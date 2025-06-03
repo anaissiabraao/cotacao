@@ -1,0 +1,33 @@
+# Ambiente virtual
+venv/
+env/
+.env
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Arquivos de distribuição
+dist/
+build/
+*.egg-info/
+
+# Arquivos de IDE
+.vscode/
+.idea/
+
+# Arquivos de log
+*.log
+
+# Arquivos de banco de dados
+*.db
+*.sqlite3
+
+# Arquivos Excel temporários
+~$*.xlsx
+*.xlsx.tmp
+
+# Arquivos de sistema
+.DS_Store
+Thumbs.db 

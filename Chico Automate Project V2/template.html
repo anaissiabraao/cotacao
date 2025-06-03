@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortoEx - Cálculo de Frete</title>
+    <style>
+        :root {
+            --primary-color: #0066cc;
+            --secondary-color: #004080;
+            --accent-color: #ff9900;
+            --light-gray: #f5f5f5;
+            --medium-gray: #e0e0e0;
+            --dark-gray: #333333;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --warning-color: #ffc107;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            border-radius: 5px 5px 0 0;
+            margin-bottom: 20px;
+        }
+        
+        h1, h2, h3 {
+            margin-bottom: 1rem;
+        }
+        
+        .card {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(0,102,204,0.2);
+        }
+        
+        .btn {
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .btn:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .btn-secondary {
+            background-color: var(--accent-color);
+        }
+        
+        .btn-secondary:hover {
+            background-color: #e68a00;
+        }
+        
+        .error {
+            color: var(--danger-color);
+            background-color: #f8d7da;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        
+        .success {
+            color: var(--success-color);
+            background-color: #d4edda;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        
+        .results {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .results th, .results td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        .results th {
+            background-color: var(--light-gray);
+            font-weight: 600;
+        }
+        
+        .results tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .results tr:hover {
+            background-color: #f1f1f1;
+        }
+        
+        .tab-container {
+            margin-top: 20px;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 15px;
+        }
+        
+        .tab-button {
+            padding: 10px 20px;
+            background-color: #f1f1f1;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-weight: 600;
+        }
+        
+        .tab-button.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 15px;
+            background-color: white;
+            border-radius: 0 0 5px 5px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .history-item {
+            background-color: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .history-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        
+        .history-item h4 {
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+        
+        .history-item p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        
+        .history-item .search-id {
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+        
+        .history-item .date {
+            color: #666;
+            font-style: italic;
+        }
+        
+        .history-details {
+            display: none;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+        
+        .history-item.expanded .history-details {
+            display: block;
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .tab-buttons {
+                flex-direction: column;
+            }
+            
+            .tab-button {
+                width: 100%;
+                text-align: center;
+            }
+        }
+        
+        /* Loader */
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Mapa */
+        #map-container {
+            height: 400px;
+            margin-top: 20px;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>📦 PortoEx - Cálculo de Frete</h1>
+        <p>Sistema de cotação de fretes fracionados e dedicados</p>
+    </header>
+    
+    <div class="container">
+        {% if erro %}
+        <div class="error">{{ erro }}</div>
+        {% endif %}
+        
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="openTab(event, 'fracionado')">Frete Fracionado</button>
+                <button class="tab-button" onclick="openTab(event, 'dedicado')">Frete Dedicado</button>
+                <button class="tab-button" onclick="openTab(event, 'historico')">Histórico</button>
+            </div>
+            
+            <div id="fracionado" class="tab-content active">
+                <div class="card">
+                    <h2>Cotação de Frete Fracionado</h2>
+                    <form method="post" action="/calcular_frete_fracionado" id="form-fracionado">
+                        <div class="grid">
+                            <div>
+                                <div class="form-group">
+                                    <label for="estado_origem">Estado Origem:</label>
+                                    <select id="estado_origem" name="estado_origem" required></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="municipio_origem">Município Origem:</label>
+                                    <select id="municipio_origem" name="municipio_origem" required></select>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="form-group">
+                                    <label for="estado_destino">Estado Destino:</label>
+                                    <select id="estado_destino" name="estado_destino" required></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="municipio_destino">Município Destino:</label>
+                                    <select id="municipio_destino" name="municipio_destino" required></select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid">
+                            <div class="form-group">
+                                <label for="peso">Peso (kg):</label>
+                                <input type="number" id="peso" name="peso" step="0.01" min="0.01" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="cubagem">Cubagem (m³):</label>
+                                <input type="number" id="cubagem" name="cubagem" step="0.001" min="0" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">Calcular Frete</button>
+                        <div class="loader" id="loader-fracionado"></div>
+                    </form>
+                </div>
+                
+                {% if resultado %}
+                <div class="card">
+                    <h2>Resultados da Cotação <span class="search-id">#{{ resultado.search_id }}</span></h2>
+                    <div class="grid">
+                        <div>
+                            <p><strong>Origem:</strong> {{ resultado.cidades_origem }}, {{ resultado.uf_origem }}</p>
+                            <p><strong>Destino:</strong> {{ resultado.cidades_destino }}, {{ resultado.uf_destino }}</p>
+                        </div>
+                        <div>
+                            <p><strong>Peso:</strong> {{ resultado.peso }} kg</p>
+                            <p><strong>Cubagem:</strong> {{ resultado.cubagem }} m³</p>
+                            {% if resultado.distancia %}
+                            <p><strong>Distância Estimada:</strong> {{ "%.2f"|format(resultado.distancia) }} km</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    {% if resultado.route_points and resultado.route_points|length > 0 %}
+                    <div id="map-container"></div>
+                    {% endif %}
+                    
+                    <form method="post" action="/gerar_pdf">
+                        <input type="hidden" name="resultado_json" value="{{ resultado | tojson | safe }}">
+                        <button type="submit" class="btn btn-secondary">Gerar PDF</button>
+                    </form>
+                    
+                    <table class="results">
+                        <thead>
+                            <tr>
+                                <th>Fornecedor</th>
+                                <th>Custo (R$)</th>
+                                <th>Prazo (dias)</th>
+                                <th>GRIS</th>
+                                <th>Peso Máx (kg)</th>
+                                <th>Excedente (R$/kg)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in resultado.ranking %}
+                            <tr>
+                                <td>{{ item.fornecedor }}</td>
+                                <td>R$ {{ "%.2f"|format(item.custo) }}</td>
+                                <td>{{ item.prazo }}</td>
+                                <td>{{ "%.2f%%"|format(item.gris * 100) }}</td>
+                                <td>{{ item.peso_maximo }}</td>
+                                <td>R$ {{ "%.2f"|format(item.excedente) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6">Nenhuma transportadora encontrada para esta rota/peso.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div id="dedicado" class="tab-content">
+                <div class="card">
+                    <h2>Cotação de Frete Dedicado</h2>
+                    <form id="form-dedicado">
+                        <div class="grid">
+                            <div>
+                                <div class="form-group">
+                                    <label for="estado_origem_dedicado">Estado Origem:</label>
+                                    <select id="estado_origem_dedicado" name="uf_origem" required></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="municipio_origem_dedicado">Município Origem:</label>
+                                    <select id="municipio_origem_dedicado" name="municipio_origem" required></select>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="form-group">
+                                    <label for="estado_destino_dedicado">Estado Destino:</label>
+                                    <select id="estado_destino_dedicado" name="uf_destino" required></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="municipio_destino_dedicado">Município Destino:</label>
+                                    <select id="municipio_destino_dedicado" name="municipio_destino" required></select>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn">Calcular Frete Dedicado</button>
+                        <div class="loader" id="loader-dedicado"></div>
+                    </form>
+                </div>
+                
+                <div class="card" id="resultado-dedicado" style="display: none;">
+                    <h2>Resultados da Cotação Dedicada <span class="search-id" id="dedicado-search-id"></span></h2>
+                    <div class="grid">
+                        <div>
+                            <p><strong>Origem:</strong> <span id="dedicado-origem"></span></p>
+                            <p><strong>Destino:</strong> <span id="dedicado-destino"></span></p>
+                        </div>
+                        <div>
+                            <p><strong>Distância:</strong> <span id="dedicado-distancia"></span> km</p>
+                            <p><strong>Duração Estimada:</strong> <span id="dedicado-duracao"></span> min</p>
+                            <p><strong>Método de Cálculo:</strong> <span id="dedicado-provider"></span></p>
+                        </div>
+                    </div>
+                    
+                    <div id="dedicado-map-container" style="height: 400px; margin-top: 20px;"></div>
+                    
+                    <h3>Custos por Tipo de Veículo</h3>
+                    <table class="results" id="tabela-dedicado">
+                        <thead>
+                            <tr>
+                                <th>Tipo de Veículo</th>
+                                <th>Custo (R$)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dedicado-custos">
+                            <!-- Preenchido via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div id="historico" class="tab-content">
+                <div class="card">
+                    <h2>Histórico de Pesquisas</h2>
+                    <p>Últimas cotações realizadas no sistema</p>
+                    <div id="history-container">
+                        <!-- Preenchido via JavaScript -->
+                        <div class="loader" id="loader-historico"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Funções para manipulação de tabs
+        function openTab(evt, tabName) {
+            const tabContents = document.getElementsByClassName("tab-content");
+            for (let i = 0; i < tabContents.length; i++) {
+                tabContents[i].classList.remove("active");
+            }
+            
+            const tabButtons = document.getElementsByClassName("tab-button");
+            for (let i = 0; i < tabButtons.length; i++) {
+                tabButtons[i].classList.remove("active");
+            }
+            
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+            
+            // Carregar dados específicos da tab
+            if (tabName === "historico") {
+                loadHistory();
+            }
+        }
+        
+        // Funções para carregar dados
+        const estadoOrigemSelect = document.getElementById('estado_origem');
+        const municipioOrigemSelect = document.getElementById('municipio_origem');
+        const estadoDestinoSelect = document.getElementById('estado_destino');
+        const municipioDestinoSelect = document.getElementById('municipio_destino');
+        
+        const estadoOrigemDedicadoSelect = document.getElementById('estado_origem_dedicado');
+        const municipioOrigemDedicadoSelect = document.getElementById('municipio_origem_dedicado');
+        const estadoDestinoDedicadoSelect = document.getElementById('estado_destino_dedicado');
+        const municipioDestinoDedicadoSelect = document.getElementById('municipio_destino_dedicado');
+        
+        const historyContainer = document.getElementById('history-container');
+        
+        function loadEstados(selectElement) {
+            selectElement.innerHTML = '<option value="">Carregando...</option>';
+            fetch('/estados')
+                .then(response => response.json())
+                .then(data => {
+                    selectElement.innerHTML = '<option value="">Selecione...</option>';
+                    data.forEach(estado => {
+                        const option = document.createElement('option');
+                        option.value = estado.id;
+                        option.textContent = estado.text;
+                        selectElement.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar estados:', error);
+                    selectElement.innerHTML = '<option value="">Erro ao carregar</option>';
+                });
+        }
+        
+        function loadMunicipios(uf, selectElement) {
+            if (!uf) {
+                selectElement.innerHTML = '<option value="">Selecione o estado primeiro</option>';
+                return;
+            }
+            
+            selectElement.innerHTML = '<option value="">Carregando...</option>';
+            fetch(`/municipios/${uf}`)
+                .then(response => response.json())
+                .then(data => {
+                    selectElement.innerHTML = '<option value="">Selecione...</option>';
+                    data.forEach(municipio => {
+                        const option = document.createElement('option');
+                        option.value = municipio.id;
+                        option.textContent = municipio.text;
+                        selectElement.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error(`Erro ao carregar municípios para UF ${uf}:`, error);
+                    selectElement.innerHTML = '<option value="">Erro ao carregar</option>';
+                });
+        }
+        
+        function loadHistory() {
+            const loaderHistorico = document.getElementById('loader-historico');
+            loaderHistorico.style.display = 'block';
+            historyContainer.innerHTML = '';
+            historyContainer.appendChild(loaderHistorico);
+            
+            fetch('/historico')
+                .then(response => response.json())
+                .then(data => {
+                    loaderHistorico.style.display = 'none';
+                    
+                    if (data && data.length > 0) {
+                        const historyList = document.createElement('div');
+                        historyList.className = 'history-list';
+                        
+                        // Mostrar os mais recentes primeiro
+                        data.slice().reverse().forEach(item => {
+                            const historyItem = document.createElement('div');
+                            historyItem.className = 'history-item';
+                            historyItem.dataset.id = item.search_id;
+                            
+                            const tipoFrete = item.tipo_frete === 'fracionado' ? 'Fracionado' : 'Dedicado';
+                            const origem = `${item.origem_municipio}/${item.origem_uf}`;
+                            const destino = `${item.destino_municipio}/${item.destino_uf}`;
+                            
+                            historyItem.innerHTML = `
+                                <h4>${tipoFrete}: ${origem} → ${destino}</h4>
+                                <p class="search-id">ID: ${item.search_id}</p>
+                                <p class="date">${item.data_hora}</p>
+                                <p>Peso: ${item.peso_kg}kg | Cubagem: ${item.cubagem_m3}m³</p>
+                                ${item.distancia_km ? `<p>Distância: ${item.distancia_km.toFixed(2)} km</p>` : ''}
+                                <div class="history-details">
+                                    <p><strong>Detalhes da Rota:</strong></p>
+                                    <p>Origem: ${item.origem_geocode || origem}</p>
+                                    <p>Destino: ${item.destino_geocode || destino}</p>
+                                    ${item.duracao_min ? `<p>Duração estimada: ${Math.floor(item.duracao_min / 60)}h ${Math.round(item.duracao_min % 60)}min</p>` : ''}
+                                    ${item.rota_provider ? `<p>Método de cálculo: ${item.rota_provider}</p>` : ''}
+                                </div>
+                            `;
+                            
+                            historyItem.addEventListener('click', function() {
+                                this.classList.toggle('expanded');
+                            });
+                            
+                            historyList.appendChild(historyItem);
+                        });
+                        
+                        historyContainer.appendChild(historyList);
+                    } else {
+                        historyContainer.innerHTML = '<p>Nenhuma pesquisa no histórico.</p>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Erro ao carregar histórico:', error);
+                    loaderHistorico.style.display = 'none';
+                    historyContainer.innerHTML = '<p>Erro ao carregar histórico.</p>';
+                });
+        }
+        
+        // Event listeners para selects de estados
+        estadoOrigemSelect.addEventListener('change', () => {
+            loadMunicipios(estadoOrigemSelect.value, municipioOrigemSelect);
+        });
+        
+        estadoDestinoSelect.addEventListener('change', () => {
+            loadMunicipios(estadoDestinoSelect.value, municipioDestinoSelect);
+        });
+        
+        estadoOrigemDedicadoSelect.addEventListener('change', () => {
+            loadMunicipios(estadoOrigemDedicadoSelect.value, municipioOrigemDedicadoSelect);
+        });
+        
+        estadoDestinoDedicadoSelect.addEventListener('change', () => {
+            loadMunicipios(estadoDestinoDedicadoSelect.value, municipioDestinoDedicadoSelect);
+        });
+        
+        // Formulário de frete dedicado
+        document.getElementById('form-dedicado').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const loaderDedicado = document.getElementById('loader-dedicado');
+            loaderDedicado.style.display = 'block';
+            
+            const formData = {
+                uf_origem: estadoOrigemDedicadoSelect.value,
+                municipio_origem: municipioOrigemDedicadoSelect.value,
+                uf_destino: estadoDestinoDedicadoSelect.value,
+                municipio_destino: municipioDestinoDedicadoSelect.value
+            };
+            
+            fetch('/calcular', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData),
+            })
+            .then(response => response.json())
+            .then(data => {
+                loaderDedicado.style.display = 'none';
+                
+                if (data.error) {
+                    alert('Erro: ' + data.error);
+                    return;
+                }
+                
+                // Preencher resultados
+                document.getElementById('dedicado-search-id').textContent = '#' + data.analise_historico.search_id;
+                document.getElementById('dedicado-origem').textContent = `${municipioOrigemDedicadoSelect.options[municipioOrigemDedicadoSelect.selectedIndex].text}, ${estadoOrigemDedicadoSelect.value}`;
+                document.getElementById('dedicado-destino').textContent = `${municipioDestinoDedicadoSelect.options[municipioDestinoDedicadoSelect.selectedIndex].text}, ${estadoDestinoDedicadoSelect.value}`;
+                document.getElementById('dedicado-distancia').textContent = data.distancia_km.toFixed(2);
+                document.getElementById('dedicado-duracao').textContent = data.duracao_min.toFixed(0);
+                document.getElementById('dedicado-provider').textContent = data.rota_provider;
+                
+                // Preencher tabela de custos
+                const custosBody = document.getElementById('dedicado-custos');
+                custosBody.innerHTML = '';
+                
+                if (data.custos_dedicado.error) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `<td colspan="2">${data.custos_dedicado.error}</td>`;
+                    custosBody.appendChild(row);
+                } else {
+                    for (const [veiculo, custo] of Object.entries(data.custos_dedicado)) {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${veiculo}</td>
+                            <td>R$ ${custo.toFixed(2).replace('.', ',')}</td>
+                        `;
+                        custosBody.appendChild(row);
+                    }
+                }
+                
+                // Mostrar resultado
+                document.getElementById('resultado-dedicado').style.display = 'block';
+                
+                // Renderizar mapa se houver pontos de rota
+                if (data.rota_pontos && data.rota_pontos.length > 0) {
+                    // Implementar renderização do mapa aqui
+                    // Exemplo: usando Leaflet.js
+                }
+            })
+            .catch(error => {
+                loaderDedicado.style.display = 'none';
+                console.error('Erro:', error);
+                alert('Erro ao processar a requisição. Verifique o console para mais detalhes.');
+            });
+        });
+        
+        // Formulário de frete fracionado
+        document.getElementById('form-fracionado').addEventListener('submit', function() {
+            document.getElementById('loader-fracionado').style.display = 'block';
+        });
+        
+        // Carregar dados iniciais
+        loadEstados(estadoOrigemSelect);
+        loadEstados(estadoDestinoSelect);
+        loadEstados(estadoOrigemDedicadoSelect);
+        loadEstados(estadoDestinoDedicadoSelect);
+        
+        // Verificar se há resultado para mostrar mapa
+        {% if resultado and resultado.route_points and resultado.route_points|length > 0 %}
+        // Implementar renderização do mapa aqui
+        // Exemplo: usando Leaflet.js
+        {% endif %}
+    </script>
+</body>
+</html>
