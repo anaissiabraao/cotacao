@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortoEx - Cálculo de Frete</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='portoex-logo.png') }}">
+    <link rel="shortcut icon" type="image/png" href="{{ url_for('static', filename='portoex-logo.png') }}">
+    <!-- Frameworks e Libs -->
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"/>
+    <link href="https://fonts.googleapis.com/css?family=Segoe+UI:400,700,800&display=swap" rel="stylesheet">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Scripts da aplicação -->
+    <script src="{{ url_for('static', filename='js/chico_automate.js') }}"></script>
+    <style>
+        body { background: #f7f9fa; color: #23272f; font-family: 'Segoe UI', Arial, sans-serif; }
+        .btn-primary { background: #ff9800; color: #fff; border: none; border-radius: 8px; padding: 8px 18px; text-decoration: none; font-weight: 600; font-size: 1.1rem; cursor: pointer; height: 42px; }
+        .btn-primary:hover { background: #ffb74d; color: #fff; }
+        .btn-secondary { background: #6c757d; color: #fff; border: none; border-radius: 6px; padding: 5px 10px; text-decoration: none; font-weight: 500; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; }
+        .btn-secondary:hover { background: #545b62; color: #fff; transform: translateY(-1px); }
+        .tabs { display: flex; justify-content: center; margin: 32px 0 0 0; border-bottom: 2px solid #e3e8ee; }
+        .tab-btn { background: none; border: none; font-size: 1.1rem; font-weight: 700; color: #0a6ed1; padding: 14px 32px 10px 32px; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; }
+        .tab-btn.active { color: #fff; background: #0a6ed1; border-bottom: 3px solid #ff9800; }
+        .tab-content { display: none; max-width: 1200px; margin: 0 auto; }
+        .tab-content.active { display: block; animation: fadeInUp 0.5s; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: none; } }
+        .card { background: #fff; border-radius: 16px; box-shadow: 0 2px 16px rgba(25,118,210,0.10); padding: 32px 28px; margin: 32px 0; }
+        .form-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            margin-bottom: 18px;
+        }
+        .form-group {
+            flex: 1 1 220px;
+            min-width: 220px;
+            max-width: 100%;
+        }
+        .form-group label { font-weight: 600; color: #0a6ed1; margin-bottom: 6px; display: block; }
+        .form-group input, .form-group select { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1.5px solid #b3e5fc; font-size: 1.08rem; background: #fafdff; color: #222b45; transition: border .2s, box-shadow .2s; height: 42px; }
+        .results { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); font-size: 0.9rem; }
+        .results th, .results td { border: 1px solid #e3e8ee; padding: 8px 10px; text-align: left; }
+        .results th { background-color: #f4faff; font-weight: 700; color: #0a6ed1; font-size: 0.85rem; }
+        .results tr:nth-child(even) { background-color: #f9f9f9; }
+        .results tr:hover { background-color: #e3f2fd; }
+        .map-container { height: 350px; width: 100%; margin: 20px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.1); position: relative; }
+        .map-container.hidden { display: none; }
+        .map-title { font-size: 1.3rem; font-weight: 700; color: #0a6ed1; margin-bottom: 10px; text-align: center; }
+        .chart-container { width: 100%; max-width: 400px; margin: 15px auto; }
+        .analise-container { background: #f8f9fa; border-radius: 12px; padding: 15px; margin: 15px 0; border-left: 4px solid #0a6ed1; }
+        .analise-title { font-size: 1.1rem; font-weight: 700; color: #0a6ed1; margin-bottom: 8px; }
+        .analise-item { font-size: 0.95rem; margin: 4px 0; color: #495057; }
+        .error, .success { padding: 12px 18px; border-radius: 8px; margin-bottom: 18px; font-weight: 600; font-size: 1.08rem; }
+        .error { background: #ffeaea; color: #ff9800; border: 1.5px solid #ff9800; }
+        .success { background: #eaffea; color: #28a745; border: 1.5px solid #28a745; }
+        @media (max-width: 900px) {
+            .form-grid { flex-direction: column; gap: 10px; }
+            .tabs { flex-direction: column; }
+            .tab-btn { width: 100%; }
+        }
+        .loading-spinner {
+            display: none;
+            margin: 18px auto 0 auto;
+            border: 5px solid #e3e8ee;
+            border-top: 5px solid #0a6ed1;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* === ESTILOS DO CABEÇALHO E USUÁRIO === */
+        header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 15px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        header .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .logo h1 {
+            font-size: 1.8rem;
+            margin: 0;
+            font-weight: 700;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-greeting {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        .admin-badge {
+            background: #ff9800;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-admin, .btn-logout, .btn-login {
+            padding: 8px 16px;
+            border-radius: 20px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.9rem;
+        }
+
+        .btn-admin {
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-admin:hover {
+            background: #f57c00;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+        }
+
+        .btn-logout {
+            background: #f44336;
+            color: white;
+        }
+
+        .btn-logout:hover {
+            background: #d32f2f;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+        }
+
+        .btn-login {
+            background: #4caf50;
+            color: white;
+        }
+
+        .btn-login:hover {
+            background: #388e3c;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            header .container {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            .user-menu {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .user-actions {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">
+                <img src="{{ url_for('static', filename='portoex-logo.png') }}" alt="PortoEx" onerror="this.style.display='none'">
+                <h1>PortoEx</h1>
+            </div>
+            <div class="user-info">
+                {% if usuario %}
+                    <div class="user-menu">
+                        <span class="user-greeting">
+                            <i class="fas fa-user-circle"></i>
+                            Olá, {{ usuario.nome }}
+                            {% if usuario.tipo == 'administrador' %}
+                                <span class="admin-badge">Admin</span>
+                            {% endif %}
+                        </span>
+                        <div class="user-actions">
+                            {% if usuario.tipo == 'administrador' %}
+                                <a href="/admin" class="btn-admin" title="Painel Administrativo">
+                                    <i class="fas fa-cog"></i> Admin
+                                </a>
+                            {% endif %}
+                            <a href="/logout" class="btn-logout" title="Sair do Sistema">
+                                <i class="fas fa-sign-out-alt"></i> Sair
+                            </a>
+                        </div>
+                    </div>
+                {% else %}
+                    <a href="/login" class="btn-login">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="openTab(event, 'fracionado')" aria-controls="fracionado">Frete Fracionado</button>
+        <button class="tab-btn" onclick="openTab(event, 'dedicado')" aria-controls="dedicado">Frete Dedicado</button>
+        <button class="tab-btn" onclick="openTab(event, 'aereo')" aria-controls="aereo">Frete Aéreo</button>
+        <button class="tab-btn" onclick="openTab(event, 'historico')" aria-controls="historico">Histórico</button>
+        <button class="tab-btn" onclick="openTab(event, 'dashboard')" aria-controls="dashboard">Dashboard</button>
+    </div>
+    <div id="fracionado" class="tab-content active">
+        <div class="card">
+            <h2><i class="fa-solid fa-box"></i> Cotação de Frete Fracionado</h2>
+            <form id="form-fracionado">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="uf_origem_frac">Estado de Origem:</label>
+                        <select id="uf_origem_frac" name="uf_origem_frac" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="uf_destino_frac">Estado de Destino:</label>
+                        <select id="uf_destino_frac" name="uf_destino_frac" required></select>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="municipio_origem_frac">Município de Origem:</label>
+                        <select id="municipio_origem_frac" name="municipio_origem_frac" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="municipio_destino_frac">Município de Destino:</label>
+                        <select id="municipio_destino_frac" name="municipio_destino_frac" required></select>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="peso_frac">Peso (kg):</label>
+                        <input type="number" id="peso_frac" name="peso_frac" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cubagem_frac">Cubagem (m³):</label>
+                        <input type="number" id="cubagem_frac" name="cubagem_frac" step="0.001" min="0" required>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="valor_nf_frac">Valor da NF (R$) - Opcional:</label>
+                        <input type="number" id="valor_nf_frac" name="valor_nf_frac" step="0.01" min="0" placeholder="Deixe em branco se não aplicável">
+                        <small style="color: #6c757d; font-size: 0.85rem; margin-top: 4px; display: block;">
+                            <i class="fa-solid fa-info-circle"></i> Campo usado para cálculo do GRIS (taxa de seguro)
+                        </small>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary">Calcular Frete Fracionado</button>
+                <div id="loading-fracionado" class="loading-spinner"></div>
+            </form>
+            <div id="fracionado-resultado"></div>
+            <!-- Container do mapa fracionado sempre presente e visível -->
+            <div id="map-fracionado" class="map-container" style="height: 400px; width: 100%; margin: 20px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.1); position: relative; z-index: 1;"></div>
+        </div>
+    </div>
+    <div id="dedicado" class="tab-content">
+        <div class="card">
+            <h2><i class="fa-solid fa-truck"></i> Cotação de Frete Dedicado</h2>
+            <form id="form-dedicado">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="uf_origem">Estado de Origem:</label>
+                        <select id="uf_origem" name="uf_origem" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="uf_destino">Estado de Destino:</label>
+                        <select id="uf_destino" name="uf_destino" required></select>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="municipio_origem">Município de Origem:</label>
+                        <select id="municipio_origem" name="municipio_origem" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="municipio_destino">Município de Destino:</label>
+                        <select id="municipio_destino" name="municipio_destino" required></select>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="peso">Peso (kg):</label>
+                        <input type="number" id="peso" name="peso" step="0.01" min="0" />
+                    </div>
+                    <div class="form-group">
+                        <label for="cubagem">Cubagem (m³):</label>
+                        <input type="number" id="cubagem" name="cubagem" step="0.001" min="0" />
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary">Calcular Frete Dedicado</button>
+                <div id="loading-dedicado" class="loading-spinner"></div>
+            </form>
+            
+            <!-- Mapa em cima com título -->
+            <div style="display: none;" id="mapa-section-dedicado">
+                <h3 class="map-title"><i class="fa-solid fa-map"></i> Mapa - Rota</h3>
+                <div id="map-dedicado" class="map-container" style="height: 350px; width: 100%; margin: 20px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.1); position: relative; z-index: 1;"></div>
+            </div>
+            
+            <!-- Análise da rota -->
+            <div id="analise-dedicado"></div>
+            
+            <!-- Resultados com tabela e gráfico menores -->
+            <div id="resultados-dedicado"></div>
+        </div>
+    </div>
+    <div id="aereo" class="tab-content">
+        <div class="card">
+            <h2><i class="fa-solid fa-plane"></i> Cotação de Frete Aéreo</h2>
+            <form id="form-aereo">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="uf_origem_aereo">Estado de Origem:</label>
+                        <select id="uf_origem_aereo" name="uf_origem_aereo" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="uf_destino_aereo">Estado de Destino:</label>
+                        <select id="uf_destino_aereo" name="uf_destino_aereo" required></select>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="municipio_origem_aereo">Município de Origem:</label>
+                        <select id="municipio_origem_aereo" name="municipio_origem_aereo" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="municipio_destino_aereo">Município de Destino:</label>
+                        <select id="municipio_destino_aereo" name="municipio_destino_aereo" required></select>
+                    </div>
+                </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="peso_aereo">Peso (kg):</label>
+                        <input type="number" id="peso_aereo" name="peso_aereo" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cubagem_aereo">Cubagem (m³):</label>
+                        <input type="number" id="cubagem_aereo" name="cubagem_aereo" step="0.001" min="0" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary">Calcular Frete Aéreo</button>
+                <div id="loading-aereo" class="loading-spinner"></div>
+            </form>
+            <div id="resultados-aereo"></div>
+            <!-- Container do mapa aéreo sempre presente e visível -->
+            <div id="map-aereo" class="map-container" style="height: 400px; width: 100%; margin: 20px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.1); position: relative; z-index: 1;"></div>
+        </div>
+    </div>
+    <div id="historico" class="tab-content">
+        <div class="card">
+            <h2><i class="fa-solid fa-history"></i> Histórico de Cálculos</h2>
+            <div id="listaHistorico"></div>
+        </div>
+    </div>
+    <div id="dashboard" class="tab-content">
+        <div class="card">
+            <h2><i class="fa-solid fa-chart-line"></i> Dashboard Target</h2>
+            <iframe src="https://app.powerbi.com/view?r=eyJrIjoiYWUzODBiYmUtMWI1OC00NGVjLWFjNDYtYzYyMDQ3MzQ0MTQ0IiwidCI6IjM4MjViNTlkLTY1ZGMtNDM1Zi04N2M4LTkyM2QzMzkxYzMyOCJ9" 
+                    allowfullscreen="true" 
+                    style="width: 100%; height: 600px; border: none; border-radius: 8px;"
+                    title="Dashboard Power BI">
+            </iframe>
+        </div>
+    </div>
+    
+    <script>
+        // Limpar dados de cache e cookies para permitir acesso livre
+        if (typeof(Storage) !== "undefined") {
+            localStorage.clear();
+            sessionStorage.clear();
+        }
+        
+        // Limpar cookies específicos de sessão
+        document.cookie.split(";").forEach(function(c) { 
+            document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+        });
+        
+        console.log("Cache e cookies limpos para acesso livre");
+    </script>
+</body>
+</html> 

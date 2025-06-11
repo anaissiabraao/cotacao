@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Histórico Detalhado - PortoEx Admin</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='portoex-logo.png') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Segoe+UI:400,700,800&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); 
+            color: #2c3e50; 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+        }
+        .container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            background: #fff; 
+            border-radius: 15px; 
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1); 
+            overflow: hidden; 
+        }
+        .header { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: #fff; 
+            padding: 30px; 
+            text-align: center; 
+        }
+        .header h1 { 
+            margin: 0; 
+            font-size: 2.5rem; 
+            font-weight: 800; 
+        }
+        .content { 
+            padding: 30px; 
+        }
+        .historico-table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-top: 20px; 
+            background: #fff; 
+            border-radius: 10px; 
+            overflow: hidden; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+        }
+        .historico-table th, .historico-table td { 
+            padding: 12px 15px; 
+            text-align: left; 
+            border-bottom: 1px solid #e9ecef; 
+        }
+        .historico-table th { 
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+            color: #fff; 
+            font-weight: 700; 
+            font-size: 0.9rem; 
+            text-transform: uppercase; 
+        }
+        .historico-table tr:hover { 
+            background-color: #f1f3f4; 
+        }
+        .btn { 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 25px; 
+            text-decoration: none; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: all 0.3s ease; 
+            display: inline-flex; 
+            align-items: center; 
+            gap: 8px; 
+        }
+        .btn-back { 
+            background: #6c757d; 
+            color: #fff; 
+        }
+        .btn-back:hover { 
+            background: #545b62; 
+            transform: translateY(-2px); 
+        }
+        .stats { 
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); 
+            padding: 20px; 
+            border-radius: 10px; 
+            margin-bottom: 20px; 
+            text-align: center; 
+        }
+        .stats h3 { 
+            margin: 0; 
+            font-size: 1.5rem; 
+            color: #2c3e50; 
+        }
+        .tipo-badge { 
+            padding: 4px 12px; 
+            border-radius: 20px; 
+            font-size: 0.8rem; 
+            font-weight: 600; 
+            color: #fff; 
+        }
+        .tipo-pesquisa { 
+            background: #28a745; 
+        }
+        .detalhes { 
+            max-width: 400px; 
+            word-wrap: break-word; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-history"></i> Histórico Detalhado</h1>
+        </div>
+        
+        <div class="content">
+            <div class="stats">
+                <h3>Total de Registros: {{ historico|length }}</h3>
+            </div>
+            
+            {% if historico %}
+            <table class="historico-table">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>ID</th>
+                        <th>Data/Hora</th>
+                        <th>Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in historico %}
+                    <tr>
+                        <td>
+                            <span class="tipo-badge tipo-{{ item.tipo.lower() }}">
+                                {{ item.tipo }}
+                            </span>
+                        </td>
+                        <td>{{ item.id }}</td>
+                        <td>{{ item.data_hora }}</td>
+                        <td class="detalhes">{{ item.detalhes }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            {% else %}
+            <div style="text-align: center; padding: 40px; color: #6c757d;">
+                <i class="fas fa-info-circle" style="font-size: 3rem; margin-bottom: 20px;"></i>
+                <h3>Nenhum histórico encontrado</h3>
+                <p>Não há registros no histórico do sistema.</p>
+            </div>
+            {% endif %}
+            
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="/admin" class="btn btn-back">
+                    <i class="fas fa-arrow-left"></i> Voltar ao Admin
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 

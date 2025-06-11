@@ -1,0 +1,25 @@
+# ESTE É UM ARQUIVO DE EXEMPLO
+# O arquivo real Base_Unificada.xlsx deve ter a seguinte estrutura:
+
+# Coluna A: Modalidade (ex: Concept, Braspress, etc.)
+# Coluna B: Agente (ex: CWB, SPO, etc.)
+# Coluna C: Origem (ex: SAO PAULO - SP)
+# Coluna D: Base Origem (ex: SPO)
+# Coluna E: Destino (ex: ARACAJU - SE)
+# Coluna F: Valor para 10kg
+# Coluna G: Valor para 20kg
+# Coluna H: Valor para 30kg
+# Coluna I: Valor para 50kg
+# Coluna J: Valor para 70kg
+# Coluna K: Valor para 100kg
+# Coluna L: Valor para 300kg
+# Coluna M: Valor para 500kg
+# Coluna N: Valor acima de 500kg
+# Coluna O: Pedágio por 100kg
+# Coluna P: GRIS Mínimo
+# Coluna Q: GRIS Excedente (%)
+# Coluna R: Prazo (dias)
+
+# IMPORTANTE: 
+# - Copie seu arquivo real como "Base_Unificada.xlsx" na raiz do projeto
+# - O arquivo real não será commitado (está no .gitignore) 
