@@ -215,8 +215,8 @@ Este projeto está sob licença proprietária. Todos os direitos reservados à P
 ## 📞 Suporte
 
 Para suporte técnico, entre em contato:
-- Email: suporte@portoex.com.br
-- Telefone: (11) 9999-9999
+- Email: abraao.anaissi@portoex.com.br
+- Telefone: (47) 98839-5126
 
 ## 📈 Roadmap
 
