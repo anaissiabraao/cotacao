@@ -178,10 +178,10 @@ temp_*.py
 *_backup.py
 
 # Dados sensíveis
-Base_Unificada.xlsx
+# Base_Unificada.xlsx (permitido temporariamente para demo)
 consolidated_data.xlsx
-*.xls
-*.xlsx
+# *.xls
+# *.xlsx (permitindo arquivos Excel para demo)
 
 # Logs e dados temporários
 *.log
