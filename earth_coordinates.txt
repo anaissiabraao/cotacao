@@ -1,5 +1,0 @@
-R = 6371  # Raio da Terra em km
-    φ1 = math.radians(lat1)
-    φ2 = math.radians(lat2)
-    Δφ = math.radians(lat2 - lat1)
-    Δλ = math.radians(lon2 - lon1)
