@@ -2117,10 +2117,27 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                 valor_base_kg = linha[faixa_peso]
                 valor_base = peso * valor_base_kg
                 
-                # PEDÁGIO CORRETO: Cubagem × 166 ÷ 100, ARREDONDADO PARA CIMA
+                # LÓGICA CORRETA DO PEDÁGIO
+                # 1. Calcular peso cubado = cubagem × 166
+                # 2. Usar o MAIOR entre peso real e peso cubado
+                # 3. Pedágio = (maior_peso ÷ 100) arredondado PARA CIMA × valor_coluna_pedagio
+                
+                peso_cubado = 0
                 if cubagem and cubagem > 0:
-                    pedagio_bruto = (cubagem * 166) / 100
-                    pedagio = math.ceil(pedagio_bruto)  # Arredonda PARA CIMA
+                    peso_cubado = cubagem * 166  # Peso cubado = cubagem × 166kg
+                
+                # Usar o MAIOR entre peso real e peso cubado
+                maior_peso = max(peso, peso_cubado)
+                
+                # Buscar valor do pedágio na coluna P da planilha
+                valor_pedagio_coluna = linha.get('Pedagio (100 Kg)', 0)  # Coluna P
+                if valor_pedagio_coluna is None:
+                    valor_pedagio_coluna = 0
+                
+                # Calcular pedágio: (maior_peso ÷ 100) arredondado PARA CIMA × valor_coluna_pedagio
+                if maior_peso > 0 and valor_pedagio_coluna > 0:
+                    fator_pedagio = math.ceil(maior_peso / 100)  # Arredonda PARA CIMA
+                    pedagio = fator_pedagio * float(valor_pedagio_coluna)
                 else:
                     pedagio = 0.0
                 
@@ -2144,6 +2161,10 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                 except (ValueError, TypeError):
                     prazo = 1  # Valor padrão caso não consiga converter
                 
+                # Detalhes para observações
+                peso_usado = "Real" if maior_peso == peso else "Cubado"
+                observacao_pedagio = f"Pedágio: Peso {peso_usado} {maior_peso:.1f}kg ÷ 100 = {math.ceil(maior_peso/100):.0f} × R${valor_pedagio_coluna:.2f} = R${pedagio:.2f}"
+                
                 cotacao = {
                     'modalidade': fornecedor,
                     'agente': fornecedor,
@@ -2154,7 +2175,11 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                     'gris': gris,
                     'total': total,
                     'prazo': prazo,
-                    'observacoes': f"Peso {peso}kg × R${valor_base_kg:.2f} = R${valor_base:.2f} + Pedágio R${pedagio:.2f} + GRIS R${gris:.2f} = Total R${total:.2f}",
+                    'peso_real': peso,
+                    'peso_cubado': peso_cubado,
+                    'maior_peso': maior_peso,
+                    'valor_pedagio_base': valor_pedagio_coluna,
+                    'observacoes': f"Peso {peso}kg × R${valor_base_kg:.2f} = R${valor_base:.2f} | {observacao_pedagio} | GRIS R${gris:.2f} = Total R${total:.2f}",
                     'fonte': '📊 Planilha',
                     'origem_planilha': origem_planilha,  # Dados reais da planilha para debug
                     'destino_planilha': destino_planilha  # Dados reais da planilha para debug
@@ -2162,7 +2187,8 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                 
                 cotacoes.append(cotacao)
                 estrategia_cotacoes.append(cotacao)
-                print(f"[PLANILHA] ✅ ACEITO {fornecedor}: Peso {peso}kg × R${valor_base_kg:.2f} = R${valor_base:.2f} + Pedágio R${pedagio:.2f} + GRIS R${gris:.2f} = Total R${total:.2f}")
+                print(f"[PLANILHA] ✅ ACEITO {fornecedor}: Valor Base R${valor_base:.2f} + {observacao_pedagio} + GRIS R${gris:.2f} = Total R${total:.2f}")
+                print(f"[DEBUG] -> Peso: Real {peso}kg, Cubado {peso_cubado:.1f}kg (maior: {maior_peso:.1f}kg), Pedagio base: R${valor_pedagio_coluna:.2f}")
                 print(f"[DEBUG] -> Rota na planilha: {origem_planilha} -> {destino_planilha} (Valor/kg: R${valor_base_kg:.2f})")
         
         # CONTINUAR buscando em todas as estratégias (não parar na primeira)
