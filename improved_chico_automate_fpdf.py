@@ -1016,6 +1016,10 @@ def calcular_frete_fracionado():
         # ID do histórico
         id_historico = f"Fra{CONTADOR_FRACIONADO:03d}"
 
+        # Identificar qual peso foi usado na melhor opção
+        maior_peso_usado = melhor_opcao.get('maior_peso', max(peso_real, peso_cubado))
+        peso_usado_tipo = melhor_opcao.get('peso_usado', 'Real' if maior_peso_usado == peso_real else 'Cubado')
+        
         # Criar resultado final apenas com dados REAIS
         resultado_final = {
             "id_historico": id_historico,
@@ -1024,8 +1028,10 @@ def calcular_frete_fracionado():
             "uf_origem": uf_origem,
             "destino": cidade_destino,
             "uf_destino": uf_destino,
-            "peso": peso,
+            "peso": peso_real,
             "peso_cubado": peso_cubado,
+            "maior_peso": maior_peso_usado,
+            "peso_usado": peso_usado_tipo,
             "cubagem": cubagem,
             "valor_nf": valor_nf,
             "tipo_calculo": "Fracionado",
@@ -1711,14 +1717,51 @@ def formatar_resultado_fracionado(resultado):
                     {f' <span style="color: #27ae60;">✅ Calculado</span>' if melhor_opcao.get('gris', 0) > 0 else ' <span style="color: #f39c12;">⚠️ Requer valor NF</span>'}
                 </div>
                 <div class="analise-item" style="font-weight: bold; color: #0a6ed1;"><strong>TOTAL:</strong> R$ {melhor_opcao.get('total', 0):,.2f}</div>
+                
+                <div style="margin-top: 15px; text-align: center;">
+                    <button class="btn-secondary" onclick="toggleDetails('detalhes_peso_melhor')" style="margin: 5px; font-size: 0.9rem;">
+                        ⚖️ Detalhes do Peso
+                    </button>
+                    <button class="btn-secondary" onclick="toggleDetails('detalhes_pedagio_melhor')" style="margin: 5px; font-size: 0.9rem;">
+                        🛣️ Detalhes do Pedágio
+                    </button>
+                </div>
+                
+                <div id="detalhes_peso_melhor" style="display: none; margin-top: 15px; background: #f0f8ff; padding: 15px; border-radius: 8px; border-left: 4px solid #0a6ed1;">
+                    <strong>⚖️ Análise Detalhada do Peso - {melhor_opcao.get('modalidade', 'N/A')}:</strong><br><br>
+                    • <strong>Peso Real Informado:</strong> <span style="color: #2c3e50; font-weight: bold;">{melhor_opcao.get('peso_real', 0):.1f} kg</span><br>
+                    • <strong>Peso Cubado Calculado:</strong> <span style="color: #8e44ad; font-weight: bold;">{melhor_opcao.get('peso_cubado', 0):.1f} kg</span><br>
+                    {'  <small>(Cubagem: ' + str(melhor_opcao.get('detalhes_peso', {}).get('cubagem_original', 0)) + ' m³ × Fator ' + str(melhor_opcao.get('detalhes_peso', {}).get('fator_cubagem', 166)) + ')</small><br>' if melhor_opcao.get('detalhes_peso', {}).get('cubagem_original', 0) > 0 else '  <small>(Estimativa baseada no peso real)</small><br>'}
+                    • <strong>Maior Peso (Usado no Cálculo):</strong> <span style="color: #e74c3c; font-weight: bold; font-size: 1.1em;">{melhor_opcao.get('maior_peso', 0):.1f} kg ({melhor_opcao.get('peso_usado', 'N/A')})</span><br>
+                    • <strong>Faixa de Peso Aplicada:</strong> {melhor_opcao.get('detalhes_peso', {}).get('faixa_peso_usada', 'N/A')} kg<br>
+                    • <strong>Valor por kg na Faixa:</strong> R$ {melhor_opcao.get('detalhes_peso', {}).get('valor_kg', 0):.4f}<br>
+                    • <strong>Cálculo do Frete:</strong> {melhor_opcao.get('maior_peso', 0):.1f} kg × R$ {melhor_opcao.get('detalhes_peso', {}).get('valor_kg', 0):.4f} = <strong style="color: #27ae60; font-size: 1.1em;">R$ {melhor_opcao.get('valor_base', 0):.2f}</strong>
+                </div>
+                
+                <div id="detalhes_pedagio_melhor" style="display: none; margin-top: 15px; background: #fff8dc; padding: 15px; border-radius: 8px; border-left: 4px solid #f39c12;">
+                    <strong>🛣️ Cálculo Detalhado do Pedágio - {melhor_opcao.get('modalidade', 'N/A')}:</strong><br><br>
+                    • <strong>Peso para Cálculo:</strong> <span style="color: #e74c3c; font-weight: bold;">{melhor_opcao.get('detalhes_pedagio', {}).get('peso_calculo', 0):.1f} kg ({melhor_opcao.get('peso_usado', 'N/A')})</span><br>
+                    • <strong>Divisão por 100kg:</strong> {melhor_opcao.get('detalhes_pedagio', {}).get('peso_calculo', 0):.1f} ÷ 100 = {melhor_opcao.get('detalhes_pedagio', {}).get('peso_calculo', 0)/100:.3f}<br>
+                    • <strong>Fator Pedágio (arredondado para cima):</strong> <span style="color: #27ae60; font-weight: bold; font-size: 1.1em;">{melhor_opcao.get('detalhes_pedagio', {}).get('fator_pedagio', 0)}</span><br>
+                    • <strong>Valor Base Pedágio (tabela):</strong> R$ {melhor_opcao.get('detalhes_pedagio', {}).get('valor_base_pedagio', 0):.2f} por 100kg<br>
+                    • <strong>Cálculo Final:</strong> {melhor_opcao.get('detalhes_pedagio', {}).get('fator_pedagio', 0)} × R$ {melhor_opcao.get('detalhes_pedagio', {}).get('valor_base_pedagio', 0):.2f} = <strong style="color: #e67e22; font-size: 1.1em;">R$ {melhor_opcao.get('pedagio', 0):.2f}</strong><br>
+                    • <small style="color: #7f8c8d;">💡 O pedágio é sempre arredondado para cima (matemática de teto) para cada 100kg ou fração.</small>
+                </div>
             </div>
 
             <div class="analise-container">
                 <div class="analise-title">📍 Informações da Rota</div>
                 <div class="analise-item"><strong>Origem Solicitada:</strong> {resultado.get('origem', 'N/A')} - {resultado.get('uf_origem', 'N/A')}</div>
                 <div class="analise-item"><strong>Destino Solicitado:</strong> {resultado.get('destino', 'N/A')} - {resultado.get('uf_destino', 'N/A')}</div>
-                <div class="analise-item"><strong>Peso:</strong> {resultado.get('peso', 0)} kg</div>
-                <div class="analise-item"><strong>Peso Cubado:</strong> {resultado.get('peso_cubado', 0):.2f} kg</div>
+                
+                <div style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #17a2b8;">
+                    <strong>⚖️ Análise de Peso:</strong><br>
+                    • <strong>Peso Real:</strong> {resultado.get('peso', 0)} kg<br>
+                    • <strong>Peso Cubado:</strong> {resultado.get('peso_cubado', 0):.2f} kg<br>
+                    • <strong>Maior Peso (Usado):</strong> <span style="color: #e74c3c; font-weight: bold;">{melhor_opcao.get('maior_peso', 0):.1f} kg ({melhor_opcao.get('peso_usado', 'N/A')})</span><br>
+                    <small style="color: #6c757d;">💡 O sistema usa sempre o maior peso entre real e cubado para garantir precisão no cálculo.</small>
+                </div>
+                
                 <div class="analise-item"><strong>Cubagem:</strong> {resultado.get('cubagem', 0):.4f} m³</div>
                 {f'<div class="analise-item"><strong>Valor da NF:</strong> R$ {resultado.get("valor_nf", 0):,.2f}</div>' if resultado.get('valor_nf') else '<div class="analise-item"><strong>Valor da NF:</strong> <span style="color: #f39c12;">Não informado (GRIS não calculado)</span></div>'}
                 <div class="analise-item"><strong>Estratégia de Busca:</strong> {resultado.get('estrategia_busca', 'N/A')}</div>
@@ -1793,6 +1836,34 @@ def formatar_resultado_fracionado(resultado):
                                         • Prazo: {opcao.get('prazo', 'N/A')} dias úteis<br>
                                         • Fonte: {opcao.get('fonte', 'Planilha Real')}
                                     </div>
+                                </div>
+                                
+                                <div style="margin-top: 15px; text-align: center;">
+                                    <button class="btn-info" onclick="toggleDetails('detalhes_peso_{i}')" style="margin: 5px; font-size: 0.8rem;">
+                                        ⚖️ Detalhes do Peso
+                                    </button>
+                                    <button class="btn-info" onclick="toggleDetails('detalhes_pedagio_{i}')" style="margin: 5px; font-size: 0.8rem;">
+                                        🛣️ Detalhes do Pedágio
+                                    </button>
+                                </div>
+                                
+                                <div id="detalhes_peso_{i}" style="display: none; margin-top: 10px; background: #f0f8ff; padding: 10px; border-radius: 5px;">
+                                    <strong>⚖️ Análise Detalhada do Peso:</strong><br>
+                                    • <strong>Peso Real:</strong> {opcao.get('peso_real', 0):.1f} kg<br>
+                                    • <strong>Peso Cubado:</strong> {opcao.get('peso_cubado', 0):.1f} kg (Cubagem: {opcao.get('detalhes_peso', {}).get('cubagem_original', 0):.4f} m³ × {opcao.get('detalhes_peso', {}).get('fator_cubagem', 166)})<br>
+                                    • <strong>Maior Peso (Usado):</strong> <span style="color: #e74c3c; font-weight: bold;">{opcao.get('maior_peso', 0):.1f} kg ({opcao.get('peso_usado', 'N/A')})</span><br>
+                                    • <strong>Faixa de Peso:</strong> {opcao.get('detalhes_peso', {}).get('faixa_peso_usada', 'N/A')} kg<br>
+                                    • <strong>Valor por kg:</strong> R$ {opcao.get('detalhes_peso', {}).get('valor_kg', 0):.2f}<br>
+                                    • <strong>Cálculo Frete:</strong> {opcao.get('maior_peso', 0):.1f} kg × R$ {opcao.get('detalhes_peso', {}).get('valor_kg', 0):.2f} = <strong>R$ {opcao.get('valor_base', 0):.2f}</strong>
+                                </div>
+                                
+                                <div id="detalhes_pedagio_{i}" style="display: none; margin-top: 10px; background: #fff8dc; padding: 10px; border-radius: 5px;">
+                                    <strong>🛣️ Cálculo Detalhado do Pedágio:</strong><br>
+                                    • <strong>Peso para Cálculo:</strong> {opcao.get('detalhes_pedagio', {}).get('peso_calculo', 0):.1f} kg ({opcao.get('peso_usado', 'N/A')})<br>
+                                    • <strong>Divisão por 100kg:</strong> {opcao.get('detalhes_pedagio', {}).get('peso_calculo', 0):.1f} ÷ 100 = {opcao.get('detalhes_pedagio', {}).get('peso_calculo', 0)/100:.2f}<br>
+                                    • <strong>Fator Pedagio (arredondado):</strong> <span style="color: #27ae60; font-weight: bold;">{opcao.get('detalhes_pedagio', {}).get('fator_pedagio', 0)}</span><br>
+                                    • <strong>Valor Base Pedágio:</strong> R$ {opcao.get('detalhes_pedagio', {}).get('valor_base_pedagio', 0):.2f} por 100kg<br>
+                                    • <strong>Cálculo Final:</strong> {opcao.get('detalhes_pedagio', {}).get('fator_pedagio', 0)} × R$ {opcao.get('detalhes_pedagio', {}).get('valor_base_pedagio', 0):.2f} = <strong>R$ {opcao.get('pedagio', 0):.2f}</strong>
                                 </div>
                                 {f'<br><strong>📝 Observações:</strong> {opcao.get("observacoes", "N/A")}' if opcao.get('observacoes') else ''}
                             </div>
@@ -1917,9 +1988,15 @@ def calcular_frete_base_unificada(origem, uf_origem, destino, uf_destino, peso, 
     if df_base is not None and not df_base.empty:
         print(f"[PLANILHA] Buscando APENAS na Base_Unificada.xlsx...")
         
-        # Usar cubagem fornecida ou calcular padrão
-        if not cubagem:
-            cubagem = peso * 0.0017  # Fator padrão de cubagem para transporte
+        # Calcular peso cubado
+        peso_real = float(peso)
+        peso_cubado = 0
+        if cubagem and cubagem > 0:
+            peso_cubado = float(cubagem) * 166  # Peso cubado = cubagem × 166kg
+        else:
+            # Se não fornecido, usar fator padrão baseado no peso (estimativa)
+            peso_cubado = peso_real * 0.17  # Estimativa conservadora
+            cubagem = peso_real * 0.0017  # Fator padrão de cubagem para transporte
         
         cotacoes_planilha = processar_dados_planilha(
             df_base,
@@ -2092,44 +2169,46 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                     
                 fornecedores_encontrados.add(fornecedor)
                 
-                # Determinar faixa de peso correta
+                # CALCULAR PESO REAL VS PESO CUBADO
+                peso_real = float(peso)
+                
+                # Calcular peso cubado com fator de cubagem padrão 
+                peso_cubado = 0
+                if cubagem and cubagem > 0:
+                    peso_cubado = float(cubagem) * 166  # Peso cubado = cubagem × 166kg
+                else:
+                    # Se não fornecido, usar fator padrão baseado no peso (estimativa)
+                    peso_cubado = peso_real * 0.17  # Estimativa conservadora
+                
+                # USAR O MAIOR entre peso real e peso cubado para TODOS os cálculos
+                maior_peso = max(peso_real, peso_cubado)
+                
+                # Determinar faixa de peso baseada no MAIOR PESO
                 faixa_peso = None
-                if peso <= 10:
+                if maior_peso <= 10:
                     faixa_peso = 10
-                elif peso <= 20:
+                elif maior_peso <= 20:
                     faixa_peso = 20
-                elif peso <= 30:
+                elif maior_peso <= 30:
                     faixa_peso = 30
-                elif peso <= 50:
+                elif maior_peso <= 50:
                     faixa_peso = 50
-                elif peso <= 70:
+                elif maior_peso <= 70:
                     faixa_peso = 70
-                elif peso <= 100:
+                elif maior_peso <= 100:
                     faixa_peso = 100
-                elif peso <= 300:
+                elif maior_peso <= 300:
                     faixa_peso = 300
-                elif peso <= 500:
+                elif maior_peso <= 500:
                     faixa_peso = 500
                 else:
                     faixa_peso = 'Acima 500'
                 
-                # Valor base por peso
+                # Valor base USANDO O MAIOR PESO
                 valor_base_kg = linha[faixa_peso]
-                valor_base = peso * valor_base_kg
+                valor_base = maior_peso * valor_base_kg
                 
-                # LÓGICA CORRETA DO PEDÁGIO
-                # 1. Calcular peso cubado = cubagem × 166
-                # 2. Usar o MAIOR entre peso real e peso cubado
-                # 3. Pedágio = (maior_peso ÷ 100) arredondado PARA CIMA × valor_coluna_pedagio
-                
-                peso_cubado = 0
-                if cubagem and cubagem > 0:
-                    peso_cubado = cubagem * 166  # Peso cubado = cubagem × 166kg
-                
-                # Usar o MAIOR entre peso real e peso cubado
-                maior_peso = max(peso, peso_cubado)
-                
-                # Buscar valor do pedágio na coluna P da planilha
+                # PEDÁGIO USANDO O MAIOR PESO
                 valor_pedagio_coluna = linha.get('Pedagio (100 Kg)', 0)  # Coluna P
                 if valor_pedagio_coluna is None:
                     valor_pedagio_coluna = 0
@@ -2161,35 +2240,62 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                 except (ValueError, TypeError):
                     prazo = 1  # Valor padrão caso não consiga converter
                 
-                # Detalhes para observações
-                peso_usado = "Real" if maior_peso == peso else "Cubado"
-                observacao_pedagio = f"Pedágio: Peso {peso_usado} {maior_peso:.1f}kg ÷ 100 = {math.ceil(maior_peso/100):.0f} × R${valor_pedagio_coluna:.2f} = R${pedagio:.2f}"
+                # Identificar qual peso foi usado
+                peso_usado = "Real" if maior_peso == peso_real else "Cubado"
+                
+                # Detalhes completos dos cálculos
+                detalhes_peso = {
+                    'peso_real': peso_real,
+                    'peso_cubado': peso_cubado,
+                    'maior_peso': maior_peso,
+                    'peso_usado': peso_usado,
+                    'cubagem_original': cubagem or 0,
+                    'fator_cubagem': 166,
+                    'faixa_peso_usada': faixa_peso,
+                    'valor_kg': valor_base_kg
+                }
+                
+                detalhes_pedagio = {
+                    'peso_calculo': maior_peso,
+                    'divisor': 100,
+                    'fator_pedagio': math.ceil(maior_peso / 100) if maior_peso > 0 else 0,
+                    'valor_base_pedagio': valor_pedagio_coluna,
+                    'calculo_pedagio': f"{maior_peso:.1f}kg ÷ 100 = {math.ceil(maior_peso/100):.0f} × R${valor_pedagio_coluna:.2f}"
+                }
+                
+                # Observações detalhadas
+                observacao_peso = f"Peso Real: {peso_real}kg | Peso Cubado: {peso_cubado:.1f}kg | Usado: {peso_usado} ({maior_peso:.1f}kg)"
+                observacao_frete = f"Frete: {maior_peso:.1f}kg × R${valor_base_kg:.2f} = R${valor_base:.2f}"
+                observacao_pedagio = f"Pedágio: {detalhes_pedagio['calculo_pedagio']} = R${pedagio:.2f}"
                 
                 cotacao = {
                     'modalidade': fornecedor,
                     'agente': fornecedor,
-                    'origem': f"{origem.title()}/{uf_origem.upper()}",  # Usar sempre os parâmetros da consulta
-                    'destino': f"{destino.title()}/{uf_destino.upper()}",  # Usar sempre os parâmetros da consulta
+                    'origem': f"{origem.title()}/{uf_origem.upper()}",
+                    'destino': f"{destino.title()}/{uf_destino.upper()}",
                     'valor_base': valor_base,
                     'pedagio': pedagio,
                     'gris': gris,
                     'total': total,
                     'prazo': prazo,
-                    'peso_real': peso,
+                    'peso_real': peso_real,
                     'peso_cubado': peso_cubado,
                     'maior_peso': maior_peso,
+                    'peso_usado': peso_usado,
                     'valor_pedagio_base': valor_pedagio_coluna,
-                    'observacoes': f"Peso {peso}kg × R${valor_base_kg:.2f} = R${valor_base:.2f} | {observacao_pedagio} | GRIS R${gris:.2f} = Total R${total:.2f}",
+                    'detalhes_peso': detalhes_peso,
+                    'detalhes_pedagio': detalhes_pedagio,
+                    'observacoes': f"{observacao_peso} | {observacao_frete} | {observacao_pedagio} | GRIS R${gris:.2f} = Total R${total:.2f}",
                     'fonte': '📊 Planilha',
-                    'origem_planilha': origem_planilha,  # Dados reais da planilha para debug
-                    'destino_planilha': destino_planilha  # Dados reais da planilha para debug
+                    'origem_planilha': origem_planilha,
+                    'destino_planilha': destino_planilha
                 }
                 
                 cotacoes.append(cotacao)
                 estrategia_cotacoes.append(cotacao)
-                print(f"[PLANILHA] ✅ ACEITO {fornecedor}: Valor Base R${valor_base:.2f} + {observacao_pedagio} + GRIS R${gris:.2f} = Total R${total:.2f}")
-                print(f"[DEBUG] -> Peso: Real {peso}kg, Cubado {peso_cubado:.1f}kg (maior: {maior_peso:.1f}kg), Pedagio base: R${valor_pedagio_coluna:.2f}")
-                print(f"[DEBUG] -> Rota na planilha: {origem_planilha} -> {destino_planilha} (Valor/kg: R${valor_base_kg:.2f})")
+                print(f"[PLANILHA] ✅ ACEITO {fornecedor}: {observacao_peso}")
+                print(f"[PLANILHA] -> {observacao_frete} + {observacao_pedagio} + GRIS R${gris:.2f} = Total R${total:.2f}")
+                print(f"[DEBUG] -> Faixa usada: {faixa_peso}, Valor/kg: R${valor_base_kg:.2f}")
         
         # CONTINUAR buscando em todas as estratégias (não parar na primeira)
         if cotacoes:
