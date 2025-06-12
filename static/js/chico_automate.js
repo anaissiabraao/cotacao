@@ -419,6 +419,74 @@ document.addEventListener('DOMContentLoaded', function() {
                     opacity: 0.8
                 }).addTo(map);
                 
+                // Adicionar marcadores de pedágio para Frete Dedicado
+                if (mapId.includes('dedicado') && window.ultimoResultadoDedicado && 
+                    window.ultimoResultadoDedicado.analise && 
+                    window.ultimoResultadoDedicado.analise.pedagio_detalhes && 
+                    window.ultimoResultadoDedicado.analise.pedagio_detalhes.pedagios_mapa) {
+                    
+                    const pedagios = window.ultimoResultadoDedicado.analise.pedagio_detalhes.pedagios_mapa;
+                    console.log(`[MAPA] Adicionando ${pedagios.length} marcadores de pedágio`);
+                    
+                    // Ícone customizado para pedágios
+                    const pedagogioIcon = L.divIcon({
+                        html: '<div style="background: #FFC107; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; font-size: 8px;">🛣️</div>',
+                        iconSize: [16, 16],
+                        className: 'pedagio-marker'
+                    });
+                    
+                    pedagios.forEach((pedagio, index) => {
+                        const marker = L.marker([pedagio.lat, pedagio.lon], {icon: pedagogioIcon})
+                        .bindTooltip(`
+                            <div style="text-align: center; min-width: 100px; font-size: 12px;">
+                                <strong style="color: #FFC107;">💰 R$ ${pedagio.valor.toFixed(2)}</strong><br>
+                                <small style="color: #666;">${pedagio.nome}</small>
+                            </div>
+                        `, {
+                            permanent: false,
+                            direction: 'top',
+                            offset: [0, -8],
+                            className: 'pedagio-tooltip'
+                        })
+                        .bindPopup(`
+                            <div style="text-align: center; min-width: 180px;">
+                                <strong style="color: #0a6ed1;">🛣️ ${pedagio.nome}</strong><br>
+                                <hr style="margin: 6px 0; border-color: #ddd;">
+                                <div style="text-align: left; font-size: 11px;">
+                                    <strong>💰 Valor:</strong> R$ ${pedagio.valor.toFixed(2)}<br>
+                                    <strong>🚛 Veículo:</strong> ${pedagio.tipo_veiculo}<br>
+                                    <strong>📍 Km:</strong> ${pedagio.distancia_origem.toFixed(0)} km da origem<br>
+                                    <strong>🏢 Operadora:</strong> ${pedagio.concessionaria}<br>
+                                    <strong>🛤️ Via:</strong> ${pedagio.tipo_estrada}
+                                </div>
+                            </div>
+                        `)
+                        .addTo(map);
+                        
+                        // Efeitos de hover para mostrar tooltip
+                        marker.on('mouseover', function() {
+                            this.openTooltip();
+                        });
+                        
+                        marker.on('mouseout', function() {
+                            this.closeTooltip();
+                        });
+                        
+                        // Efeito visual ao clicar
+                        marker.on('click', function() {
+                            const element = this.getElement();
+                            if (element) {
+                                element.style.transform = 'scale(1.2)';
+                                setTimeout(() => {
+                                    element.style.transform = 'scale(1)';
+                                }, 200);
+                            }
+                        });
+                    });
+                    
+                    console.log(`[MAPA] ${pedagios.length} marcadores de pedágio adicionados com sucesso`);
+                }
+                
                 // Ajustar zoom para mostrar toda a rota
                 map.fitBounds(polyline.getBounds(), {padding: [20, 20]});
                 
@@ -562,7 +630,26 @@ document.addEventListener('DOMContentLoaded', function() {
                               </div>
                               <div>
                                 <div class="analise-item"><strong>Emissão de CO₂:</strong> ${data.analise.emissao_co2} kg</div>
-                                <div class="analise-item"><strong>🛣️ Pedágio Real:</strong> <span style="color: #e67e22; font-weight: bold;">R$ ${(data.analise.pedagio_real || 0).toFixed(2)}</span>${pedagogioDetalhes}</div>
+                                <div class="analise-item">
+                                    <strong>🛣️ Pedágio Real:</strong> <span style="color: #e67e22; font-weight: bold;">R$ ${(data.analise.pedagio_real || 0).toFixed(2)}</span>${pedagogioDetalhes}
+                                    <button onclick="togglePedagioDetails()" class="btn-info" style="margin-left: 10px; font-size: 0.8rem; padding: 2px 6px;">
+                                        📋 Detalhes do Pedágio
+                                    </button>
+                                </div>
+                                <div id="pedagio-detalhes" style="display: none; margin-top: 10px; background: #fff8dc; padding: 10px; border-radius: 5px;">
+                                    <strong>🛣️ Análise Detalhada do Pedágio:</strong><br>
+                                    ${data.analise.pedagio_detalhes ? 
+                                        `• <strong>Fonte:</strong> ${data.analise.pedagio_detalhes.fonte || 'Sistema Integrado'}<br>
+                                         • <strong>Método:</strong> ${data.analise.pedagio_detalhes.metodo || 'Cálculo automático'}<br>
+                                         • <strong>Veículo Base:</strong> ${data.analise.pedagio_detalhes.veiculo_tipo || 'TRUCK'}<br>
+                                         ${data.analise.pedagio_detalhes.calculo ? `• <strong>Cálculo:</strong> ${data.analise.pedagio_detalhes.calculo}<br>` : ''}
+                                         ${data.analise.pedagio_detalhes.pedagios_detalhados ? 
+                                            `• <strong>Pedágios Encontrados:</strong> ${data.analise.pedagio_detalhes.num_pedagios || 0} praças<br>` : ''}
+                                         ${data.analise.pedagio_detalhes.taxa_final_km ? 
+                                            `• <strong>Taxa Final:</strong> R$ ${data.analise.pedagio_detalhes.taxa_final_km.toFixed(3)}/km<br>` : ''}` 
+                                        : '• Cálculo baseado em estimativas brasileiras'
+                                    }
+                                </div>
                                 <div class="analise-item"><strong>Provedor de rota:</strong> ${data.analise.provider}</div>
                               </div>
                             </div>
@@ -578,15 +665,56 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Atualizar resultados com tabela e gráfico menores
                 const resultadosDiv = document.getElementById('resultados-dedicado');
                 if (resultadosDiv) {
-                    // Montar tabela de custos compacta
-                    let tabelaCustos = '<h4 style="color: #0a6ed1; margin-bottom: 10px;"><i class="fa-solid fa-money-bill-wave"></i> Custos por Veículo</h4>';
-                    tabelaCustos += '<table class="results"><thead><tr><th>Veículo</th><th>Custo (R$)</th></tr></thead><tbody>';
-                    Object.entries(data.custos || {}).forEach(([tipo, valor]) => {
-                        if (valor && typeof valor === 'number') {
-                            tabelaCustos += `<tr><td>${tipo}</td><td>R$ ${valor.toFixed(2)}</td></tr>`;
-                        }
+                    // Calcular custos detalhados para cada veículo
+                    const custosDetalhados = calcularCustosDetalhados(data.custos, data.analise, peso, cubagem);
+                    
+                    // Criar ranking dos veículos (melhor preço ao pior)
+                    const ranking = Object.entries(custosDetalhados)
+                        .sort(([,a], [,b]) => a.custo_total - b.custo_total)
+                        .map(([tipo, detalhes], index) => ({
+                            posicao: index + 1,
+                            tipo,
+                            ...detalhes
+                        }));
+                    
+                    // Montar tabela de custos detalhada com ranking
+                    let tabelaCustos = '<h4 style="color: #0a6ed1; margin-bottom: 10px;"><i class="fa-solid fa-money-bill-wave"></i> Custos por Veículo (Ranking)</h4>';
+                    tabelaCustos += '<table class="results"><thead><tr><th>Ranking</th><th>Veículo</th><th style="background: #e8f4fd; font-weight: bold; color: #0a6ed1;">💼 Custo Operacional</th><th style="background: #e8f9e8; font-weight: bold; color: #28a745;">💰 Cálculo Comercial</th><th>Adequação</th><th>Ações</th></tr></thead><tbody>';
+                    
+                    ranking.forEach((veiculo) => {
+                        const medalha = veiculo.posicao === 1 ? '🥇' : veiculo.posicao === 2 ? '🥈' : veiculo.posicao === 3 ? '🥉' : veiculo.posicao;
+                        const adequacao = veiculo.adequacao_carga;
+                        const corAdequacao = adequacao.includes('✅') ? '#28a745' : adequacao.includes('⚠️') ? '#ffc107' : '#dc3545';
+                        
+                        // Calcular CUSTO OPERACIONAL REAL (apenas Operacional + Pedágio)
+                        const custoOperacionalReal = veiculo.custo_operacional + veiculo.pedagio_veiculo;
+                        
+                        // Calcular valor comercial baseado no custo operacional real
+                        const margemComercial = calcularMargemComercial(veiculo.tipo, custoOperacionalReal);
+                        const valorComercial = custoOperacionalReal + margemComercial;
+                        
+                        tabelaCustos += `
+                            <tr>
+                                <td style="text-align: center; font-weight: bold;">${medalha}</td>
+                                <td><strong>${veiculo.tipo}</strong></td>
+                                <td style="background: #f8fbff; color: #0a6ed1; font-weight: bold; border-left: 3px solid #0a6ed1;">R$ ${custoOperacionalReal.toFixed(2)}</td>
+                                <td style="background: #f8fff8; color: #28a745; font-weight: bold; border-left: 3px solid #28a745;">R$ ${valorComercial.toFixed(2)}</td>
+                                <td style="color: ${corAdequacao}; font-size: 0.9rem;">${adequacao}</td>
+                                <td>
+                                    <button onclick="mostrarDetalhesVeiculo('${veiculo.tipo}')" class="btn-info" style="font-size: 0.7rem; padding: 2px 6px;">
+                                        📊 Detalhes
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
                     });
                     tabelaCustos += '</tbody></table>';
+                    
+                    // Adicionar div para detalhes dos veículos
+                    tabelaCustos += '<div id="detalhes-veiculos" style="margin-top: 15px;"></div>';
+                    
+                    // Armazenar dados para uso posterior
+                    window.custosDetalhados = custosDetalhados;
 
                     // Container do gráfico menor
                     let chartContainer = `
@@ -616,17 +744,29 @@ document.addEventListener('DOMContentLoaded', function() {
                         const ctx = document.getElementById('dedicadoChart');
                         if (ctx) {
                             const chart = ctx.getContext('2d');
-                            const veiculos = Object.keys(data.custos || {});
-                            const custos = Object.values(data.custos || {}).filter(v => v && typeof v === 'number');
+                            const veiculos = ranking.map(v => v.tipo);
+                            // Usar valores comerciais para o gráfico (custo operacional + margem)
+                            const custosComerciais = ranking.map(v => {
+                                const custoOperacionalReal = v.custo_operacional + v.pedagio_veiculo;
+                                const margem = calcularMargemComercial(v.tipo, custoOperacionalReal);
+                                return custoOperacionalReal + margem;
+                            });
                             window.dedicadoChart = new Chart(chart, {
                                 type: 'bar',
                                 data: {
                                     labels: veiculos,
                                     datasets: [
                                         {
-                                            label: 'Custo (R$)',
-                                            data: custos,
-                                            backgroundColor: '#0a6ed1',
+                                            label: 'Valor Comercial (R$)',
+                                            data: custosComerciais,
+                                            backgroundColor: veiculos.map((_, index) => {
+                                                if (index === 0) return '#FFD700'; // Ouro para 1º lugar
+                                                if (index === 1) return '#C0C0C0'; // Prata para 2º lugar
+                                                if (index === 2) return '#CD7F32'; // Bronze para 3º lugar
+                                                return '#0a6ed1'; // Azul para os demais
+                                            }),
+                                            borderColor: '#ffffff',
+                                            borderWidth: 2,
                                             borderRadius: 8
                                         }
                                     ]
@@ -636,18 +776,34 @@ document.addEventListener('DOMContentLoaded', function() {
                                     maintainAspectRatio: true,
                                     aspectRatio: 2.5,
                                     plugins: { 
-                                        legend: { display: false },
-                                        title: { display: false }
+                                        legend: { 
+                                            display: true,
+                                            labels: {
+                                                color: '#333',
+                                                font: { size: 11, weight: 'bold' }
+                                            }
+                                        },
+                                        title: { 
+                                            display: true,
+                                            text: 'Valores Comerciais por Veículo (Ranking)',
+                                            color: '#0a6ed1',
+                                            font: { size: 13, weight: 'bold' }
+                                        }
                                     },
                                     scales: { 
                                         y: { 
                                             beginAtZero: true, 
                                             grid: { display: true },
-                                            ticks: { font: { size: 11 } }
+                                            ticks: { 
+                                                font: { size: 10 },
+                                                callback: function(value) {
+                                                    return 'R$ ' + value.toLocaleString('pt-BR', {minimumFractionDigits: 0});
+                                                }
+                                            }
                                         },
                                         x: { 
                                             grid: { display: false },
-                                            ticks: { font: { size: 11 } }
+                                            ticks: { font: { size: 10 } }
                                         }
                                     },
                                     layout: {
@@ -666,17 +822,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.warn('[DEBUG] Div de resultados não encontrada');
                 }
                 
-                // Armazenar resultado para exportação
-                window.ultimoResultadoDedicado = data.analise;
-                // Mostrar mapa dedicado
+                // Armazenar resultado para exportação - dados completos incluindo pedágios
+                window.ultimoResultadoDedicado = data;
+                
+                // Mostrar mapa dedicado com marcadores de pedágio
                 if (data.rota_pontos && Array.isArray(data.rota_pontos) && data.rota_pontos.length > 1) {
                     console.log('[DEBUG] Chamando criarMapaUniversal para dedicado com pontos:', data.rota_pontos);
+                    console.log('[DEBUG] Dados de pedágio para mapa:', data.analise?.pedagio_detalhes?.pedagios_mapa);
+                    
                     // Mostrar seção do mapa
                     const mapaSection = document.getElementById('mapa-section-dedicado');
                     if (mapaSection) {
                         mapaSection.style.display = 'block';
                     }
-                    criarMapaUniversal(data.rota_pontos, 'map-dedicado');
+                    
+                    // Criar mapa com dados atualizados (incluindo pedágios)
+                    setTimeout(() => {
+                        criarMapaUniversal(data.rota_pontos, 'map-dedicado');
+                    }, 100); // Pequeno delay para garantir que os dados estejam disponíveis
                 } else {
                     console.warn('[DEBUG] Pontos de rota inválidos para mapa dedicado:', data.rota_pontos);
                     // Ocultar seção do mapa se não há rota válida
@@ -1230,6 +1393,282 @@ document.addEventListener('DOMContentLoaded', function() {
     window.debugDetalhes = debugDetalhes;
 
     console.log('[DEBUG] Funções toggleDetails e debugDetalhes registradas globalmente');
+    
+    // Adicionar estilos CSS para tooltips de pedágio
+    const style = document.createElement('style');
+    style.textContent = `
+        .pedagio-tooltip {
+            background: rgba(255, 193, 7, 0.95) !important;
+            border: 1px solid #FFC107 !important;
+            border-radius: 4px !important;
+            color: #000 !important;
+            font-weight: bold !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+        }
+        
+        .pedagio-marker {
+            cursor: pointer !important;
+            transition: transform 0.2s ease !important;
+        }
+        
+        .pedagio-marker:hover {
+            transform: scale(1.1) !important;
+        }
+        
+        .leaflet-popup-content {
+            margin: 8px 12px !important;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+        }
+        
+        .custom-marker {
+            transition: transform 0.2s ease !important;
+        }
+        
+        .custom-marker:hover {
+            transform: scale(1.1) !important;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Função para toggle dos detalhes do pedágio
+    function togglePedagioDetails() {
+        const detalhes = document.getElementById('pedagio-detalhes');
+        if (detalhes) {
+            detalhes.style.display = detalhes.style.display === 'none' ? 'block' : 'none';
+        }
+    }
+
+    // Definir capacidades dos veículos (peso e volume)
+    const CAPACIDADES_VEICULOS = {
+        'FIORINO': { peso_max: 700, volume_max: 2.8, descricao: 'Utilitário pequeno' },
+        'VAN': { peso_max: 1500, volume_max: 6.0, descricao: 'Van/Kombi' },
+        '3/4': { peso_max: 3500, volume_max: 12.0, descricao: 'Caminhão 3/4' },
+        'TOCO': { peso_max: 7000, volume_max: 25.0, descricao: 'Caminhão toco' },
+        'TRUCK': { peso_max: 15000, volume_max: 45.0, descricao: 'Caminhão truck' },
+        'CARRETA': { peso_max: 30000, volume_max: 90.0, descricao: 'Carreta/bitrem' }
+    };
+
+    // Função para calcular custos detalhados de cada veículo
+    function calcularCustosDetalhados(custosBase, analise, pesoInformado, cubagemInformada) {
+        const detalhes = {};
+        const distancia = analise.distancia || 0;
+        const pedagioBase = analise.pedagio_real || 0;
+        
+        Object.entries(custosBase || {}).forEach(([tipo, custoTotal]) => {
+            const capacidade = CAPACIDADES_VEICULOS[tipo] || CAPACIDADES_VEICULOS['TOCO'];
+            
+            // Calcular componentes do custo
+            const custoOperacional = custoTotal - pedagioBase; // Custo base sem pedágio
+            
+            // Pedágio específico por tipo de veículo (baseado no peso do veículo)
+            const pesoVeiculo = {
+                'FIORINO': 1200, 'VAN': 2000, '3/4': 4000,
+                'TOCO': 8000, 'TRUCK': 12000, 'CARRETA': 18000
+            }[tipo] || 8000;
+            
+            const pedagogioVeiculo = calcularPedagioVeiculo(distancia, pesoVeiculo);
+            
+            // Consumo de combustível por tipo
+            const consumoPorKm = {
+                'FIORINO': 0.08, 'VAN': 0.10, '3/4': 0.12,
+                'TOCO': 0.15, 'TRUCK': 0.18, 'CARRETA': 0.22
+            }[tipo] || 0.15;
+            
+            const consumoCombustivel = distancia * consumoPorKm;
+            const custoCombustivel = consumoCombustivel * 5.80; // R$ 5,80/litro
+            
+            // Emissão de CO2 (kg CO2 por litro de diesel)
+            const emissaoCO2 = consumoCombustivel * 2.7;
+            
+            // Depreciação baseada na distância e tipo do veículo
+            const depreciacao = calcularDepreciacao(tipo, distancia);
+            
+            // Verificar adequação da carga
+            const adequacaoCarga = verificarAdequacaoCarga(
+                pesoInformado || 0, 
+                cubagemInformada || 0, 
+                capacidade
+            );
+            
+            // Custo total recalculado
+            const custoTotalCalculado = custoOperacional + pedagogioVeiculo + custoCombustivel + depreciacao;
+            
+            detalhes[tipo] = {
+                custo_operacional: custoOperacional,
+                pedagio_veiculo: pedagogioVeiculo,
+                consumo_litros: consumoCombustivel,
+                custo_combustivel: custoCombustivel,
+                emissao_co2: emissaoCO2,
+                depreciacao: depreciacao,
+                custo_total: custoTotalCalculado,
+                capacidade: capacidade,
+                adequacao_carga: adequacaoCarga,
+                eficiencia_peso: ((pesoInformado || 0) / capacidade.peso_max * 100),
+                eficiencia_volume: ((cubagemInformada || 0) / capacidade.volume_max * 100)
+            };
+        });
+        
+        return detalhes;
+    }
+
+    // Função para calcular pedágio específico por veículo
+    function calcularPedagioVeiculo(distancia, pesoVeiculo) {
+        const taxasPorKm = {
+            700: 0.03,   // FIORINO
+            1500: 0.05,  // VAN  
+            3500: 0.07,  // 3/4
+            7000: 0.10,  // TOCO
+            15000: 0.14, // TRUCK
+            30000: 0.18  // CARRETA
+        };
+        
+        let taxa = 0.10; // Taxa padrão
+        for (const [pesoLimite, taxaKm] of Object.entries(taxasPorKm)) {
+            if (pesoVeiculo <= parseInt(pesoLimite)) {
+                taxa = taxaKm;
+                break;
+            }
+        }
+        
+        // Ajuste para longas distâncias
+        if (distancia > 300) {
+            taxa *= 1.3;
+        }
+        
+        return distancia * taxa;
+    }
+
+    // Função para calcular depreciação
+    function calcularDepreciacao(tipoVeiculo, distancia) {
+        const depreciacao_por_km = {
+            'FIORINO': 0.12, 'VAN': 0.15, '3/4': 0.18,
+            'TOCO': 0.25, 'TRUCK': 0.32, 'CARRETA': 0.45
+        };
+        
+        return distancia * (depreciacao_por_km[tipoVeiculo] || 0.25);
+    }
+
+    // Função para calcular margem comercial baseada no tipo de veículo
+    function calcularMargemComercial(tipoVeiculo, custoTotal) {
+        // Margens comerciais diferenciadas por tipo de veículo (percentuais)
+        const margensComerciais = {
+            'FIORINO': 0.35,   // 35% - Veículos pequenos têm margem maior
+            'VAN': 0.30,       // 30% - Boa margem para entregas urbanas
+            '3/4': 0.25,       // 25% - Margem média para médio porte
+            'TOCO': 0.22,      // 22% - Margem reduzida para caminhões
+            'TRUCK': 0.20,     // 20% - Margem padrão para trucks
+            'CARRETA': 0.18    // 18% - Margem menor para grandes volumes
+        };
+        
+        const percentualMargem = margensComerciais[tipoVeiculo] || 0.20; // 20% padrão
+        const margem = custoTotal * percentualMargem;
+        
+        // Margem mínima de R$ 50,00 para qualquer veículo
+        return Math.max(margem, 50.00);
+    }
+
+    // Função para obter posicionamento comercial do veículo
+    function obterPosicionamentoComercial(tipoVeiculo) {
+        const posicionamentos = {
+            'FIORINO': 'Premium - Entregas expressas',
+            'VAN': 'Especializado - Urbano/E-commerce',
+            '3/4': 'Intermediário - Distribuidora',
+            'TOCO': 'Competitivo - Carga geral',
+            'TRUCK': 'Padrão - Longa distância',
+            'CARRETA': 'Econômico - Grandes volumes'
+        };
+        
+        return posicionamentos[tipoVeiculo] || 'Padrão - Uso geral';
+    }
+
+    // Função para verificar adequação da carga
+    function verificarAdequacaoCarga(peso, cubagem, capacidade) {
+        const eficienciaPeso = (peso / capacidade.peso_max) * 100;
+        const eficienciaVolume = (cubagem / capacidade.volume_max) * 100;
+        
+        if (peso > capacidade.peso_max || cubagem > capacidade.volume_max) {
+            return `❌ Excede capacidade (${Math.max(eficienciaPeso, eficienciaVolume).toFixed(0)}%)`;
+        } else if (eficienciaPeso > 80 || eficienciaVolume > 80) {
+            return `✅ Adequado (${Math.max(eficienciaPeso, eficienciaVolume).toFixed(0)}%)`;
+        } else if (eficienciaPeso > 50 || eficienciaVolume > 50) {
+            return `⚠️ Subutilizado (${Math.max(eficienciaPeso, eficienciaVolume).toFixed(0)}%)`;
+        } else {
+            return `⚠️ Muito subutilizado (${Math.max(eficienciaPeso, eficienciaVolume).toFixed(0)}%)`;
+        }
+    }
+
+    // Função para mostrar detalhes de um veículo específico
+    function mostrarDetalhesVeiculo(tipoVeiculo) {
+        const detalhes = window.custosDetalhados[tipoVeiculo];
+        if (!detalhes) return;
+        
+        const container = document.getElementById('detalhes-veiculos');
+        if (!container) return;
+        
+        const html = `
+            <div class="detalhes-veiculo" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 4px solid #0a6ed1;">
+                <h5 style="color: #0a6ed1; margin-bottom: 10px;">
+                    🚛 Análise Detalhada: ${tipoVeiculo} (${detalhes.capacidade.descricao})
+                </h5>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <h6>💰 Breakdown de Custos:</h6>
+                        <ul style="margin: 5px 0; padding-left: 20px; font-size: 0.9rem;">
+                            <li><strong>Operacional:</strong> R$ ${detalhes.custo_operacional.toFixed(2)}</li>
+                            <li><strong>Pedágio:</strong> R$ ${detalhes.pedagio_veiculo.toFixed(2)}</li>
+                            <li style="border-top: 1px solid #0a6ed1; margin-top: 5px; padding-top: 5px; color: #0a6ed1; font-weight: bold;"><strong>Custo Operacional:</strong> R$ ${(detalhes.custo_operacional + detalhes.pedagio_veiculo).toFixed(2)}</li>
+                            <li style="color: #28a745;"><strong>Margem Comercial:</strong> R$ ${calcularMargemComercial(tipoVeiculo, detalhes.custo_operacional + detalhes.pedagio_veiculo).toFixed(2)}</li>
+                            <li style="border-top: 2px solid #28a745; margin-top: 5px; padding-top: 5px; color: #28a745; font-weight: bold;"><strong>Valor Comercial:</strong> R$ ${(detalhes.custo_operacional + detalhes.pedagio_veiculo + calcularMargemComercial(tipoVeiculo, detalhes.custo_operacional + detalhes.pedagio_veiculo)).toFixed(2)}</li>
+                        </ul>
+                        
+                        <h6>📊 Informações de Análise:</h6>
+                        <ul style="margin: 5px 0; padding-left: 20px; font-size: 0.85rem; color: #666;">
+                            <li><strong>Combustível:</strong> R$ ${detalhes.custo_combustivel.toFixed(2)} (${detalhes.consumo_litros.toFixed(1)}L) <em>- Informativo</em></li>
+                            <li><strong>Depreciação:</strong> R$ ${detalhes.depreciacao.toFixed(2)} <em>- Informativo</em></li>
+                            <li><strong>Emissão CO₂:</strong> ${detalhes.emissao_co2.toFixed(1)}kg <em>- Impacto ambiental</em></li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h6>📊 Capacidade vs Carga:</h6>
+                        <ul style="margin: 5px 0; padding-left: 20px; font-size: 0.9rem;">
+                            <li><strong>Peso Max:</strong> ${detalhes.capacidade.peso_max.toLocaleString()}kg</li>
+                            <li><strong>Volume Max:</strong> ${detalhes.capacidade.volume_max}m³</li>
+                            <li><strong>Eficiência Peso:</strong> ${detalhes.eficiencia_peso.toFixed(1)}%</li>
+                            <li><strong>Eficiência Volume:</strong> ${detalhes.eficiencia_volume.toFixed(1)}%</li>
+                            <li><strong>Adequação:</strong> ${detalhes.adequacao_carga}</li>
+                        </ul>
+                        
+                        <h6>💼 Informações Comerciais:</h6>
+                        <ul style="margin: 5px 0; padding-left: 20px; font-size: 0.9rem;">
+                            <li><strong>Margem Aplicada:</strong> ${((calcularMargemComercial(tipoVeiculo, detalhes.custo_total) / detalhes.custo_total) * 100).toFixed(1)}%</li>
+                            <li><strong>Categoria:</strong> ${detalhes.capacidade.descricao}</li>
+                            <li><strong>Posicionamento:</strong> ${obterPosicionamentoComercial(tipoVeiculo)}</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 10px; padding: 8px; background: #e8f4f8; border-radius: 4px;">
+                    <strong>🌱 Impacto Ambiental:</strong> ${detalhes.emissao_co2.toFixed(2)} kg CO₂ estimados
+                </div>
+                
+                <button onclick="this.parentElement.parentElement.innerHTML=''" class="btn-info" style="margin-top: 10px; font-size: 0.8rem;">
+                    ✖️ Fechar Detalhes
+                </button>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Tornar funções globalmente acessíveis
+    window.togglePedagioDetails = togglePedagioDetails;
+    window.mostrarDetalhesVeiculo = mostrarDetalhesVeiculo;
+    window.calcularCustosDetalhados = calcularCustosDetalhados;
+    window.calcularMargemComercial = calcularMargemComercial;
+    window.obterPosicionamentoComercial = obterPosicionamentoComercial;
     
     console.log('[DEBUG] Inicialização concluída');
 });

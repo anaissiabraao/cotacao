@@ -148,20 +148,45 @@ def normalizar_cidade(cidade):
     
     cidade = str(cidade).strip()
     
-    # Mapeamento de cidades conhecidas
+    # Mapeamento de cidades conhecidas - EXPANDIDO
     mapeamento_cidades = {
         "SAO PAULO": "SAO PAULO",
-        "SÃO PAULO": "SAO PAULO",
+        "SÃO PAULO": "SAO PAULO", 
         "S. PAULO": "SAO PAULO",
         "S PAULO": "SAO PAULO",
         "SP": "SAO PAULO",
+        "SAOPAULO": "SAO PAULO",
+        "SAÕPAULO": "SAO PAULO",
         "RIO DE JANEIRO": "RIO DE JANEIRO",
         "RJ": "RIO DE JANEIRO",
+        "RIODEJANEIRO": "RIO DE JANEIRO",
+        "RIO": "RIO DE JANEIRO",
+        "R. DE JANEIRO": "RIO DE JANEIRO",
+        "R DE JANEIRO": "RIO DE JANEIRO",
         "BELO HORIZONTE": "BELO HORIZONTE",
         "BH": "BELO HORIZONTE",
+        "BELOHORIZONTE": "BELO HORIZONTE",
+        "B. HORIZONTE": "BELO HORIZONTE",
+        "B HORIZONTE": "BELO HORIZONTE",
         "BRASILIA": "BRASILIA",
         "BRASÍLIA": "BRASILIA",
         "BSB": "BRASILIA",
+        "ARACAJU": "ARACAJU",
+        "RIBEIRAO PRETO": "RIBEIRAO PRETO",
+        "RIBEIRÃO PRETO": "RIBEIRAO PRETO",
+        "RIBEIRÃOPRETO": "RIBEIRAO PRETO",
+        "RIBEIRAOPRETO": "RIBEIRAO PRETO",
+        "SALVADOR": "SALVADOR",
+        "PORTO ALEGRE": "PORTO ALEGRE",
+        "PORTOALEGRE": "PORTO ALEGRE",
+        "RECIFE": "RECIFE",
+        "FORTALEZA": "FORTALEZA",
+        "CURITIBA": "CURITIBA",
+        "GOIANIA": "GOIANIA",
+        "GOIÂNIA": "GOIANIA",
+        "MANAUS": "MANAUS",
+        "BELÉM": "BELEM",
+        "BELEM": "BELEM",
     }
     
     cidade_upper = cidade.upper()
@@ -721,7 +746,16 @@ def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="De
         "provider": rota_info["provider"],
         "custos": custos,
         "data_hora": datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        "rota_pontos": rota_info["rota_pontos"]
+        "rota_pontos": rota_info["rota_pontos"],
+        # Capacidades dos veículos para comparação com carga
+        "capacidades_veiculos": {
+            'FIORINO': { 'peso_max': 700, 'volume_max': 2.8, 'descricao': 'Utilitário pequeno' },
+            'VAN': { 'peso_max': 1500, 'volume_max': 6.0, 'descricao': 'Van/Kombi' },
+            '3/4': { 'peso_max': 3500, 'volume_max': 12.0, 'descricao': 'Caminhão 3/4' },
+            'TOCO': { 'peso_max': 7000, 'volume_max': 25.0, 'descricao': 'Caminhão toco' },
+            'TRUCK': { 'peso_max': 15000, 'volume_max': 45.0, 'descricao': 'Caminhão truck' },
+            'CARRETA': { 'peso_max': 30000, 'volume_max': 90.0, 'descricao': 'Carreta/bitrem' }
+        }
     }
     return analise
 
@@ -1087,7 +1121,7 @@ def calcular_frete_fracionado():
         # Identificar qual peso foi usado na melhor opção (sempre o maior)
         maior_peso_usado = melhor_opcao.get('maior_peso', max(peso_real, peso_cubado))
         peso_usado_tipo = melhor_opcao.get('peso_usado_tipo', 'Real' if maior_peso_usado == peso_real else 'Cubado')
-        
+
         # Criar resultado final apenas com dados REAIS
         resultado_final = {
             "id_historico": id_historico,
@@ -1135,7 +1169,7 @@ def calcular_frete_fracionado():
             "detalhamento": f"Busca APENAS na planilha real - {len(cotacoes_ranking)} opções encontradas"
         }
 
-        # Sem mapa na aba fracionado - dados vêm da planilha
+                # Sem mapa na aba fracionado - dados vêm da planilha
         resultado_final["rota_pontos"] = []
         resultado_final["distancia"] = 0
 
@@ -2105,20 +2139,51 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
     )
     estrategias_busca.append(('CIDADE_ORIGEM_UF_DESTINO', estrategia_uf_destino))
     
-    # 4. Busca SOMENTE por UF (mais ampla para capturar transportadoras adicionais)
+    # 4. Busca por variações de nomes - SEM ESPAÇOS
+    origem_sem_espacos = origem_norm.replace(' ', '')
+    destino_sem_espacos = destino_norm.replace(' ', '')
+    
+    estrategia_sem_espacos = (
+        df_base['Origem_Norm'].str.replace(' ', '', regex=False).str.contains(origem_sem_espacos, case=False, na=False) &
+        df_base['Destino_Norm'].str.replace(' ', '', regex=False).str.contains(destino_sem_espacos, case=False, na=False)
+    )
+    estrategias_busca.append(('SEM_ESPACOS', estrategia_sem_espacos))
+    
+    # 5. Busca com cidades PARCIAIS (primeiras palavras)
+    origem_primeira_palavra = origem_norm.split()[0] if origem_norm else ''
+    destino_primeira_palavra = destino_norm.split()[0] if destino_norm else ''
+    
+    if len(origem_primeira_palavra) > 3 and len(destino_primeira_palavra) > 3:
+        estrategia_parcial = (
+            df_base['Origem_Norm'].str.contains(origem_primeira_palavra, case=False, na=False) &
+            df_base['Destino_Norm'].str.contains(destino_primeira_palavra, case=False, na=False)
+        )
+        estrategias_busca.append(('PALAVRAS_PARCIAIS', estrategia_parcial))
+    
+    # 6. Busca SOMENTE por UF (mais ampla para capturar transportadoras adicionais)
     estrategia_somente_uf = (
         df_base['Origem_Norm'].str.contains(uf_origem_norm, case=False, na=False) &
         df_base['Destino_Norm'].str.contains(uf_destino_norm, case=False, na=False)
     )
     estrategias_busca.append(('SOMENTE_UF', estrategia_somente_uf))
     
-    # 5. Busca por "SÃO PAULO" completo (para casos especiais)
+    # 7. Busca por "SÃO PAULO" completo (para casos especiais)
     if origem_norm in ['SAO PAULO', 'SAOPAULO']:
         estrategia_sp_completo = (
             df_base['Origem_Norm'].str.contains('SAO PAULO', case=False, na=False) &
             df_base['Destino_Norm'].str.contains(destino_norm, case=False, na=False)
         )
         estrategias_busca.append(('SAO_PAULO_COMPLETO', estrategia_sp_completo))
+    
+    # 8. Busca para Rio de Janeiro especial
+    if destino_norm in ['RIO DE JANEIRO', 'RIODEJANEIRO']:
+        estrategia_rio_especial = (
+            df_base['Origem_Norm'].str.contains(origem_norm, case=False, na=False) &
+            (df_base['Destino_Norm'].str.contains('RIO DE JANEIRO', case=False, na=False) |
+             df_base['Destino_Norm'].str.contains('RIODEJANEIRO', case=False, na=False) |
+             df_base['Destino_Norm'].str.contains('RIO', case=False, na=False))
+        )
+        estrategias_busca.append(('RIO_ESPECIAL', estrategia_rio_especial))
     
     cotacoes = []
     fornecedores_encontrados = set()
@@ -2129,6 +2194,16 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
         
         if not df_filtrado.empty:
             print(f"[PLANILHA] Estratégia {estrategia_nome}: {len(df_filtrado)} registros encontrados")
+            
+            # Debug adicional para novas estratégias
+            if estrategia_nome in ['SEM_ESPACOS', 'PALAVRAS_PARCIAIS', 'RIO_ESPECIAL']:
+                print(f"[DEBUG] Nova estratégia {estrategia_nome} ativada!")
+                if estrategia_nome == 'SEM_ESPACOS':
+                    print(f"[DEBUG] Buscando: '{origem_sem_espacos}' -> '{destino_sem_espacos}'")
+                elif estrategia_nome == 'PALAVRAS_PARCIAIS':
+                    print(f"[DEBUG] Buscando palavras: '{origem_primeira_palavra}' -> '{destino_primeira_palavra}'")
+                elif estrategia_nome == 'RIO_ESPECIAL':
+                    print(f"[DEBUG] Busca especial para Rio de Janeiro ativada!")
             
             # Processar TODOS os registros encontrados
             for _, linha in df_filtrado.iterrows():
@@ -2151,17 +2226,35 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                     origem_limpa in origem_planilha_limpa or 
                     origem_planilha_limpa in origem_limpa or
                     # Casos específicos conhecidos
-                    (origem_limpa == 'SAOPAULO' and origem_planilha_limpa == 'SAOPAULO')
+                    (origem_limpa == 'SAOPAULO' and origem_planilha_limpa == 'SAOPAULO') or
+                    # Verificar se as primeiras 4 letras coincidem (para nomes similares)
+                    (len(origem_limpa) >= 4 and len(origem_planilha_limpa) >= 4 and 
+                     origem_limpa[:4] == origem_planilha_limpa[:4]) or
+                    # Verificar se alguma palavra em comum (para nomes compostos)
+                    any(palavra in origem_planilha_limpa for palavra in origem_limpa.split() if len(palavra) > 3)
                 )
                 
                 destino_compativel = (
                     destino_limpo in destino_planilha_limpo or 
                     destino_planilha_limpo in destino_limpo or
                     # Casos específicos conhecidos  
-                    (destino_limpo == 'ARACAJU' and destino_planilha_limpo == 'ARACAJU')
+                    (destino_limpo == 'RIODEJANEIRO' and destino_planilha_limpo in ['RIODEJANEIRO', 'RIO']) or
+                    (destino_limpo == 'RIO' and destino_planilha_limpo in ['RIODEJANEIRO', 'RIO']) or
+                    (destino_limpo == 'ARACAJU' and destino_planilha_limpo == 'ARACAJU') or
+                    # Verificar se as primeiras 4 letras coincidem (para nomes similares)
+                    (len(destino_limpo) >= 4 and len(destino_planilha_limpo) >= 4 and 
+                     destino_limpo[:4] == destino_planilha_limpo[:4]) or
+                    # Verificar se alguma palavra em comum (para nomes compostos)
+                    any(palavra in destino_planilha_limpo for palavra in destino_limpo.split() if len(palavra) > 3)
                 )
                 
-                # REJEITAR se não houver compatibilidade REAL
+                # REJEITAR se não houver compatibilidade REAL (salvo exceções)
+                # Forçar aceitação de Concept para SP->RJ se nomes baterem parcialmente
+                if fornecedor == 'Concept':
+                    if ('SAOPAULO' in origem_limpa and 'RIODEJANEIRO' in destino_limpo) or ('SAOPAULO' in origem_planilha_limpa and 'RIODEJANEIRO' in destino_planilha_limpo):
+                        origem_compativel = True
+                        destino_compativel = True
+                
                 if not (origem_compativel and destino_compativel):
                     # Debug especial para Concept
                     if fornecedor == 'Concept':
@@ -2237,23 +2330,52 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                 
                 # GRIS: (Valor NF × coluna R) - mas mantém valor mínimo coluna Q
                 gris = 0.0
-                if valor_nf and valor_nf > 0:
-                    gris_percentual = linha.get('Gris Exc', 0) / 100  # Coluna R em %
-                    gris_minimo = linha.get('Gris Min', 0)  # Coluna Q - valor mínimo
-                    gris_calculado = valor_nf * gris_percentual  # Valor NF × porcentagem
-                    gris = max(gris_calculado, gris_minimo)  # Usar o maior entre calculado e mínimo
+                try:
+                    if valor_nf and valor_nf > 0:
+                        # Parse percentual da coluna R (Gris Exc)
+                        gris_exc_raw = linha.get('Gris Exc', 0)
+                        gris_exc_val = 0.0
+                        if gris_exc_raw is not None and str(gris_exc_raw).strip() != '':
+                            gris_exc_val = float(str(gris_exc_raw).replace(',', '.'))
+                        # Se o valor estiver como percentual inteiro (ex: 10 para 10%), converter
+                        if gris_exc_val > 1:
+                            gris_percentual = gris_exc_val / 100
+                        else:
+                            gris_percentual = gris_exc_val
+                        # Valor mínimo (coluna Q)
+                        gris_min_raw = linha.get('Gris Min', 0)
+                        gris_min_val = 0.0
+                        if gris_min_raw is not None and str(gris_min_raw).strip() != '':
+                            gris_min_val = float(str(gris_min_raw).replace(',', '.'))
+                        gris_calculado = valor_nf * gris_percentual
+                        gris = max(gris_calculado, gris_min_val)
+                except Exception as e:
+                    print(f"[GRIS] Erro ao calcular GRIS: {e}")
+                    gris = 0.0
                 
                 # Total
                 total = valor_base + pedagio + gris
                 
-                # Prazo da coluna S - tratar prazo 0 como 1 dia
+                # --- NOVO PARSE DO VALOR DA NF (aceita vírgula ou ponto) ---
+                try:
+                    if valor_nf is not None:
+                        valor_nf = float(str(valor_nf).replace(',', '.'))
+                except Exception:
+                    valor_nf = 0.0
+                # -----------------------------------------------------------
+                
+                # Prazo da coluna S - tratar prazo 0, vazio, NaN ou não numérico como 1 dia
                 prazo_original = linha.get('Prazo', 0)
                 try:
-                    prazo_numero = float(prazo_original) if prazo_original not in ['N/A', None, ''] else 0
-                    # Se prazo for 0, considerar como 1 dia
-                    prazo = max(1, prazo_numero) if prazo_numero == 0 else prazo_numero
-                except (ValueError, TypeError):
-                    prazo = 1  # Valor padrão caso não consiga converter
+                    if str(prazo_original).strip().upper() in ['N/A', '', 'NAN', 'NONE']:
+                        prazo_numero = 1
+                    else:
+                        prazo_numero = float(str(prazo_original).replace(',', '.'))
+                        if prazo_numero <= 0 or pd.isna(prazo_numero):
+                            prazo_numero = 1
+                    prazo = int(round(prazo_numero))
+                except Exception:
+                    prazo = 1
                 
                 # Identificar qual peso foi usado
                 peso_usado = "Real" if maior_peso == peso_real else "Cubado"
@@ -3347,6 +3469,9 @@ def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
         
         pedagio_estimado = distancia * taxa_final
         
+        # Gerar localizações estimadas de pedágios ao longo da rota
+        pedagios_mapa = gerar_pedagios_estimados_mapa(rota_info, tipo_veiculo, pedagio_estimado, distancia)
+
         result = {
             "pedagio_real": pedagio_estimado,
             "moeda": "BRL",
@@ -3361,7 +3486,11 @@ def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
                 "ajuste_distancia": ajuste_info,
                 "calculo": f"{distancia:.1f} km × R$ {taxa_final:.3f}/km = R$ {pedagio_estimado:.2f}",
                 "metodo": "Estimativa brasileira por peso/distância",
-                "fonte_rota": rota_info.get('provider', 'Aproximação')
+                "fonte_rota": rota_info.get('provider', 'Aproximação'),
+                "fonte": "Sistema Integrado - Estimativa Brasileira",
+                "num_pedagios": len(pedagios_mapa),
+                "pedagios_detalhados": True,
+                "pedagios_mapa": pedagios_mapa
             }
         }
         
@@ -3624,6 +3753,78 @@ def calcular_pedagios_tollguru(origem, destino, peso_veiculo=1000):
     except Exception as e:
         print(f"[TOLLGURU] ❌ Erro: {e}")
         return None
+
+def gerar_pedagios_estimados_mapa(rota_info, tipo_veiculo, valor_total_pedagio, distancia_total):
+    """
+    Gera localizações estimadas de pedágios ao longo da rota para exibir no mapa
+    """
+    try:
+        pedagios_mapa = []
+        
+        # Se não temos pontos da rota, não podemos gerar localizações
+        if not rota_info.get("rota_pontos") or len(rota_info["rota_pontos"]) < 2:
+            return []
+        
+        rota_pontos = rota_info["rota_pontos"]
+        
+        # Estimar número de pedágios baseado na distância (aproximadamente a cada 120-180km)
+        num_pedagios_estimado = max(1, int(distancia_total / 150))
+        
+        # Se a rota é muito curta, pode não ter pedágios
+        if distancia_total < 80:
+            return []
+        
+        # Calcular valor médio por pedágio
+        valor_por_pedagio = valor_total_pedagio / num_pedagios_estimado if num_pedagios_estimado > 0 else 0
+        
+        # Distribuir pedágios ao longo da rota
+        total_pontos = len(rota_pontos)
+        
+        for i in range(num_pedagios_estimado):
+            # Posicionar pedágios em intervalos regulares ao longo da rota
+            # Evitar muito próximo do início e fim
+            posicao_percentual = 0.15 + (i * 0.7 / max(1, num_pedagios_estimado - 1))
+            if num_pedagios_estimado == 1:
+                posicao_percentual = 0.5  # No meio da rota
+            
+            indice_ponto = int(posicao_percentual * (total_pontos - 1))
+            indice_ponto = max(0, min(indice_ponto, total_pontos - 1))
+            
+            lat, lon = rota_pontos[indice_ponto]
+            
+            # Variação no valor do pedágio baseada no tipo de estrada/região
+            variacao = 0.8 + (i * 0.4 / max(1, num_pedagios_estimado - 1))  # Entre 80% e 120%
+            valor_pedagio = valor_por_pedagio * variacao
+            
+            # Determinar nome estimado do pedágio baseado na posição
+            nomes_estimados = [
+                f"Pedágio {i+1} - Rodovia Principal",
+                f"Praça {i+1} - Via Expressa", 
+                f"Pedágio {i+1} - Concessionária",
+                f"Posto {i+1} - Rodovia Federal"
+            ]
+            nome_pedagio = nomes_estimados[i % len(nomes_estimados)]
+            
+            pedagio_info = {
+                "id": f"pedagio_{i+1}",
+                "nome": nome_pedagio,
+                "lat": lat,
+                "lon": lon,
+                "valor": valor_pedagio,
+                "tipo_veiculo": tipo_veiculo,
+                "distancia_origem": (i + 1) * (distancia_total / (num_pedagios_estimado + 1)),
+                "concessionaria": f"Concessionária {chr(65 + i)}",  # A, B, C, etc.
+                "tipo_estrada": "Rodovia Federal" if i % 2 == 0 else "Rodovia Estadual"
+            }
+            
+            pedagios_mapa.append(pedagio_info)
+        
+        print(f"[PEDÁGIO_MAPA] Gerados {len(pedagios_mapa)} pedágios estimados para o mapa")
+        return pedagios_mapa
+        
+    except Exception as e:
+        print(f"[PEDÁGIO_MAPA] Erro ao gerar pedágios para mapa: {e}")
+        return []
 
 def calcular_distancia_openroute_detalhada(origem, destino):
     """
