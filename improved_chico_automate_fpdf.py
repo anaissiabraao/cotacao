@@ -3230,22 +3230,135 @@ def admin_exportar_logs():
         download_name=f"logs_sistema_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     )
 
-# Google Routes API Key - você pode obter em https://console.cloud.google.com/
-# Para usar os pedágios reais, substitua pela sua chave da Google Routes API
+# APIs para cálculo de pedágios reais
 GOOGLE_ROUTES_API_KEY = os.getenv("GOOGLE_ROUTES_API_KEY", "SUA_CHAVE_AQUI")
+TOLLGURU_API_KEY = os.getenv("TOLLGURU_API_KEY", "SUA_CHAVE_TOLLGURU")
+OPENROUTE_API_KEY = "5b3ce3597851110001cf6248a355ae5a9ee94a6ca9c6d876c7e4d534"  # Chave pública
 
 def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
     """
-    Calcula pedágios reais usando Google Routes API
-    Retorna o valor total de pedágios para a rota
+    Sistema inteligente de cálculo de pedágios usando múltiplas APIs
+    Prioridade: TollGuru (especializada) > Google Routes > OpenRoute + Estimativa Brasileira
     """
     try:
-        # Verificar se há chave de API válida
+        print(f"[PEDÁGIO] 🎯 Calculando pedágios reais: {origem} -> {destino} (peso: {peso_veiculo}kg)")
+        
+        # 1. Tentar TollGuru primeiro (mais especializada em pedágios)
+        result = calcular_pedagios_tollguru(origem, destino, peso_veiculo)
+        if result:
+            print(f"[PEDÁGIO] ✅ TollGuru bem-sucedida: R$ {result['pedagio_real']:.2f}")
+            return result
+        
+        # 2. Fallback para Google Routes
+        result = calcular_pedagios_google_routes(origem, destino, peso_veiculo)
+        if result:
+            print(f"[PEDÁGIO] ✅ Google Routes bem-sucedida: R$ {result['pedagio_real']:.2f}")
+            return result
+        
+        # 3. Fallback final: OpenRoute + Estimativa Brasileira
+        print(f"[PEDÁGIO] ⚠️ APIs externas indisponíveis - usando OpenRoute + estimativa brasileira")
+        
+        # Obter rota real usando OpenRoute
+        rota_info = calcular_distancia_openroute_detalhada(origem, destino)
+        if not rota_info:
+            # Se OpenRoute falhar, usar OSRM
+            rota_info = calcular_distancia_osrm(origem, destino)
+        
+        if not rota_info:
+            print(f"[PEDÁGIO] ❌ Não foi possível obter rota - usando distância estimada")
+            # Cálculo de distância aproximada usando haversine
+            import math
+            lat1, lon1 = origem[0], origem[1]
+            lat2, lon2 = destino[0], destino[1]
+            
+            # Fórmula haversine
+            R = 6371  # Raio da Terra em km
+            dlat = math.radians(lat2 - lat1)
+            dlon = math.radians(lon2 - lon1)
+            a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            distancia = R * c
+            
+            rota_info = {
+                "distancia": distancia,
+                "duracao": distancia / 80 * 60,  # Assumir 80 km/h média
+                "provider": "Cálculo Aproximado"
+            }
+        
+        distancia = rota_info.get("distancia", 0)
+        
+        # Estimativa brasileira avançada de pedágios por tipo de veículo e distância
+        estimativas_pedagio = {
+            "FIORINO": {"base": 0.03, "mult_dist": 1.0},      # R$ 0.03/km base
+            "VAN": {"base": 0.05, "mult_dist": 1.1},          # R$ 0.05/km base + 10% em longas distâncias
+            "3/4": {"base": 0.07, "mult_dist": 1.2},          # R$ 0.07/km base + 20%
+            "TOCO": {"base": 0.10, "mult_dist": 1.3},         # R$ 0.10/km base + 30%
+            "TRUCK": {"base": 0.14, "mult_dist": 1.4},        # R$ 0.14/km base + 40%
+            "CARRETA": {"base": 0.18, "mult_dist": 1.5}       # R$ 0.18/km base + 50%
+        }
+        
+        # Determinar tipo de veículo baseado no peso
+        if peso_veiculo <= 700:
+            tipo_veiculo = "FIORINO"
+        elif peso_veiculo <= 1500:
+            tipo_veiculo = "VAN"
+        elif peso_veiculo <= 3500:
+            tipo_veiculo = "3/4"
+        elif peso_veiculo <= 7000:
+            tipo_veiculo = "TOCO"
+        elif peso_veiculo <= 15000:
+            tipo_veiculo = "TRUCK"
+        else:
+            tipo_veiculo = "CARRETA"
+        
+        config = estimativas_pedagio.get(tipo_veiculo, estimativas_pedagio["TOCO"])
+        taxa_base = config["base"]
+        
+        # Ajustar taxa para longas distâncias (mais pedágios em rodovias principais)
+        if distancia > 300:
+            taxa_final = taxa_base * config["mult_dist"]
+            ajuste_info = f"Longa distância ({distancia:.1f}km) - taxa aumentada {config['mult_dist']}x"
+        else:
+            taxa_final = taxa_base
+            ajuste_info = "Distância normal - taxa base"
+        
+        pedagio_estimado = distancia * taxa_final
+        
+        result = {
+            "pedagio_real": pedagio_estimado,
+            "moeda": "BRL",
+            "distancia": distancia,
+            "duracao": rota_info.get("duracao", 0),
+            "fonte": f"{rota_info.get('provider', 'OpenRoute/OSRM')} + Estimativa Brasileira Avançada",
+            "detalhes_pedagio": {
+                "veiculo_tipo": tipo_veiculo,
+                "peso_veiculo": peso_veiculo,
+                "taxa_base_km": taxa_base,
+                "taxa_final_km": taxa_final,
+                "ajuste_distancia": ajuste_info,
+                "calculo": f"{distancia:.1f} km × R$ {taxa_final:.3f}/km = R$ {pedagio_estimado:.2f}",
+                "metodo": "Estimativa brasileira por peso/distância",
+                "fonte_rota": rota_info.get('provider', 'Aproximação')
+            }
+        }
+        
+        print(f"[PEDÁGIO] ✅ Estimativa brasileira: R$ {pedagio_estimado:.2f} ({tipo_veiculo})")
+        return result
+        
+    except Exception as e:
+        print(f"[PEDÁGIO] ❌ Erro geral no cálculo de pedágios: {e}")
+        return None
+
+def calcular_pedagios_google_routes(origem, destino, peso_veiculo=1000):
+    """
+    Calcula pedágios usando Google Routes API
+    """
+    try:
         if not GOOGLE_ROUTES_API_KEY or GOOGLE_ROUTES_API_KEY == "SUA_CHAVE_AQUI":
-            print(f"[PEDÁGIO] ⚠️ Chave da Google Routes API não configurada - usando fallback")
+            print(f"[GOOGLE] ⚠️ Chave da Google Routes API não configurada")
             return None
             
-        print(f"[PEDÁGIO] Calculando pedágios reais para: {origem} -> {destino}")
+        print(f"[GOOGLE] Tentando calcular pedágios: {origem} -> {destino}")
         
         url = "https://routes.googleapis.com/directions/v2:computeRoutes"
         
@@ -3297,7 +3410,7 @@ def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
             "units": "METRIC"
         }
         
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
         
         if response.status_code == 200:
             data = response.json()
@@ -3342,19 +3455,18 @@ def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
                     }
                 }
                 
-                print(f"[PEDÁGIO] ✅ Pedágio real calculado: R$ {total_toll:.2f}")
+                print(f"[GOOGLE] ✅ Pedágio calculado: R$ {total_toll:.2f}")
                 return result
             else:
-                print(f"[PEDÁGIO] ❌ Nenhuma rota encontrada na resposta da API")
+                print(f"[GOOGLE] ❌ Nenhuma rota encontrada")
                 return None
                 
         else:
-            print(f"[PEDÁGIO] ❌ Erro na API Google Routes: {response.status_code}")
-            print(f"[PEDÁGIO] Resposta: {response.text}")
+            print(f"[GOOGLE] ❌ Erro na API: {response.status_code}")
             return None
             
     except Exception as e:
-        print(f"[PEDÁGIO] ❌ Erro ao calcular pedágios reais: {e}")
+        print(f"[GOOGLE] ❌ Erro: {e}")
         return None
 
 def calcular_pedagios_fallback_brasil(distancia_km, tipo_veiculo="CARRETA"):
@@ -3390,6 +3502,168 @@ def calcular_pedagios_fallback_brasil(distancia_km, tipo_veiculo="CARRETA"):
         
     except Exception as e:
         print(f"[PEDÁGIO] Erro no fallback: {e}")
+        return None
+
+def calcular_pedagios_tollguru(origem, destino, peso_veiculo=1000):
+    """
+    Calcula pedágios reais usando TollGuru API - especializada em pedágios
+    Mais precisa que Google Routes para cálculos de pedágio
+    """
+    try:
+        if not TOLLGURU_API_KEY or TOLLGURU_API_KEY == "SUA_CHAVE_TOLLGURU":
+            print(f"[TOLLGURU] ⚠️ Chave TollGuru não configurada")
+            return None
+            
+        print(f"[TOLLGURU] Calculando pedágios reais: {origem} -> {destino}")
+        
+        # Primeiro obter rota do OpenRouteService
+        rota_info = calcular_distancia_openroute_detalhada(origem, destino)
+        if not rota_info or not rota_info.get('polyline'):
+            print(f"[TOLLGURU] ❌ Não foi possível obter rota detalhada")
+            return None
+        
+        # Configurar tipo de veículo baseado no peso
+        if peso_veiculo <= 1000:
+            vehicle_type = "2AxlesAuto"
+        elif peso_veiculo <= 3500:
+            vehicle_type = "2AxlesTruck" 
+        elif peso_veiculo <= 7500:
+            vehicle_type = "3AxlesTruck"
+        elif peso_veiculo <= 15000:
+            vehicle_type = "4AxlesTruck"
+        else:
+            vehicle_type = "5AxlesTruck"
+        
+        # Chamar TollGuru API
+        url = "https://apis.tollguru.com/toll/v2"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": TOLLGURU_API_KEY
+        }
+        
+        payload = {
+            "source": "openroute",
+            "polyline": rota_info['polyline'],
+            "vehicleType": vehicle_type,
+            "departure_time": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
+            "country": "BR"  # Brasil
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if data.get('route'):
+                route = data['route']
+                costs = route.get('costs', {})
+                tolls = costs.get('tolls', [])
+                
+                total_toll = 0.0
+                currency = "BRL"
+                toll_details = []
+                
+                for toll in tolls:
+                    if toll.get('currency') == 'BRL':
+                        total_toll += float(toll.get('cost', 0))
+                        toll_details.append({
+                            'name': toll.get('name', 'Desconhecido'),
+                            'cost': toll.get('cost', 0),
+                            'currency': toll.get('currency', 'BRL')
+                        })
+                
+                result = {
+                    "pedagio_real": total_toll,
+                    "moeda": currency,
+                    "distancia": route.get('distance', {}).get('value', 0) / 1000,
+                    "duracao": route.get('duration', {}).get('value', 0) / 60,
+                    "fonte": "TollGuru API (Especializada)",
+                    "detalhes_pedagio": {
+                        "veiculo_tipo": vehicle_type,
+                        "num_pedagios": len(tolls),
+                        "pedagios_detalhados": toll_details,
+                        "rota_fonte": "OpenRouteService"
+                    }
+                }
+                
+                print(f"[TOLLGURU] ✅ Pedágio real: R$ {total_toll:.2f} ({len(tolls)} pedágios)")
+                return result
+            else:
+                print(f"[TOLLGURU] ❌ Resposta inválida da API")
+                return None
+                
+        else:
+            print(f"[TOLLGURU] ❌ Erro na API: {response.status_code}")
+            print(f"[TOLLGURU] Resposta: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"[TOLLGURU] ❌ Erro: {e}")
+        return None
+
+def calcular_distancia_openroute_detalhada(origem, destino):
+    """
+    Versão melhorada do OpenRouteService para obter polyline detalhada
+    """
+    try:
+        url = "https://api.openrouteservice.org/v2/directions/driving-car"
+        headers = {
+            "Authorization": OPENROUTE_API_KEY
+        }
+        params = {
+            "start": f"{origem[1]},{origem[0]}",
+            "end": f"{destino[1]},{destino[0]}",
+            "format": "json",
+            "geometry_format": "polyline"
+        }
+        
+        response = requests.get(url, headers=headers, params=params, timeout=15)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if "features" in data and data["features"]:
+                route = data["features"][0]
+                properties = route.get("properties", {})
+                segments = properties.get("segments", [{}])[0]
+                
+                distance = segments.get("distance", 0)
+                duration = segments.get("duration", 0)
+                
+                # Obter polyline da geometria
+                geometry = route.get("geometry")
+                polyline = None
+                route_points = []
+                
+                if geometry:
+                    if isinstance(geometry, str):
+                        polyline = geometry
+                    elif isinstance(geometry, dict) and geometry.get("coordinates"):
+                        # Converter coordenadas para polyline
+                        coords = geometry["coordinates"]
+                        route_points = [[coord[1], coord[0]] for coord in coords]
+                        
+                        # Para TollGuru, precisamos de polyline codificada
+                        try:
+                            import polyline as polyline_lib
+                            polyline = polyline_lib.encode(route_points)
+                        except ImportError:
+                            # Fallback simples se polyline lib não disponível
+                            polyline = f"polyline_points_{len(route_points)}"
+                
+                return {
+                    "distancia": distance / 1000,
+                    "duracao": duration / 60,
+                    "polyline": polyline,
+                    "rota_pontos": route_points,
+                    "provider": "OpenRouteService"
+                }
+        
+        return None
+        
+    except Exception as e:
+        print(f"[OPENROUTE] Erro: {e}")
         return None
 
 if __name__ == "__main__":
