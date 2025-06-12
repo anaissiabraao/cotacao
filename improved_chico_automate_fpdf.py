@@ -594,23 +594,44 @@ DEDICADO_KM_ACIMA_600 = {
 }
 
 def calcular_custos_dedicado(df, uf_origem, municipio_origem, uf_destino, municipio_destino, distancia, pedagio_real=0):
-    faixa = determinar_faixa(distancia)
-    custos = {}
-    if faixa and faixa in TABELA_CUSTOS_DEDICADO:
-        tabela = TABELA_CUSTOS_DEDICADO[faixa]
-        for tipo_veiculo, valor in tabela.items():
-            # Adicionar pedágio real ao custo base
-            custos[tipo_veiculo] = valor + pedagio_real
-    elif distancia > 600:
-        for tipo_veiculo, valor_km in DEDICADO_KM_ACIMA_600.items():
-            # Adicionar pedágio real ao custo calculado por km
-            custos[tipo_veiculo] = round((distancia * valor_km) + pedagio_real, 2)
-    else:
-        # Custos padrão + pedágio real
-        custos_base = {"FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0}
-        for tipo_veiculo, valor in custos_base.items():
-            custos[tipo_veiculo] = valor + pedagio_real
-    return custos
+    try:
+        # Garantir que pedagio_real é um número válido
+        pedagio_real = float(pedagio_real) if pedagio_real is not None else 0.0
+        distancia = float(distancia) if distancia is not None else 0.0
+        
+        faixa = determinar_faixa(distancia)
+        custos = {}
+        
+        if faixa and faixa in TABELA_CUSTOS_DEDICADO:
+            tabela = TABELA_CUSTOS_DEDICADO[faixa]
+            for tipo_veiculo, valor in tabela.items():
+                # Adicionar pedágio real ao custo base
+                custo_total = float(valor) + pedagio_real
+                custos[tipo_veiculo] = round(custo_total, 2)
+        elif distancia > 600:
+            for tipo_veiculo, valor_km in DEDICADO_KM_ACIMA_600.items():
+                # Adicionar pedágio real ao custo calculado por km
+                custo_total = (distancia * float(valor_km)) + pedagio_real
+                custos[tipo_veiculo] = round(custo_total, 2)
+        else:
+            # Custos padrão + pedágio real
+            custos_base = {"FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0}
+            for tipo_veiculo, valor in custos_base.items():
+                custo_total = float(valor) + pedagio_real
+                custos[tipo_veiculo] = round(custo_total, 2)
+        
+        # Garantir que todos os valores são números válidos
+        for tipo_veiculo, valor in custos.items():
+            if not isinstance(valor, (int, float)) or valor < 0:
+                custos[tipo_veiculo] = 0.0
+                
+        print(f"[DEBUG] Custos calculados: {custos}")
+        return custos
+        
+    except Exception as e:
+        print(f"[ERRO] Erro ao calcular custos dedicado: {e}")
+        # Retornar custos padrão em caso de erro
+        return {"FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0}
 
 def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="Dedicado", municipio_origem=None, uf_origem=None, municipio_destino=None, uf_destino=None):
     global CONTADOR_DEDICADO, CONTADOR_FRACIONADO # Adicionado CONTADOR_FRACIONADO
@@ -866,6 +887,8 @@ def calcular():
                 "consumo_combustivel": analise["consumo_combustivel"],
                 "emissao_co2": analise["emissao_co2"],
                 "pedagio_estimado": analise["pedagio_estimado"],
+                "pedagio_real": analise.get("pedagio_real", 0),
+                "pedagio_detalhes": analise.get("pedagio_detalhes"),
                 "origem": analise["origem"],
                 "destino": analise["destino"],
                 "distancia": analise["distancia"],

@@ -509,6 +509,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
+                // Verificar se os dados essenciais estão presentes
+                if (!data.custos || Object.keys(data.custos).length === 0) {
+                    showError('Erro: Nenhum custo calculado. Verifique os dados de entrada.', ids.dedicado.analise);
+                    return;
+                }
+                
+                if (!data.analise) {
+                    showError('Erro: Análise não disponível. Verifique a conexão.', ids.dedicado.analise);
+                    return;
+                }
+                
                 // Salvar rota para uso posterior
                 console.log('[DEBUG] Salvando rota:', data.rota_pontos);
                 window.ultimaRotaDedicado = data.rota_pontos;
@@ -532,7 +543,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (detalhes.fonte) {
                             pedagogioDetalhes = ` (${detalhes.fonte})`;
                         }
-                        if (detalhes.valor_por_km) {
+                        if (detalhes.valor_por_km && typeof detalhes.valor_por_km === 'number') {
                             pedagogioDetalhes += ` - R$ ${detalhes.valor_por_km.toFixed(3)}/km`;
                         }
                         if (detalhes.veiculo_tipo) {
@@ -551,7 +562,7 @@ document.addEventListener('DOMContentLoaded', function() {
                               </div>
                               <div>
                                 <div class="analise-item"><strong>Emissão de CO₂:</strong> ${data.analise.emissao_co2} kg</div>
-                                <div class="analise-item"><strong>🛣️ Pedágio Real:</strong> <span style="color: #e67e22; font-weight: bold;">R$ ${data.analise.pedagio_real.toFixed(2)}</span>${pedagogioDetalhes}</div>
+                                <div class="analise-item"><strong>🛣️ Pedágio Real:</strong> <span style="color: #e67e22; font-weight: bold;">R$ ${(data.analise.pedagio_real || 0).toFixed(2)}</span>${pedagogioDetalhes}</div>
                                 <div class="analise-item"><strong>Provedor de rota:</strong> ${data.analise.provider}</div>
                               </div>
                             </div>
@@ -570,8 +581,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Montar tabela de custos compacta
                     let tabelaCustos = '<h4 style="color: #0a6ed1; margin-bottom: 10px;"><i class="fa-solid fa-money-bill-wave"></i> Custos por Veículo</h4>';
                     tabelaCustos += '<table class="results"><thead><tr><th>Veículo</th><th>Custo (R$)</th></tr></thead><tbody>';
-                    Object.entries(data.custos).forEach(([tipo, valor]) => {
-                        tabelaCustos += `<tr><td>${tipo}</td><td>R$ ${valor.toFixed(2)}</td></tr>`;
+                    Object.entries(data.custos || {}).forEach(([tipo, valor]) => {
+                        if (valor && typeof valor === 'number') {
+                            tabelaCustos += `<tr><td>${tipo}</td><td>R$ ${valor.toFixed(2)}</td></tr>`;
+                        }
                     });
                     tabelaCustos += '</tbody></table>';
 
@@ -603,8 +616,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         const ctx = document.getElementById('dedicadoChart');
                         if (ctx) {
                             const chart = ctx.getContext('2d');
-                            const veiculos = Object.keys(data.custos);
-                            const custos = Object.values(data.custos);
+                            const veiculos = Object.keys(data.custos || {});
+                            const custos = Object.values(data.custos || {}).filter(v => v && typeof v === 'number');
                             window.dedicadoChart = new Chart(chart, {
                                 type: 'bar',
                                 data: {
@@ -658,9 +671,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Mostrar mapa dedicado
                 if (data.rota_pontos && Array.isArray(data.rota_pontos) && data.rota_pontos.length > 1) {
                     console.log('[DEBUG] Chamando criarMapaUniversal para dedicado com pontos:', data.rota_pontos);
+                    // Mostrar seção do mapa
+                    const mapaSection = document.getElementById('mapa-section-dedicado');
+                    if (mapaSection) {
+                        mapaSection.style.display = 'block';
+                    }
                     criarMapaUniversal(data.rota_pontos, 'map-dedicado');
                 } else {
                     console.warn('[DEBUG] Pontos de rota inválidos para mapa dedicado:', data.rota_pontos);
+                    // Ocultar seção do mapa se não há rota válida
+                    const mapaSection = document.getElementById('mapa-section-dedicado');
+                    if (mapaSection) {
+                        mapaSection.style.display = 'none';
+                    }
+                    showError('Nenhuma rota disponível para exibir o mapa (JS).', ids.dedicado.analise);
                 }
             })
             .catch(error => {
