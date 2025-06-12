@@ -525,7 +525,21 @@ document.addEventListener('DOMContentLoaded', function() {
                         mapaSection.style.display = 'block';
                     }
                     
-                    // Montar análise textual em container estilizado
+                    // Montar análise textual com informações detalhadas de pedágio
+                    let pedagogioDetalhes = '';
+                    if (data.analise.pedagio_detalhes) {
+                        const detalhes = data.analise.pedagio_detalhes;
+                        if (detalhes.fonte) {
+                            pedagogioDetalhes = ` (${detalhes.fonte})`;
+                        }
+                        if (detalhes.valor_por_km) {
+                            pedagogioDetalhes += ` - R$ ${detalhes.valor_por_km.toFixed(3)}/km`;
+                        }
+                        if (detalhes.veiculo_tipo) {
+                            pedagogioDetalhes += ` - ${detalhes.veiculo_tipo}`;
+                        }
+                    }
+
                     let analiseHtml = `
                         <div class="analise-container">
                             <h3 class="analise-title"><i class="fa-solid fa-chart-bar" aria-hidden="true"></i> Análise da Rota</h3>
@@ -537,7 +551,7 @@ document.addEventListener('DOMContentLoaded', function() {
                               </div>
                               <div>
                                 <div class="analise-item"><strong>Emissão de CO₂:</strong> ${data.analise.emissao_co2} kg</div>
-                                <div class="analise-item"><strong>Pedágio estimado:</strong> R$ ${data.analise.pedagio_estimado}</div>
+                                <div class="analise-item"><strong>🛣️ Pedágio Real:</strong> <span style="color: #e67e22; font-weight: bold;">R$ ${data.analise.pedagio_real.toFixed(2)}</span>${pedagogioDetalhes}</div>
                                 <div class="analise-item"><strong>Provedor de rota:</strong> ${data.analise.provider}</div>
                               </div>
                             </div>
@@ -831,12 +845,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Mostrar loading
             showLoading(ids.fracionado.loading, true);
             
-            // Preparar o container do mapa
-            const mapContainer = document.getElementById(ids.fracionado.mapContainer);
-            if (mapContainer) {
-                mapContainer.style.display = 'block';
-                mapContainer.classList.remove('hidden');
-            }
+            // Mapa removido da aba fracionado - dados vêm da planilha
             
             // Enviar requisição para o backend
             fetch('/calcular_frete_fracionado', {
@@ -867,13 +876,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
                 
-                // Atualiza mapa fracionado
-                if (data.rota_pontos && typeof initializeFracionadoMap === 'function') {
-                    console.log('[DEBUG] Inicializando mapa fracionado com rota');
-                    initializeFracionadoMap(data.rota_pontos);
-                } else {
-                    console.warn('[DEBUG] Não foi possível inicializar o mapa fracionado');
-                }
+                // Mapa removido - fracionado usa dados da planilha apenas
                 
                 // Atualiza resultados
                 const resultadosDiv = document.getElementById(ids.fracionado.resultados);
@@ -887,13 +890,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Armazenar resultado para exportação
                 window.ultimoResultadoFracionado = data.analise;
-                // Mostrar mapa fracionado (rota completa)
-                if (data.rota_pontos && Array.isArray(data.rota_pontos) && data.rota_pontos.length > 1) {
-                    console.log('[DEBUG] Chamando criarMapaUniversal para fracionado com pontos:', data.rota_pontos);
-                    criarMapaUniversal(data.rota_pontos, 'map-fracionado');
-                } else {
-                    console.warn('[DEBUG] Pontos de rota inválidos para mapa fracionado:', data.rota_pontos);
-                }
+                // Mapa removido da aba fracionado
             })
             .catch(error => {
                 showLoading(ids.fracionado.loading, false);

@@ -593,18 +593,23 @@ DEDICADO_KM_ACIMA_600 = {
     "CARRETA": 8.0
 }
 
-def calcular_custos_dedicado(df, uf_origem, municipio_origem, uf_destino, municipio_destino, distancia):
+def calcular_custos_dedicado(df, uf_origem, municipio_origem, uf_destino, municipio_destino, distancia, pedagio_real=0):
     faixa = determinar_faixa(distancia)
     custos = {}
     if faixa and faixa in TABELA_CUSTOS_DEDICADO:
         tabela = TABELA_CUSTOS_DEDICADO[faixa]
         for tipo_veiculo, valor in tabela.items():
-            custos[tipo_veiculo] = valor
+            # Adicionar pedágio real ao custo base
+            custos[tipo_veiculo] = valor + pedagio_real
     elif distancia > 600:
         for tipo_veiculo, valor_km in DEDICADO_KM_ACIMA_600.items():
-            custos[tipo_veiculo] = round(distancia * valor_km, 2)
+            # Adicionar pedágio real ao custo calculado por km
+            custos[tipo_veiculo] = round((distancia * valor_km) + pedagio_real, 2)
     else:
-        custos = {"FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0}
+        # Custos padrão + pedágio real
+        custos_base = {"FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0}
+        for tipo_veiculo, valor in custos_base.items():
+            custos[tipo_veiculo] = valor + pedagio_real
     return custos
 
 def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="Dedicado", municipio_origem=None, uf_origem=None, municipio_destino=None, uf_destino=None):
@@ -629,11 +634,41 @@ def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="De
     if tipo == "Aéreo":
         consumo_combustivel = rota_info["distancia"] * 0.4  # Maior consumo para aviões
         emissao_co2 = consumo_combustivel * 3.15  # Maior emissão para aviação
-        pedagio_estimado = 0  # Não há pedágio para modal aéreo
+        pedagio_real = 0  # Não há pedágio para modal aéreo
+        pedagio_detalhes = None
     else:
         consumo_combustivel = rota_info["distancia"] * 0.12  # Consumo médio para veículos terrestres
         emissao_co2 = consumo_combustivel * 2.3
-        pedagio_estimado = rota_info["distancia"] * 0.05
+        
+        # CÁLCULO REAL DE PEDÁGIOS para Frete Dedicado
+        if tipo == "Dedicado":
+            print(f"[PEDÁGIO] Iniciando cálculo real de pedágios para {origem_nome} -> {destino_nome}")
+            
+            # Tentar calcular pedágios reais usando APIs
+            pedagio_result = None
+            
+            # Primeira tentativa: Google Routes API com pedágios reais
+            if len(origem_info) >= 2 and len(destino_info) >= 2:
+                pedagio_result = calcular_pedagios_reais(origem_info[:2], destino_info[:2], peso_veiculo=7500)
+            
+            # Fallback: Estimativas brasileiras
+            if not pedagio_result:
+                print(f"[PEDÁGIO] API falhou, usando estimativas brasileiras")
+                pedagio_result = calcular_pedagios_fallback_brasil(rota_info["distancia"], "CARRETA")
+            
+            if pedagio_result:
+                pedagio_real = pedagio_result["pedagio_real"]
+                pedagio_detalhes = pedagio_result["detalhes_pedagio"]
+                print(f"[PEDÁGIO] ✅ Pedágio final: R$ {pedagio_real:.2f} ({pedagio_result['fonte']})")
+            else:
+                # Último fallback - estimativa simples
+                pedagio_real = rota_info["distancia"] * 0.05
+                pedagio_detalhes = {"fonte": "Estimativa simples", "valor_por_km": 0.05}
+                print(f"[PEDÁGIO] ⚠️ Usando estimativa simples: R$ {pedagio_real:.2f}")
+        else:
+            # Para outros tipos de frete, manter a estimativa antiga
+            pedagio_real = rota_info["distancia"] * 0.05
+            pedagio_detalhes = None
     
     # Gerar ID único com formato #DedXXX, #FraXXX ou #AerXXX
     tipo_sigla = tipo[:3].upper()
@@ -659,7 +694,9 @@ def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="De
         "duracao_minutos": round(rota_info["duracao"], 2),
         "consumo_combustivel": round(consumo_combustivel, 2),
         "emissao_co2": round(emissao_co2, 2),
-        "pedagio_estimado": round(pedagio_estimado, 2),
+        "pedagio_estimado": round(pedagio_real, 2),  # Agora é o valor real
+        "pedagio_real": round(pedagio_real, 2),      # Valor real de pedágios
+        "pedagio_detalhes": pedagio_detalhes,        # Detalhes do cálculo
         "provider": rota_info["provider"],
         "custos": custos,
         "data_hora": datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
@@ -799,7 +836,14 @@ def calcular():
         print(f"[DEBUG] rota_info: {rota_info}")
         if not rota_info:
             return jsonify({"error": "Não foi possível calcular a rota"})
-        custos = calcular_custos_dedicado(df_unificado, uf_origem, municipio_origem, uf_destino, municipio_destino, rota_info["distancia"])
+        # Primeiro gerar análise para calcular pedágios reais
+        analise_preliminar = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, {}, "Dedicado", municipio_origem, uf_origem, municipio_destino, uf_destino)
+        
+        # Usar pedágio real para calcular custos
+        pedagio_real = analise_preliminar.get('pedagio_real', 0)
+        custos = calcular_custos_dedicado(df_unificado, uf_origem, municipio_origem, uf_destino, municipio_destino, rota_info["distancia"], pedagio_real)
+        
+        # Gerar análise final com custos atualizados
         analise = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, custos, "Dedicado", municipio_origem, uf_origem, municipio_destino, uf_destino)
         ultimoResultadoDedicado = analise
         HISTORICO_PESQUISAS.append(analise)
@@ -1068,62 +1112,9 @@ def calcular_frete_fracionado():
             "detalhamento": f"Busca APENAS na planilha real - {len(cotacoes_ranking)} opções encontradas"
         }
 
-        # GEOCODIFICAR PARA GERAR PONTOS DO MAPA COM ROTA REAL
-        try:
-            print(f"[MAPA] Geocodificando {cidade_origem}/{uf_origem} -> {cidade_destino}/{uf_destino}")
-            coord_origem = geocode(cidade_origem, uf_origem)
-            coord_destino = geocode(cidade_destino, uf_destino)
-            
-            if coord_origem and coord_destino:
-                print(f"[MAPA] Coordenadas obtidas: {coord_origem} -> {coord_destino}")
-                
-                # Calcular rota REAL usando OSRM ou OpenRoute (não linha reta)
-                try:
-                    print(f"[MAPA] Calculando rota rodoviária real...")
-                    rota_info = calcular_distancia_osrm(coord_origem, coord_destino)
-                    
-                    if not rota_info:
-                        print(f"[MAPA] OSRM falhou, tentando OpenRoute...")
-                        rota_info = calcular_distancia_openroute(coord_origem, coord_destino)
-                    
-                    if rota_info and rota_info.get("rota_pontos"):
-                        # Usar rota real com todos os pontos do trajeto
-                        resultado_final["rota_pontos"] = rota_info["rota_pontos"]
-                        resultado_final["distancia"] = rota_info.get("distancia", 0)
-                        print(f"[MAPA] Rota REAL calculada: {len(rota_info['rota_pontos'])} pontos, {rota_info.get('distancia', 0):.1f} km")
-                    else:
-                        print(f"[MAPA] APIs de rota falharam, usando linha reta como fallback")
-                        rota_info = calcular_distancia_reta(coord_origem, coord_destino)
-                        if rota_info:
-                            resultado_final["distancia"] = rota_info.get("distancia", 0)
-                            resultado_final["rota_pontos"] = rota_info.get("rota_pontos", [coord_origem, coord_destino])
-                            print(f"[MAPA] Fallback linha reta: {rota_info.get('distancia', 0):.1f} km")
-                        else:
-                            resultado_final["rota_pontos"] = [coord_origem, coord_destino]
-                            resultado_final["distancia"] = 0
-                            
-                except Exception as e:
-                    print(f"[MAPA] Erro ao calcular rota real: {e}")
-                    # Fallback para linha reta se as APIs falharem
-                    try:
-                        rota_info = calcular_distancia_reta(coord_origem, coord_destino)
-                        if rota_info:
-                            resultado_final["distancia"] = rota_info.get("distancia", 0)
-                            resultado_final["rota_pontos"] = rota_info.get("rota_pontos", [coord_origem, coord_destino])
-                            print(f"[MAPA] Fallback linha reta por erro: {rota_info.get('distancia', 0):.1f} km")
-                        else:
-                            resultado_final["rota_pontos"] = [coord_origem, coord_destino]
-                            resultado_final["distancia"] = 0
-                    except Exception as e2:
-                        print(f"[MAPA] Erro no fallback: {e2}")
-                        resultado_final["rota_pontos"] = [coord_origem, coord_destino]
-                        resultado_final["distancia"] = 0
-            else:
-                print(f"[MAPA] Falha na geocodificação: origem={coord_origem}, destino={coord_destino}")
-                resultado_final["rota_pontos"] = []
-        except Exception as e:
-            print(f"[MAPA] Erro geral na geocodificação: {e}")
-            resultado_final["rota_pontos"] = []
+        # Sem mapa na aba fracionado - dados vêm da planilha
+        resultado_final["rota_pontos"] = []
+        resultado_final["distancia"] = 0
 
         # Adicionar HTML formatado
         resultado_final["html"] = formatar_resultado_fracionado({
@@ -3238,6 +3229,168 @@ def admin_exportar_logs():
         as_attachment=True,
         download_name=f"logs_sistema_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     )
+
+# Google Routes API Key - você pode obter em https://console.cloud.google.com/
+# Para usar os pedágios reais, substitua pela sua chave da Google Routes API
+GOOGLE_ROUTES_API_KEY = os.getenv("GOOGLE_ROUTES_API_KEY", "SUA_CHAVE_AQUI")
+
+def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
+    """
+    Calcula pedágios reais usando Google Routes API
+    Retorna o valor total de pedágios para a rota
+    """
+    try:
+        # Verificar se há chave de API válida
+        if not GOOGLE_ROUTES_API_KEY or GOOGLE_ROUTES_API_KEY == "SUA_CHAVE_AQUI":
+            print(f"[PEDÁGIO] ⚠️ Chave da Google Routes API não configurada - usando fallback")
+            return None
+            
+        print(f"[PEDÁGIO] Calculando pedágios reais para: {origem} -> {destino}")
+        
+        url = "https://routes.googleapis.com/directions/v2:computeRoutes"
+        
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": GOOGLE_ROUTES_API_KEY,
+            "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.travelAdvisory.tollInfo,routes.legs.steps.localizedValues"
+        }
+        
+        # Configurar veículo baseado no peso
+        if peso_veiculo <= 1000:
+            vehicle_type = "TWO_WHEELER"
+        elif peso_veiculo <= 3500:
+            vehicle_type = "LIGHT_VEHICLE" 
+        elif peso_veiculo <= 7500:
+            vehicle_type = "MEDIUM_VEHICLE"
+        else:
+            vehicle_type = "HEAVY_VEHICLE"
+        
+        payload = {
+            "origin": {
+                "location": {
+                    "latLng": {
+                        "latitude": origem[0],
+                        "longitude": origem[1]
+                    }
+                }
+            },
+            "destination": {
+                "location": {
+                    "latLng": {
+                        "latitude": destino[0],
+                        "longitude": destino[1]
+                    }
+                }
+            },
+            "travelMode": "DRIVE",
+            "routeModifiers": {
+                "vehicleInfo": {
+                    "emissionType": "GASOLINE"
+                },
+                "tollPasses": [
+                    "BR_AUTOPASS",  # Passe de pedágio brasileiro
+                    "BR_CONECTCAR",
+                    "BR_SEM_PARAR"
+                ]
+            },
+            "extraComputations": ["TOLLS"],
+            "units": "METRIC"
+        }
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            if "routes" in data and len(data["routes"]) > 0:
+                route = data["routes"][0]
+                
+                # Extrair informações de pedágio
+                toll_info = route.get("travelAdvisory", {}).get("tollInfo", {})
+                estimated_price = toll_info.get("estimatedPrice", [])
+                
+                total_toll = 0.0
+                currency = "BRL"
+                
+                if estimated_price:
+                    for price in estimated_price:
+                        if price.get("currencyCode") == "BRL":
+                            units = float(price.get("units", 0))
+                            nanos = float(price.get("nanos", 0)) / 1000000000
+                            total_toll += units + nanos
+                            currency = price.get("currencyCode", "BRL")
+                            break
+                
+                # Extrair distância e duração
+                distance_meters = route.get("distanceMeters", 0)
+                duration_seconds = route.get("duration", "0s")
+                
+                # Converter duração de string para segundos
+                if isinstance(duration_seconds, str):
+                    duration_seconds = int(duration_seconds.replace("s", ""))
+                
+                result = {
+                    "pedagio_real": total_toll,
+                    "moeda": currency,
+                    "distancia": distance_meters / 1000,  # Converter para km
+                    "duracao": duration_seconds / 60,  # Converter para minutos
+                    "fonte": "Google Routes API",
+                    "detalhes_pedagio": {
+                        "veiculo_tipo": vehicle_type,
+                        "passes_tentados": ["BR_AUTOPASS", "BR_CONECTCAR", "BR_SEM_PARAR"],
+                        "preco_estimado": estimated_price
+                    }
+                }
+                
+                print(f"[PEDÁGIO] ✅ Pedágio real calculado: R$ {total_toll:.2f}")
+                return result
+            else:
+                print(f"[PEDÁGIO] ❌ Nenhuma rota encontrada na resposta da API")
+                return None
+                
+        else:
+            print(f"[PEDÁGIO] ❌ Erro na API Google Routes: {response.status_code}")
+            print(f"[PEDÁGIO] Resposta: {response.text}")
+            return None
+            
+    except Exception as e:
+        print(f"[PEDÁGIO] ❌ Erro ao calcular pedágios reais: {e}")
+        return None
+
+def calcular_pedagios_fallback_brasil(distancia_km, tipo_veiculo="CARRETA"):
+    """
+    Fallback para cálculo de pedágios baseado em estimativas brasileiras
+    Usando dados médios de pedágios por km no Brasil
+    """
+    try:
+        # Valores médios de pedágio por km no Brasil (2024)
+        valores_km = {
+            "FIORINO": 0.03,      # R$ 0,03/km
+            "VAN": 0.04,          # R$ 0,04/km  
+            "3/4": 0.05,          # R$ 0,05/km
+            "TOCO": 0.08,         # R$ 0,08/km
+            "TRUCK": 0.12,        # R$ 0,12/km
+            "CARRETA": 0.15       # R$ 0,15/km
+        }
+        
+        valor_por_km = valores_km.get(tipo_veiculo, 0.08)  # Default para TOCO
+        pedagio_estimado = distancia_km * valor_por_km
+        
+        return {
+            "pedagio_real": pedagio_estimado,
+            "moeda": "BRL",
+            "distancia": distancia_km,
+            "fonte": "Estimativa Brasil (fallback)",
+            "detalhes_pedagio": {
+                "valor_por_km": valor_por_km,
+                "tipo_veiculo": tipo_veiculo,
+                "calculo": f"{distancia_km:.1f} km × R$ {valor_por_km:.3f}/km"
+            }
+        }
+        
+    except Exception as e:
+        print(f"[PEDÁGIO] Erro no fallback: {e}")
+        return None
 
 if __name__ == "__main__":
     # Usar configurações de ambiente para produção

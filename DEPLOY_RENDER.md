@@ -90,7 +90,7 @@ services:
 ## 🎯 URL Final
 Após deploy bem-sucedido, sua aplicação estará disponível em:
 ```
-https://portoex.onrender.com
+https://cotacao-9sd1.onrender.com
 ```
 
 ## 🔐 Credenciais de Acesso
