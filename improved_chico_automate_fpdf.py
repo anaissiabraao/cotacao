@@ -984,8 +984,9 @@ def calcular_frete_fracionado():
         if not all([uf_origem, cidade_origem, uf_destino, cidade_destino]):
             return jsonify({"error": "Todos os campos são obrigatórios."})
 
-        # Calcular peso cubado
-        peso_cubado = max(float(peso), float(cubagem) * 300)
+        # Definir peso real e peso cubado
+        peso_real = float(peso)
+        peso_cubado = float(cubagem) * 166  # Usando 166kg/m³ conforme regra da ANTT
 
         # USAR APENAS A BASE_UNIFICADA.XLSX - SEM SIMULAÇÕES
         cotacoes_base = calcular_frete_base_unificada(
@@ -1016,9 +1017,9 @@ def calcular_frete_fracionado():
         # ID do histórico
         id_historico = f"Fra{CONTADOR_FRACIONADO:03d}"
 
-        # Identificar qual peso foi usado na melhor opção
+        # Identificar qual peso foi usado na melhor opção (sempre o maior)
         maior_peso_usado = melhor_opcao.get('maior_peso', max(peso_real, peso_cubado))
-        peso_usado_tipo = melhor_opcao.get('peso_usado', 'Real' if maior_peso_usado == peso_real else 'Cubado')
+        peso_usado_tipo = melhor_opcao.get('peso_usado_tipo', 'Real' if maior_peso_usado == peso_real else 'Cubado')
         
         # Criar resultado final apenas com dados REAIS
         resultado_final = {
@@ -1139,7 +1140,7 @@ def calcular_frete_fracionado():
             'uf_origem': uf_origem,
             'destino': cidade_destino,
             'uf_destino': uf_destino,
-            'peso': peso,
+            'peso': peso_real,
             'peso_cubado': peso_cubado,
             'cubagem': cubagem,
             'valor_nf': valor_nf,
