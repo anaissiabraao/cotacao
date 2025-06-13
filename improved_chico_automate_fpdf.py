@@ -4223,7 +4223,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
     else:
         # Usar índice para busca mais rápida
         agentes_coleta = df_agentes[
-            df_agentes['Origem_Normalized'].str.contains(origem_norm, case=False, na=False)
+            df_agentes['Origem_Normalizada'].str.contains(origem_norm, case=False, na=False)
         ].copy()
     
     # Se não houver agentes, retorna vazio
@@ -4340,7 +4340,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             
             # Primeiro, tentar encontrar por nome de cidade normalizado
             agentes_entrega = agentes_base_destino[
-                agentes_base_destino['Origem_Normalized'].str.contains(destino_norm, case=False, na=False)
+                agentes_base_destino['Origem_Normalizada'].str.contains(destino_norm, case=False, na=False)
             ]
             
             # Se não encontrar, buscar por UF
@@ -4353,7 +4353,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 if agentes_entrega.empty and len(destino_norm) > 3:
                     # Buscar por partes do nome da cidade (apenas se o nome for longo o suficiente)
                     agentes_entrega = agentes_base_destino[
-                        agentes_base_destino['Origem_Normalized'].str.contains(destino_norm[:4], case=False, na=False)
+                        agentes_base_destino['Origem_Normalizada'].str.contains(destino_norm[:4], case=False, na=False)
                     ]
             
             for _, agente_entrega in agentes_entrega.iterrows():
