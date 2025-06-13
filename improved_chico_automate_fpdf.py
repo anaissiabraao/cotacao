@@ -383,9 +383,14 @@ possible_paths = [
 
 # Adicionar caminho para Base_Unificada.xlsx
 base_unificada_paths = [
-    "/home/ubuntu/upload/Base_Unificada.xlsx",
-    "Base_Unificada.xlsx",
-    "C:\\Users\\Usuário\\OneDrive\\Desktop\\SQL data\\Chico automate\\Base_Unificada.xlsx",
+    "/home/ubuntu/upload/Base_Unificada.xlsx",  # Render
+    "/opt/render/project/src/Base_Unificada.xlsx",  # Render
+    "/app/Base_Unificada.xlsx",  # Outro possível caminho no Render
+    "Base_Unificada.xlsx",  # Diretório atual
+    "../Base_Unificada.xlsx",  # Diretório pai
+    "C:\\Users\\Usuário\\OneDrive\\Desktop\\SQL data\\Chico automate\\Base_Unificada.xlsx",  # Caminho local
+    os.path.join(os.path.dirname(__file__), "Base_Unificada.xlsx"),  # Mesmo diretório do script
+    os.path.join(os.getcwd(), "Base_Unificada.xlsx"),  # Diretório de trabalho atual
 ]
 
 EXCEL_FILE = None
@@ -405,7 +410,9 @@ if EXCEL_FILE is None:
     exit(1)
 
 if BASE_UNIFICADA_FILE is None:
-    print("Arquivo Base_Unificada.xlsx não encontrado!")
+    print("Arquivo Base_Unificada.xlsx não encontrado nos seguintes caminhos:")
+    for path in base_unificada_paths:
+        print(f"- {path} (existe: {os.path.exists(path)})")
     BASE_UNIFICADA_FILE = None  # Continuar sem erro crítico
 
 print(f"Usando arquivo principal: {EXCEL_FILE}")
@@ -4033,16 +4040,44 @@ def carregar_base_completa():
     """
     Carrega a base completa SEM filtrar registros com Destino vazio (necessário para Agentes)
     """
-    if not BASE_UNIFICADA_FILE or not os.path.exists(BASE_UNIFICADA_FILE):
-        print("Base_Unificada.xlsx não encontrada")
+    debug = os.getenv('DEBUG_AGENTES', 'false').lower() == 'true'
+    
+    if not BASE_UNIFICADA_FILE:
+        if debug:
+            print("[AGENTES] Erro: BASE_UNIFICADA_FILE não está definido")
+        return None
+    
+    if not os.path.exists(BASE_UNIFICADA_FILE):
+        if debug:
+            print(f"[AGENTES] Erro: Arquivo não encontrado: {BASE_UNIFICADA_FILE}")
+            print(f"[AGENTES] Diretório atual: {os.getcwd()}")
+            print("[AGENTES] Conteúdo do diretório:")
+            for f in os.listdir('.'):
+                print(f"- {f} (dir: {os.path.isdir(f)})")
         return None
     
     try:
+        if debug:
+            print(f"[AGENTES] Tentando carregar arquivo: {BASE_UNIFICADA_FILE}")
+            
+        # Tenta ler o arquivo Excel
         df_base = pd.read_excel(BASE_UNIFICADA_FILE)
-        print(f"Base completa carregada com {len(df_base)} registros")
+        
+        if debug:
+            print(f"[AGENTES] Base carregada com sucesso. Total de registros: {len(df_base)}")
+            if len(df_base) > 0:
+                print("[AGENTES] Primeiras colunas:", ", ".join(df_base.columns.tolist()[:10]))
+            else:
+                print("[AGENTES] Aviso: A base está vazia")
+        
         return df_base
+        
     except Exception as e:
-        print(f"Erro ao carregar Base_Unificada.xlsx: {e}")
+        if debug:
+            print(f"[AGENTES] Erro ao carregar o arquivo Excel: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        return None
         return None
 
 # Cache para armazenar a base de dados carregada
@@ -4060,23 +4095,54 @@ def carregar_base_agentes():
     
     # Se o cache ainda é válido, retorna os dados em cache
     if _BASE_AGENTES_CACHE is not None and (agora - _ULTIMO_CARREGAMENTO) < _CACHE_VALIDADE:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print("[AGENTES] Retornando dados do cache")
         return _BASE_AGENTES_CACHE
+    
+    if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+        print("[AGENTES] Carregando base de agentes...")
     
     # Se não, carrega os dados
     df_base = carregar_base_completa()
     if df_base is None:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print("[AGENTES] Erro: Não foi possível carregar a base completa")
+        return None
+    
+    # Verifica se as colunas necessárias existem
+    colunas_necessarias = ['Tipo', 'Origem']
+    colunas_faltando = [col for col in colunas_necessarias if col not in df_base.columns]
+    
+    if colunas_faltando:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print(f"[AGENTES] Erro: Colunas faltando na base: {', '.join(colunas_faltando)}")
+            print(f"[AGENTES] Colunas disponíveis: {', '.join(df_base.columns)}")
         return None
     
     # Processa os dados uma única vez
-    df_agentes = df_base[df_base['Tipo'] == 'Agente'].copy()
-    df_transferencias = df_base[df_base['Tipo'] == 'Transferência'].copy()
-    
-    # Pré-processa os dados para melhor performance
-    df_agentes['Origem_Normalizada'] = df_agentes['Origem'].apply(normalizar_cidade)
-    
-    # Atualiza o cache
-    _BASE_AGENTES_CACHE = (df_agentes, df_transferencias)
-    _ULTIMO_CARREGAMENTO = agora
+    try:
+        df_agentes = df_base[df_base['Tipo'] == 'Agente'].copy()
+        df_transferencias = df_base[df_base['Tipo'] == 'Transferência'].copy()
+        
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print(f"[AGENTES] {len(df_agentes)} agentes e {len(df_transferencias)} transferências carregados")
+        
+        # Pré-processa os dados para melhor performance
+        df_agentes['Origem_Normalizada'] = df_agentes['Origem'].apply(normalizar_cidade)
+        
+        # Atualiza o cache
+        _BASE_AGENTES_CACHE = (df_agentes, df_transferencias)
+        _ULTIMO_CARREGAMENTO = agora
+        
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print("[AGENTES] Base de agentes carregada com sucesso")
+            
+        return _BASE_AGENTES_CACHE
+        
+    except Exception as e:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print(f"[AGENTES] Erro ao processar base de agentes: {str(e)}")
+        return None
     
     return _BASE_AGENTES_CACHE
 
@@ -4109,6 +4175,16 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
     Returns:
         dict: Dicionário com as rotas calculadas e informações adicionais
     """
+    debug = os.getenv('DEBUG_AGENTES', 'false').lower() == 'true'
+    
+    if debug:
+        print("\n" + "="*80)
+        print(f"[AGENTES] Iniciando cálculo de frete com agentes")
+        print(f"[AGENTES] Origem: {origem} ({uf_origem})")
+        print(f"[AGENTES] Destino: {destino} ({uf_destino})")
+        print(f"[AGENTES] Peso: {peso}kg, Cubagem: {cubagem if cubagem is not None else 'N/A'}")
+        print(f"[AGENTES] Valor NF: {valor_nf if valor_nf is not None else 'N/A'}")
+        print("="*80 + "\n")
     # Usar cache para evitar leitura repetida do arquivo
     base_agentes = carregar_base_agentes()
     if not base_agentes:
