@@ -151,7 +151,7 @@ def normalizar_cidade(cidade):
     # Mapeamento de cidades conhecidas - EXPANDIDO
     mapeamento_cidades = {
         "SAO PAULO": "SAO PAULO",
-        "SÃO PAULO": "SAO PAULO", 
+        "SÃO PAULO": "SAO PAULO",
         "S. PAULO": "SAO PAULO",
         "S PAULO": "SAO PAULO",
         "SP": "SAO PAULO",
@@ -620,43 +620,62 @@ DEDICADO_KM_ACIMA_600 = {
 
 def calcular_custos_dedicado(df, uf_origem, municipio_origem, uf_destino, municipio_destino, distancia, pedagio_real=0):
     try:
-        # Garantir que pedagio_real é um número válido
+        # Inicializar dicionário de custos
+        custos = {}
+        
+        # Garantir que pedagio_real e distancia são números válidos
         pedagio_real = float(pedagio_real) if pedagio_real is not None else 0.0
         distancia = float(distancia) if distancia is not None else 0.0
         
+        # Determinar a faixa de distância
         faixa = determinar_faixa(distancia)
-        custos = {}
         
+        # Calcular custos baseado na faixa de distância
         if faixa and faixa in TABELA_CUSTOS_DEDICADO:
+            # Usar tabela de custos fixos por faixa
             tabela = TABELA_CUSTOS_DEDICADO[faixa]
             for tipo_veiculo, valor in tabela.items():
-                # Adicionar pedágio real ao custo base
                 custo_total = float(valor) + pedagio_real
                 custos[tipo_veiculo] = round(custo_total, 2)
+                
         elif distancia > 600:
+            # Para distâncias acima de 600km, usar custo por km
             for tipo_veiculo, valor_km in DEDICADO_KM_ACIMA_600.items():
-                # Adicionar pedágio real ao custo calculado por km
                 custo_total = (distancia * float(valor_km)) + pedagio_real
                 custos[tipo_veiculo] = round(custo_total, 2)
         else:
-            # Custos padrão + pedágio real
-            custos_base = {"FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0}
+            # Custos padrão + pedágio real (fallback)
+            custos_base = {
+                "FIORINO": 150.0, 
+                "VAN": 200.0, 
+                "3/4": 250.0, 
+                "TOCO": 300.0, 
+                "TRUCK": 350.0, 
+                "CARRETA": 500.0
+            }
             for tipo_veiculo, valor in custos_base.items():
                 custo_total = float(valor) + pedagio_real
                 custos[tipo_veiculo] = round(custo_total, 2)
         
         # Garantir que todos os valores são números válidos
-        for tipo_veiculo, valor in custos.items():
-            if not isinstance(valor, (int, float)) or valor < 0:
+        for tipo_veiculo in list(custos.keys()):
+            if not isinstance(custos[tipo_veiculo], (int, float)) or custos[tipo_veiculo] < 0:
                 custos[tipo_veiculo] = 0.0
-                
+        
         print(f"[DEBUG] Custos calculados: {custos}")
         return custos
         
     except Exception as e:
         print(f"[ERRO] Erro ao calcular custos dedicado: {e}")
         # Retornar custos padrão em caso de erro
-        return {"FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0}
+        return {
+            "FIORINO": 150.0, 
+            "VAN": 200.0, 
+            "3/4": 250.0, 
+            "TOCO": 300.0, 
+            "TRUCK": 350.0, 
+            "CARRETA": 500.0
+        }
 
 def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="Dedicado", municipio_origem=None, uf_origem=None, municipio_destino=None, uf_destino=None):
     global CONTADOR_DEDICADO, CONTADOR_FRACIONADO # Adicionado CONTADOR_FRACIONADO
@@ -1109,6 +1128,13 @@ def calcular_frete_fracionado():
                 "error": "Nenhuma cotação válida encontrada na Base_Unificada.xlsx"
             })
 
+        # NOVO: Calcular também rotas com agentes
+        rotas_agentes = calcular_frete_com_agentes(
+            cidade_origem, uf_origem,
+            cidade_destino, uf_destino,
+            peso, valor_nf, cubagem
+        )
+
         # Melhor opção (menor custo)
         melhor_opcao = cotacoes_ranking[0] if cotacoes_ranking else {}
 
@@ -1147,6 +1173,10 @@ def calcular_frete_fracionado():
             "cotacoes_rejeitadas": 0,  # Sem simulações, sem rejeições
             "criterios_qualidade": "APENAS dados reais da planilha Base_Unificada.xlsx",
             
+            # NOVO: Adicionar rotas com agentes
+            "rotas_agentes": rotas_agentes if rotas_agentes else None,
+            "tem_rotas_agentes": bool(rotas_agentes and rotas_agentes.get('total_opcoes', 0) > 0),
+            
             # Melhor opção
             "fornecedor": melhor_opcao.get('modalidade', 'N/A'),
             "agente": melhor_opcao.get('agente', 'N/A'),
@@ -1169,7 +1199,7 @@ def calcular_frete_fracionado():
             "detalhamento": f"Busca APENAS na planilha real - {len(cotacoes_ranking)} opções encontradas"
         }
 
-                # Sem mapa na aba fracionado - dados vêm da planilha
+        # Sem mapa na aba fracionado - dados vêm da planilha
         resultado_final["rota_pontos"] = []
         resultado_final["distancia"] = 0
 
@@ -1192,7 +1222,9 @@ def calcular_frete_fracionado():
             'peso_cubado': peso_cubado,
             'cubagem': cubagem,
             'valor_nf': valor_nf,
-            'estrategia_busca': "PLANILHA_REAL_APENAS"
+            'estrategia_busca': "PLANILHA_REAL_APENAS",
+            # NOVO: Passar rotas com agentes
+            'rotas_agentes': rotas_agentes
         })
 
         # Salvar no histórico
@@ -1818,19 +1850,52 @@ def formatar_resultado_fracionado(resultado):
         </div>
     """
     
-    # Ranking com informações de fonte e links - SEMPRE MOSTRAR
+    # UNIFICAR RANKING: Combinar cotações diretas + rotas com agentes
     ranking_completo = resultado.get('cotacoes_ranking', [])
-    print(f"[DEBUG] Ranking completo tem {len(ranking_completo)} itens")  # Debug
+    rotas_agentes = resultado.get('rotas_agentes')
     
-    if ranking_completo:  # Mostrar sempre, mesmo com 1 item
+    # Lista unificada para todas as opções
+    todas_opcoes = []
+    
+    # Adicionar cotações diretas
+    for cotacao in ranking_completo:
+        todas_opcoes.append({
+            'tipo': 'direto',
+            'fornecedor': cotacao.get('modalidade', 'N/A'),
+            'total': cotacao.get('total', 0),
+            'prazo': cotacao.get('prazo', 0),
+            'dados': cotacao
+        })
+    
+    # Adicionar rotas com agentes
+    if rotas_agentes and rotas_agentes.get('rotas'):
+        for rota in rotas_agentes.get('rotas', []):
+            todas_opcoes.append({
+                'tipo': 'agente',
+                'fornecedor': rota['resumo'],
+                'total': rota['total'],
+                'prazo': rota['prazo_total'],
+                'dados': rota
+            })
+    
+    # Ordenar todas as opções por custo total
+    todas_opcoes.sort(key=lambda x: x['total'])
+    
+    print(f"[DEBUG] Total de opções unificadas: {len(todas_opcoes)}")
+    
+    if todas_opcoes:
         html += """
         <div class="analise-container">
-            <div class="analise-title">🥇 Ranking Completo de Fornecedores (Todos os Dados Filtrados)</div>
+            <div class="analise-title">🥇 Ranking Completo de Fornecedores (Diretos + Agentes)</div>
+            <div style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">
+                Todas as opções de frete ordenadas por melhor custo-benefício.
+            </div>
             <table class="results" style="font-size: 0.9rem;">
                 <thead>
                     <tr>
                         <th>Posição</th>
-                        <th>Fornecedor</th>
+                        <th>Tipo</th>
+                        <th>Fornecedor/Rota</th>
                         <th>TOTAL</th>
                         <th>Prazo</th>
                         <th>Detalhes</th>
@@ -1839,7 +1904,7 @@ def formatar_resultado_fracionado(resultado):
                 <tbody>
         """
         
-        for i, opcao in enumerate(ranking_completo):
+        for i, opcao in enumerate(todas_opcoes[:10]):  # Mostrar até 10 melhores
             pos_class = ""
             if i == 0:
                 pos_class = "style='background-color: #e8f5e8; font-weight: bold;'"  # Verde para 1º
@@ -1851,15 +1916,24 @@ def formatar_resultado_fracionado(resultado):
             # Posição com medalha
             posicao = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}º"
             
+            # Tipo de serviço
+            tipo_badge = "🚛 Direto" if opcao['tipo'] == 'direto' else "🚚 Agentes"
+            tipo_color = "#2196F3" if opcao['tipo'] == 'direto' else "#FF9800"
+            
             # ID único para os detalhes
-            detalhe_id = f"detalhe_fornecedor_{i}"
+            detalhe_id = f"detalhe_unificado_{i}"
             
             html += f"""
                     <tr {pos_class}>
                         <td style="text-align: center; font-size: 1.1rem;"><strong>{posicao}</strong></td>
-                        <td><strong>{opcao.get('modalidade', 'N/A')}</strong></td>
-                        <td style="font-weight: bold; color: #0a6ed1; font-size: 1.1rem;">R$ {opcao.get('total', 0):,.2f}</td>
-                        <td style="text-align: center;">{opcao.get('prazo', 'N/A')} dias</td>
+                        <td style="text-align: center;">
+                            <span style="background: {tipo_color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">
+                                {tipo_badge}
+                            </span>
+                        </td>
+                        <td><strong>{opcao['fornecedor']}</strong></td>
+                        <td style="font-weight: bold; color: #0a6ed1; font-size: 1.1rem;">R$ {opcao['total']:,.2f}</td>
+                        <td style="text-align: center;">{opcao['prazo']} dias</td>
                         <td style="text-align: center;">
                             <button class="btn-secondary" onclick="toggleDetails('{detalhe_id}')" style="font-size: 0.8rem; padding: 5px 10px;">
                                 📋 Ver Detalhes
@@ -1867,55 +1941,111 @@ def formatar_resultado_fracionado(resultado):
                         </td>
                     </tr>
                     <tr id="{detalhe_id}" style="display: none;">
-                        <td colspan="5" style="background-color: #f8f9fa; padding: 15px;">
+                        <td colspan="6" style="background-color: #f8f9fa; padding: 15px;">
+            """
+            
+            # Detalhes específicos por tipo
+            if opcao['tipo'] == 'direto':
+                cotacao = opcao['dados']
+                html += f"""
                             <div style="font-size: 0.9rem;">
-                                <strong>📊 Detalhes da Cotação - {opcao.get('modalidade', 'N/A')}</strong><br><br>
+                                <strong>📊 Detalhes da Cotação Direta - {cotacao.get('modalidade', 'N/A')}</strong><br><br>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                                     <div>
                                         <strong>💰 Composição do Custo:</strong><br>
-                                        • Valor Base: R$ {opcao.get('valor_base', 0):,.2f}<br>
-                                        • Pedágio: R$ {opcao.get('pedagio', 0):,.2f}<br>
-                                        • GRIS: R$ {opcao.get('gris', 0):,.2f}<br>
-                                        • <strong>Total: R$ {opcao.get('total', 0):,.2f}</strong>
+                                        • Valor Base: R$ {cotacao.get('valor_base', 0):,.2f}<br>
+                                        • Pedágio: R$ {cotacao.get('pedagio', 0):,.2f}<br>
+                                        • GRIS: R$ {cotacao.get('gris', 0):,.2f}<br>
+                                        • <strong>Total: R$ {cotacao.get('total', 0):,.2f}</strong>
                                     </div>
                                     <div>
                                         <strong>📍 Informações da Rota:</strong><br>
-                                        • Origem: {opcao.get('origem', 'N/A')}<br>
-                                        • Destino: {opcao.get('destino', 'N/A')}<br>
-                                        • Prazo: {opcao.get('prazo', 'N/A')} dias úteis<br>
-                                        • Fonte: {opcao.get('fonte', 'Planilha Real')}
+                                        • Origem: {cotacao.get('origem', 'N/A')}<br>
+                                        • Destino: {cotacao.get('destino', 'N/A')}<br>
+                                        • Prazo: {cotacao.get('prazo', 'N/A')} dias úteis<br>
+                                        • Fonte: {cotacao.get('fonte', 'Planilha Real')}
                                     </div>
                                 </div>
                                 
                                 <div style="margin-top: 15px; text-align: center;">
-                                    <button class="btn-info" onclick="toggleDetails('detalhes_peso_{i}')" style="margin: 5px; font-size: 0.8rem;">
+                                    <button class="btn-info" onclick="toggleDetails('detalhes_peso_unif_{i}')" style="margin: 5px; font-size: 0.8rem;">
                                         ⚖️ Detalhes do Peso
                                     </button>
-                                    <button class="btn-info" onclick="toggleDetails('detalhes_pedagio_{i}')" style="margin: 5px; font-size: 0.8rem;">
+                                    <button class="btn-info" onclick="toggleDetails('detalhes_pedagio_unif_{i}')" style="margin: 5px; font-size: 0.8rem;">
                                         🛣️ Detalhes do Pedágio
                                     </button>
-                                </div>
-                                
-                                <div id="detalhes_peso_{i}" style="display: none; margin-top: 10px; background: #f0f8ff; padding: 10px; border-radius: 5px;">
-                                    <strong>⚖️ Análise Detalhada do Peso:</strong><br>
-                                    • <strong>Peso Real:</strong> {opcao.get('peso_real', 0):.1f} kg<br>
-                                    • <strong>Peso Cubado:</strong> {opcao.get('peso_cubado', 0):.1f} kg (Cubagem: {opcao.get('detalhes_peso', {}).get('cubagem_original', 0):.4f} m³ × {opcao.get('detalhes_peso', {}).get('fator_cubagem', 166)})<br>
-                                    • <strong>Maior Peso (Usado):</strong> <span style="color: #e74c3c; font-weight: bold;">{opcao.get('maior_peso', 0):.1f} kg ({opcao.get('peso_usado', 'N/A')})</span><br>
-                                    • <strong>Faixa de Peso:</strong> {opcao.get('detalhes_peso', {}).get('faixa_peso_usada', 'N/A')} kg<br>
-                                    • <strong>Valor por kg:</strong> R$ {opcao.get('detalhes_peso', {}).get('valor_kg', 0):.2f}<br>
-                                    • <strong>Cálculo Frete:</strong> {opcao.get('maior_peso', 0):.1f} kg × R$ {opcao.get('detalhes_peso', {}).get('valor_kg', 0):.2f} = <strong>R$ {opcao.get('valor_base', 0):.2f}</strong>
-                                </div>
-                                
-                                <div id="detalhes_pedagio_{i}" style="display: none; margin-top: 10px; background: #fff8dc; padding: 10px; border-radius: 5px;">
-                                    <strong>🛣️ Cálculo Detalhado do Pedágio:</strong><br>
-                                    • <strong>Peso para Cálculo:</strong> {opcao.get('detalhes_pedagio', {}).get('peso_calculo', 0):.1f} kg ({opcao.get('peso_usado', 'N/A')})<br>
-                                    • <strong>Divisão por 100kg:</strong> {opcao.get('detalhes_pedagio', {}).get('peso_calculo', 0):.1f} ÷ 100 = {opcao.get('detalhes_pedagio', {}).get('peso_calculo', 0)/100:.2f}<br>
-                                    • <strong>Fator Pedagio (arredondado):</strong> <span style="color: #27ae60; font-weight: bold;">{opcao.get('detalhes_pedagio', {}).get('fator_pedagio', 0)}</span><br>
-                                    • <strong>Valor Base Pedágio:</strong> R$ {opcao.get('detalhes_pedagio', {}).get('valor_base_pedagio', 0):.2f} por 100kg<br>
-                                    • <strong>Cálculo Final:</strong> {opcao.get('detalhes_pedagio', {}).get('fator_pedagio', 0)} × R$ {opcao.get('detalhes_pedagio', {}).get('valor_base_pedagio', 0):.2f} = <strong>R$ {opcao.get('pedagio', 0):.2f}</strong>
-                                </div>
-                                {f'<br><strong>📝 Observações:</strong> {opcao.get("observacoes", "N/A")}' if opcao.get('observacoes') else ''}
                             </div>
+                                
+                                <div id="detalhes_peso_unif_{i}" style="display: none; margin-top: 10px; background: #f0f8ff; padding: 10px; border-radius: 5px;">
+                                    <strong>⚖️ Análise Detalhada do Peso:</strong><br>
+                                    • <strong>Peso Real:</strong> {cotacao.get('peso_real', 0):.1f} kg<br>
+                                    • <strong>Peso Cubado:</strong> {cotacao.get('peso_cubado', 0):.1f} kg<br>
+                                    • <strong>Maior Peso (Usado):</strong> <span style="color: #e74c3c; font-weight: bold;">{cotacao.get('maior_peso', 0):.1f} kg ({cotacao.get('peso_usado', 'N/A')})</span><br>
+                                    • <strong>Faixa de Peso:</strong> {cotacao.get('detalhes_peso', {}).get('faixa_peso_usada', 'N/A')} kg<br>
+                                    • <strong>Valor por kg:</strong> R$ {cotacao.get('detalhes_peso', {}).get('valor_kg', 0):.2f}
+                                </div>
+                                
+                                <div id="detalhes_pedagio_unif_{i}" style="display: none; margin-top: 10px; background: #fff8dc; padding: 10px; border-radius: 5px;">
+                                    <strong>🛣️ Cálculo Detalhado do Pedágio:</strong><br>
+                                    • <strong>Peso para Cálculo:</strong> {cotacao.get('detalhes_pedagio', {}).get('peso_calculo', 0):.1f} kg<br>
+                                    • <strong>Fator Pedágio:</strong> {cotacao.get('detalhes_pedagio', {}).get('fator_pedagio', 0)}<br>
+                                    • <strong>Valor Base:</strong> R$ {cotacao.get('detalhes_pedagio', {}).get('valor_base_pedagio', 0):.2f}<br>
+                                    • <strong>Total Pedágio:</strong> R$ {cotacao.get('pedagio', 0):.2f}
+                                </div>
+                            </div>
+                """
+            else:  # tipo == 'agente'
+                rota = opcao['dados']
+                html += f"""
+                            <div style="font-size: 0.85rem;">
+                                <strong>📍 Detalhamento da Rota com Agentes</strong><br><br>
+                                
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
+                                    <div style="background: #e3f2fd; padding: 10px; border-radius: 5px;">
+                                        <strong>1️⃣ Coleta (Agente Local)</strong><br>
+                                        • Fornecedor: {rota['agente_coleta']['fornecedor']}<br>
+                                        • Origem: {rota['agente_coleta']['origem']}<br>
+                                        • Destino: Base {rota['agente_coleta']['base_destino']}<br>
+                                        • Custo: R$ {rota['agente_coleta']['custo']:,.2f}<br>
+                                        • Valor Mínimo: R$ {rota['agente_coleta']['valor_minimo']:,.2f}<br>
+                                        • Excedente: R$ {rota['agente_coleta']['excedente']:,.2f}/kg
+                                        {f'<br><br><span style="color: #1976d2; font-size: 0.85rem;">📍 <strong>{rota.get("quantidade_agentes", 1)} agentes disponíveis</strong> para esta rota</span>' if rota.get('quantidade_agentes', 1) > 1 else ''}
+                                    </div>
+                                    
+                                    <div style="background: #fff3e0; padding: 10px; border-radius: 5px;">
+                                        <strong>2️⃣ Transferência</strong><br>
+                                        • Fornecedor: {rota['transferencia']['fornecedor']}<br>
+                                        • Origem: {rota['transferencia']['origem']}<br>
+                                        • Destino: {rota['transferencia']['destino']}<br>
+                                        • Custo Total: R$ {rota['transferencia']['custo']:,.2f}<br>
+                                        • Frete: R$ {rota['transferencia']['frete']:,.2f}<br>
+                                        • Pedágio: R$ {rota['transferencia']['pedagio']:,.2f}<br>
+                                        • GRIS: R$ {rota['transferencia']['gris']:,.2f}
+                                    </div>
+                                    
+                                    <div style="background: #e8f5e9; padding: 10px; border-radius: 5px;">
+                                        <strong>3️⃣ Entrega (Agente Local)</strong><br>
+                                        • Fornecedor: {rota['agente_entrega']['fornecedor']}<br>
+                                        • Origem: Base {rota['agente_entrega']['base_origem']}<br>
+                                        • Destino: {rota['agente_entrega']['destino']}<br>
+                                        • Custo: R$ {rota['agente_entrega']['custo']:,.2f}<br>
+                                        • Valor Mínimo: R$ {rota['agente_entrega']['valor_minimo']:,.2f}<br>
+                                        • Excedente: R$ {rota['agente_entrega']['excedente']:,.2f}/kg
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 5px;">
+                                    <strong>📊 Resumo da Rota</strong><br>
+                                    • Peso Real: {rota['peso_real']:.1f} kg<br>
+                                    • Peso Cubado: {rota['peso_cubado']:.1f} kg<br>
+                                    • Peso Usado: {rota['maior_peso']:.1f} kg ({rota['peso_usado']})<br>
+                                    • <strong>Custo Total: R$ {rota['total']:,.2f}</strong><br>
+                                    • Prazo Total: {rota['prazo_total']} dias úteis
+                                </div>
+                            </div>
+                """
+            
+            html += """
                         </td>
                     </tr>
             """
@@ -1926,17 +2056,18 @@ def formatar_resultado_fracionado(resultado):
             <div style="margin-top: 10px; font-size: 0.85rem; color: #666; text-align: center;">
                 <strong>Legenda:</strong> 
                 🥇 Melhor preço | 🥈 2º melhor | 🥉 3º melhor | 
+                🚛 Frete Direto | 🚚 Com Agentes |
                 📋 Clique em "Ver Detalhes" para informações completas
             </div>
         </div>
         """
     else:
-        # Caso não haja ranking (debug)
+        # Caso não haja opções
         html += """
         <div class="analise-container">
-            <div class="analise-title">⚠️ Nenhum Ranking Disponível</div>
+            <div class="analise-title">⚠️ Nenhuma Opção Disponível</div>
             <div class="analise-item" style="color: #e74c3c;">
-                <strong>Problema:</strong> Não foram encontradas cotações válidas para gerar o ranking.
+                <strong>Problema:</strong> Não foram encontradas cotações válidas para esta rota.
             </div>
         </div>
         """
@@ -1958,21 +2089,28 @@ def formatar_resultado_fracionado(resultado):
     
     # Resumo estatístico com informações de qualidade
     total_opcoes = resultado.get('total_opcoes', 0)
+    total_agentes = len(rotas_agentes.get('rotas', [])) if rotas_agentes else 0
+    total_geral = total_opcoes + total_agentes
     fornecedores_count = resultado.get('fornecedores_count', 0)
-    if total_opcoes > 0:
+    
+    if total_geral > 0:
+        # Preparar valores para evitar erro de formato
+        melhor_fornecedor = todas_opcoes[0]['fornecedor'] if todas_opcoes else 'N/A'
+        melhor_valor = f"R$ {todas_opcoes[0]['total']:,.2f}" if todas_opcoes else "R$ 0,00"
+        
         html += f"""
         <div class="analise-container">
-            <div class="analise-title">📈 Resumo da Consulta (Dados Filtrados)</div>
-            <div class="analise-item"><strong>✅ Opções Aprovadas:</strong> {total_opcoes}</div>
-            <div class="analise-item"><strong>❌ Opções Rejeitadas:</strong> {cotacoes_rejeitadas}</div>
-            <div class="analise-item"><strong>🏢 Fornecedores Válidos:</strong> {fornecedores_count}</div>
-            <div class="analise-item"><strong>📊 Fontes Consultadas:</strong> {dados_fonte}</div>
-            <div class="analise-item"><strong>🔍 Critérios de Qualidade:</strong> {criterios_qualidade}</div>
-            <div class="analise-item"><strong>🚚 Rota:</strong> {resultado.get('origem', 'N/A')}/{resultado.get('uf_origem', 'N/A')} → {resultado.get('destino', 'N/A')}/{resultado.get('uf_destino', 'N/A')}</div>
+            <div class="analise-title">📈 Resumo da Consulta</div>
+            <div class="analise-item"><strong>🚛 Opções Diretas:</strong> {total_opcoes}</div>
+            <div class="analise-item"><strong>🚚 Rotas com Agentes:</strong> {total_agentes}</div>
+            <div class="analise-item"><strong>📊 Total de Opções:</strong> <span style="color: #27ae60; font-weight: bold;">{total_geral}</span></div>
+            <div class="analise-item"><strong>🏢 Fornecedores:</strong> {fornecedores_count}</div>
+            <div class="analise-item"><strong>📍 Rota:</strong> {resultado.get('origem', 'N/A')}/{resultado.get('uf_origem', 'N/A')} → {resultado.get('destino', 'N/A')}/{resultado.get('uf_destino', 'N/A')}</div>
             <div class="analise-item"><strong>⚖️ Carga:</strong> {resultado.get('peso', 0)}kg (Cubado: {resultado.get('peso_cubado', 0):.2f}kg)</div>
-            <div class="analise-item"><strong>🏆 Melhor Opção:</strong> 
-                {melhor_opcao.get('modalidade', 'N/A')} - 
-                {'<a href="' + melhor_opcao.get('url_fonte', '#') + '" target="_blank" style="color: #0066cc;">Ver Fonte</a>' if melhor_opcao.get('url_fonte') and melhor_opcao.get('url_fonte') != '#' else 'Planilha Local'}
+            <div class="analise-item"><strong>🏆 Melhor Opção Geral:</strong> 
+                <span style="color: #0a6ed1; font-weight: bold;">
+                    {melhor_fornecedor} - {melhor_valor}
+                </span>
             </div>
         </div>
         """
@@ -3888,6 +4026,446 @@ def calcular_distancia_openroute_detalhada(origem, destino):
         
     except Exception as e:
         print(f"[OPENROUTE] Erro: {e}")
+        return None
+
+def carregar_base_completa():
+    """
+    Carrega a base completa SEM filtrar registros com Destino vazio (necessário para Agentes)
+    """
+    if not BASE_UNIFICADA_FILE or not os.path.exists(BASE_UNIFICADA_FILE):
+        print("Base_Unificada.xlsx não encontrada")
+        return None
+    
+    try:
+        df_base = pd.read_excel(BASE_UNIFICADA_FILE)
+        print(f"Base completa carregada com {len(df_base)} registros")
+        return df_base
+    except Exception as e:
+        print(f"Erro ao carregar Base_Unificada.xlsx: {e}")
+        return None
+
+# Cache para armazenar a base de dados carregada
+_BASE_AGENTES_CACHE = None
+_ULTIMO_CARREGAMENTO = 0
+_CACHE_VALIDADE = 300  # 5 minutos em segundos
+
+def carregar_base_agentes():
+    """
+    Carrega a base de agentes com cache para evitar leitura repetida do arquivo
+    """
+    global _BASE_AGENTES_CACHE, _ULTIMO_CARREGAMENTO
+    
+    agora = time.time()
+    
+    # Se o cache ainda é válido, retorna os dados em cache
+    if _BASE_AGENTES_CACHE is not None and (agora - _ULTIMO_CARREGAMENTO) < _CACHE_VALIDADE:
+        return _BASE_AGENTES_CACHE
+    
+    # Se não, carrega os dados
+    df_base = carregar_base_completa()
+    if df_base is None:
+        return None
+    
+    # Processa os dados uma única vez
+    df_agentes = df_base[df_base['Tipo'] == 'Agente'].copy()
+    df_transferencias = df_base[df_base['Tipo'] == 'Transferência'].copy()
+    
+    # Pré-processa os dados para melhor performance
+    df_agentes['Origem_Normalizada'] = df_agentes['Origem'].apply(normalizar_cidade)
+    
+    # Atualiza o cache
+    _BASE_AGENTES_CACHE = (df_agentes, df_transferencias)
+    _ULTIMO_CARREGAMENTO = agora
+    
+    return _BASE_AGENTES_CACHE
+
+# Cache para mapeamento de cidades para bases
+MAPA_BASES_CACHE = {
+    'SAO PAULO': 'SAO',
+    'ARACAJU': 'AJU',
+    'CAMPINAS': 'CPQ',
+    'BRASILIA': 'BSB',
+    'BELO HORIZONTE': 'BHZ',
+    'RIO DE JANEIRO': 'RIO',
+    'CURITIBA': 'CWB',
+    'PORTO ALEGRE': 'POA'
+}
+
+def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, valor_nf=None, cubagem=None):
+    """
+    Calcula frete com sistema de agentes: Coleta -> Transferência -> Entrega
+    Retorna opções completas com ranking de melhor custo
+    
+    Args:
+        origem (str): Cidade de origem
+        uf_origem (str): UF de origem
+        destino (str): Cidade de destino
+        uf_destino (str): UF de destino
+        peso (float): Peso da carga em kg
+        valor_nf (float, optional): Valor da nota fiscal para cálculo de GRIS
+        cubagem (float, optional): Cubagem em m³ para cálculo de peso cubado
+        
+    Returns:
+        dict: Dicionário com as rotas calculadas e informações adicionais
+    """
+    # Usar cache para evitar leitura repetida do arquivo
+    base_agentes = carregar_base_agentes()
+    if not base_agentes:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print("[AGENTES] Erro ao carregar base de agentes")
+        return None
+        
+    df_agentes, df_transferencias = base_agentes
+    
+    # Log principal da operação (apenas em modo debug)
+    if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+        print(f"\n[AGENTES] Iniciando cálculo: {origem}/{uf_origem} -> {destino}/{uf_destino} | Peso: {peso}kg")
+    
+    # Normalizar cidades para comparação (uma única vez)
+    origem_norm = normalizar_cidade(origem)
+    destino_norm = normalizar_cidade(destino)
+    
+    # Calcular peso cubado (uma única vez)
+    peso_real = float(peso)
+    peso_cubado = float(cubagem) * 166 if cubagem and cubagem > 0 else peso_real * 0.17
+    maior_peso = max(peso_real, peso_cubado)
+    
+    # 1. Encontrar agentes que coletam na origem
+    base_origem_busca = MAPA_BASES_CACHE.get(origem_norm)
+    
+    # Pré-filtrar agentes baseado no tipo de busca
+    if origem_norm == 'SAO PAULO':
+        # Para São Paulo, usar agentes FILIAL que atendem cidades de SP
+        agentes_coleta = df_agentes[
+            (df_agentes['Base Origem'] == 'FILIAL') & 
+            (df_agentes['Origem'].str.contains('São|Sao', case=False, na=False))
+        ].copy()
+        base_origem_busca = 'SAO'  # Forçar base SAO para São Paulo
+    elif base_origem_busca:
+        agentes_coleta = df_agentes[df_agentes['Base Origem'] == base_origem_busca].copy()
+    else:
+        # Usar índice para busca mais rápida
+        agentes_coleta = df_agentes[
+            df_agentes['Origem_Normalized'].str.contains(origem_norm, case=False, na=False)
+        ].copy()
+    
+    # Se não houver agentes, retorna vazio
+    if agentes_coleta.empty:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print(f"[AGENTES] Nenhum agente encontrado para coleta em {origem}")
+        return {
+            'rotas': [],
+            'total_opcoes': 0,
+            'origem': f"{origem}/{uf_origem}",
+            'destino': f"{destino}/{uf_destino}",
+            'peso_info': {
+                'peso_real': peso_real,
+                'peso_cubado': peso_cubado,
+                'maior_peso': maior_peso,
+                'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real'
+            }
+        }
+    
+    if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+        print(f"[AGENTES] Encontrados {len(agentes_coleta)} agentes de coleta em {origem}/{uf_origem}")
+    
+    # 2. Processar cada agente de coleta
+    rotas_completas = []
+    
+    # Pré-processar transferências para melhor performance
+    transferencias_por_base = df_transferencias.groupby('Base Origem')
+    
+    # Controle de bases já processadas para evitar duplicação
+    bases_processadas = set()
+    
+    # Contador de agentes processados para feedback
+    total_agentes = len(agentes_coleta)
+    debug_mode = os.getenv('DEBUG_AGENTES', 'false').lower() == 'true'
+    
+    if debug_mode:
+        print(f"[AGENTES] Processando {total_agentes} agentes...")
+    
+    # Pré-calcular valores que serão usados repetidamente
+    peso_maior_que_max = maior_peso  # Evitar acessar o dicionário várias vezes
+    
+    # Converter para lista de dicionários uma única vez para melhor performance
+    agentes_lista = agentes_coleta.to_dict('records')
+    
+    for idx, agente_coleta in enumerate(agentes_lista):
+        # Feedback de progresso a cada 10% dos agentes processados (apenas em modo debug)
+        if debug_mode and total_agentes > 10 and (idx + 1) % max(1, total_agentes // 10) == 0:
+            print(f"[AGENTES] Progresso: {idx+1}/{total_agentes} agentes processados")
+            
+        # Base onde o agente de coleta entrega
+        base_transferencia = agente_coleta.get('Base Origem')
+        fornecedor_coleta = agente_coleta.get('Fornecedor', 'Desconhecido')
+        
+        # Para agentes FILIAL em São Paulo, usar transferências da base SAO
+        if base_transferencia == 'FILIAL' and origem_norm == 'SAO PAULO':
+            base_transferencia = 'SAO'
+            
+        # Pular se já processamos esta base
+        if base_transferencia in bases_processadas:
+            continue
+            
+        bases_processadas.add(base_transferencia)
+        
+        # Obter transferências para esta base (usando o grupo pré-calculado)
+        if base_transferencia not in transferencias_por_base.groups:
+            if debug_mode:
+                print(f"[AGENTES] Nenhuma transferência encontrada para a base {base_transferencia}")
+            continue
+            
+        transferencias_base = transferencias_por_base.get_group(base_transferencia)
+        
+        # Verificar peso máximo do agente de coleta
+        peso_max_coleta = agente_coleta.get('PESO MÁXIMO TRANSPORTADO')
+        if peso_max_coleta and peso_maior_que_max > float(peso_max_coleta):
+            if debug_mode:
+                print(f"[AGENTES] ⚠️ {fornecedor_coleta}: Peso excede limite ({peso_maior_que_max:.1f}kg > {peso_max_coleta}kg)")
+            continue
+        
+        # Calcular custo da coleta
+        valor_min_coleta = float(agente_coleta.get('VALOR MÍNIMO ATÉ 10', 0))
+        excedente_coleta = float(agente_coleta.get('EXCEDENTE', 0))
+        
+        # Custo coleta = valor mínimo + (peso × excedente)
+        custo_coleta = valor_min_coleta + (peso_maior_que_max * excedente_coleta)
+        
+        # 2. Encontrar transferências dessa base
+        transferencias_base = df_transferencias[
+            (df_transferencias['Base Origem'] == base_transferencia)
+        ]
+        
+        for _, transferencia in transferencias_base.iterrows():
+            fornecedor_transf = transferencia['Fornecedor']
+            base_destino_transf = transferencia['Base Destino']
+            destino_transf = transferencia['Destino']
+            
+            # Verificar se a transferência vai para o destino correto ou próximo
+            destino_transf_norm = normalizar_cidade(destino_transf)
+            
+            # Para transferências, verificar apenas se a base de destino tem agentes que atendem o destino final
+            # Não precisamos que o destino da transferência seja exatamente o destino final
+            # A verificação real será feita ao buscar agentes de entrega
+            
+            # Calcular custo da transferência (usar lógica existente)
+            cotacao_transf = processar_linha_transferencia(
+                transferencia, maior_peso, valor_nf
+            )
+            
+            if not cotacao_transf:
+                continue
+            
+            # 3. Encontrar agentes que entregam no destino final
+            # Pré-filtrar agentes pela base de destino
+            agentes_base_destino = df_agentes[df_agentes['Base Origem'] == base_destino_transf]
+            
+            # Primeiro, tentar encontrar por nome de cidade normalizado
+            agentes_entrega = agentes_base_destino[
+                agentes_base_destino['Origem_Normalized'].str.contains(destino_norm, case=False, na=False)
+            ]
+            
+            # Se não encontrar, buscar por UF
+            if agentes_entrega.empty:
+                agentes_entrega = agentes_base_destino[
+                    agentes_base_destino['Origem'].str.contains(f"- {uf_destino}", case=False, na=False)
+                ]
+                
+                # Se ainda não encontrar, tentar uma busca mais ampla
+                if agentes_entrega.empty and len(destino_norm) > 3:
+                    # Buscar por partes do nome da cidade (apenas se o nome for longo o suficiente)
+                    agentes_entrega = agentes_base_destino[
+                        agentes_base_destino['Origem_Normalized'].str.contains(destino_norm[:4], case=False, na=False)
+                    ]
+            
+            for _, agente_entrega in agentes_entrega.iterrows():
+                fornecedor_entrega = agente_entrega['Fornecedor']
+                
+                # Verificar peso máximo do agente de entrega
+                peso_max_entrega = agente_entrega.get('PESO MÁXIMO TRANSPORTADO', float('inf'))
+                if peso_max_entrega and maior_peso > peso_max_entrega:
+                    continue
+                
+                # Calcular custo da entrega
+                valor_min_entrega = agente_entrega.get('VALOR MÍNIMO ATÉ 10', 0)
+                excedente_entrega = agente_entrega.get('EXCEDENTE', 0)
+                custo_entrega = float(valor_min_entrega) + (maior_peso * float(excedente_entrega))
+                
+                # Calcular custo total da rota
+                custo_total = custo_coleta + cotacao_transf['total'] + custo_entrega
+                
+                # Calcular prazo total (soma dos prazos)
+                prazo_coleta = 1  # Assumir 1 dia para coleta
+                prazo_transf = cotacao_transf.get('prazo', 3)
+                prazo_entrega = 1  # Assumir 1 dia para entrega
+                prazo_total = prazo_coleta + prazo_transf + prazo_entrega
+                
+                rota_completa = {
+                    'opcao': len(rotas_completas) + 1,
+                    'agente_coleta': {
+                        'fornecedor': fornecedor_coleta,
+                        'origem': agente_coleta['Origem'],
+                        'base_destino': base_transferencia,
+                        'custo': custo_coleta,
+                        'valor_minimo': valor_min_coleta,
+                        'excedente': excedente_coleta,
+                        'peso_maximo': peso_max_coleta
+                    },
+                    'transferencia': {
+                        'fornecedor': fornecedor_transf,
+                        'base_origem': base_transferencia,
+                        'origem': transferencia['Origem'],
+                        'base_destino': base_destino_transf,
+                        'destino': destino_transf,
+                        'custo': cotacao_transf['total'],
+                        'frete': cotacao_transf['valor_base'],
+                        'pedagio': cotacao_transf['pedagio'],
+                        'gris': cotacao_transf['gris']
+                    },
+                    'agente_entrega': {
+                        'fornecedor': fornecedor_entrega,
+                        'base_origem': base_destino_transf,
+                        'destino': agente_entrega['Origem'],
+                        'custo': custo_entrega,
+                        'valor_minimo': valor_min_entrega,
+                        'excedente': excedente_entrega,
+                        'peso_maximo': peso_max_entrega
+                    },
+                    'total': custo_total,
+                    'prazo_total': prazo_total,
+                    'peso_real': peso_real,
+                    'peso_cubado': peso_cubado,
+                    'maior_peso': maior_peso,
+                    'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real',
+                    'resumo': f"{fornecedor_coleta} + {fornecedor_transf} + {fornecedor_entrega}"
+                }
+                
+                rotas_completas.append(rota_completa)
+    
+    # Otimização: Usar um dicionário ordenado para agrupar rotas
+    rotas_agrupadas = {}
+    
+    # Ordenar rotas por custo total
+    rotas_completas.sort(key=lambda x: x['total'])
+    
+    # Limitar o número de rotas a processar para melhor performance
+    max_rotas_processar = 1000  # Ajuste conforme necessário
+    rotas_para_processar = rotas_completas[:max_rotas_processar]
+    
+    # Agrupar rotas por resumo de forma mais eficiente
+    for rota in rotas_para_processar:
+        resumo = rota['resumo']
+        
+        if resumo not in rotas_agrupadas:
+            rotas_agrupadas[resumo] = {
+                **rota,
+                'quantidade_agentes': 1,
+                'agentes_coleta_alternativos': []
+            }
+        else:
+            rotas_agrupadas[resumo]['quantidade_agentes'] += 1
+            
+            # Limitar o número de alternativas para evitar crescimento excessivo
+            if len(rotas_agrupadas[resumo]['agentes_coleta_alternativos']) < 3:  # Limitar a 3 alternativas
+                rotas_agrupadas[resumo]['agentes_coleta_alternativos'].append({
+                    'fornecedor': rota['agente_coleta']['fornecedor'],
+                    'origem': rota['agente_coleta']['origem']
+                })
+    
+    # Converter para lista e ordenar por custo total
+    rotas_finais = sorted(rotas_agrupadas.values(), key=lambda x: x['total'])
+    
+    # Limitar a 10 melhores opções
+    rotas_finais = rotas_finais[:10]
+    
+    # Renumerar opções
+    for i, rota in enumerate(rotas_finais):
+        rota['opcao'] = i + 1
+    
+    # Resumo final da operação (apenas em modo debug)
+    if debug_mode:
+        print(f"[AGENTES] Concluído: {len(rotas_finais)} rotas únicas (de {len(rotas_completas)} totais)")
+        if rotas_finais:
+            melhor_rota = rotas_finais[0]
+            print(f"[AGENTES] Melhor opção: {melhor_rota.get('resumo', 'N/A')} - R$ {melhor_rota.get('total', 0):.2f} ({melhor_rota.get('prazo_total', 0)}d)")
+    
+    return {
+        'rotas': rotas_finais,
+        'total_opcoes': len(rotas_finais),
+        'origem': f"{origem}/{uf_origem}",
+        'destino': f"{destino}/{uf_destino}",
+        'peso_info': {
+            'peso_real': peso_real,
+            'peso_cubado': peso_cubado,
+            'maior_peso': maior_peso,
+            'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real'
+        }
+    }
+
+# Dicionário de faixas de peso pré-calculadas para otimização
+FAIXAS_PESO = [
+    (10, 10), (20, 20), (30, 30), (50, 50), 
+    (70, 70), (100, 100), (300, 300), (500, 500)
+]
+
+def processar_linha_transferencia(linha, peso, valor_nf):
+    """
+    Processa uma linha de transferência e retorna os custos calculados de forma otimizada.
+    
+    Args:
+        linha (dict): Dicionário com os dados da linha de transferência
+        peso (float): Peso da carga em kg
+        valor_nf (float): Valor da nota fiscal para cálculo do GRIS
+        
+    Returns:
+        dict: Dicionário com os valores calculados ou None em caso de erro
+    """
+    try:
+        # Determinar faixa de peso de forma otimizada
+        faixa_peso = next((faixa for limite, faixa in FAIXAS_PESO if peso <= limite), 'Acima 500')
+        
+        # Valor base - otimizado para evitar múltiplos acessos
+        valor_base_kg = float(linha.get(faixa_peso, linha.get('VALOR MÍNIMO ATÉ 10', 0) if faixa_peso == 10 else 0))
+        valor_base = peso * valor_base_kg
+        
+        # Cálculo de pedágio otimizado
+        valor_pedagio = float(linha.get('Pedagio (100 Kg)', 0))
+        pedagio = math.ceil(peso / 100) * valor_pedagio if valor_pedagio and peso > 0 else 0.0
+        
+        # Cálculo de GRIS otimizado
+        gris = 0.0
+        if valor_nf and valor_nf > 0:
+            gris_exc = linha.get('Gris Exc')
+            if gris_exc:
+                gris_exc = float(gris_exc)
+                gris_percentual = gris_exc / 100 if gris_exc > 1 else gris_exc
+                gris_min = float(linha.get('Gris Min', 0))
+                gris = max(valor_nf * gris_percentual, gris_min)
+        
+        # Cálculo do prazo com tratamento de erro otimizado
+        prazo = 3  # Valor padrão
+        try:
+            prazo = int(float(linha.get('Prazo', 3)) or 3)
+        except (ValueError, TypeError):
+            pass  # Mantém o valor padrão em caso de erro
+        
+        # Retorna um dicionário otimizado
+        return {
+            'valor_base': round(valor_base, 2),
+            'pedagio': round(pedagio, 2),
+            'gris': round(gris, 2),
+            'total': round(valor_base + pedagio + gris, 2),
+            'prazo': prazo,
+            'faixa_peso': faixa_peso,
+            'valor_kg': round(valor_base_kg, 4)
+        }
+        
+    except Exception as e:
+        # Log de erro apenas em modo debug para melhorar desempenho
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print(f"[ERRO] Erro ao processar transferência: {str(e)[:100]}")
+        return None
         return None
 
 if __name__ == "__main__":
