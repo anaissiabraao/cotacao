@@ -159,6 +159,8 @@ def normalizar_cidade(cidade):
         "SAOPAULO": "SAO PAULO",
         "SAÕPAULO": "SAO PAULO",
         "RIO DE JANEIRO": "RIO DE JANEIRO",
+        "RIO DE JANEIRO RJ": "RIO DE JANEIRO",
+        "RIO DE JANEIRO - RJ": "RIO DE JANEIRO",
         "RJ": "RIO DE JANEIRO",
         "RIODEJANEIRO": "RIO DE JANEIRO",
         "RIO": "RIO DE JANEIRO",
@@ -174,7 +176,11 @@ def normalizar_cidade(cidade):
         "BSB": "BRASILIA",
         "ARACAJU": "ARACAJU",
         "RIBEIRAO PRETO": "RIBEIRAO PRETO",
+        "RIBEIRAO PRETO SP": "RIBEIRAO PRETO",
+        "RIBEIRAO PRETO - SP": "RIBEIRAO PRETO",
         "RIBEIRÃO PRETO": "RIBEIRAO PRETO",
+        "RIBEIRÃO PRETO SP": "RIBEIRAO PRETO",
+        "RIBEIRÃO PRETO - SP": "RIBEIRAO PRETO",
         "RIBEIRÃOPRETO": "RIBEIRAO PRETO",
         "RIBEIRAOPRETO": "RIBEIRAO PRETO",
         "SALVADOR": "SALVADOR",
@@ -4155,36 +4161,25 @@ MAPA_BASES_CACHE = {
     'BELO HORIZONTE': 'BHZ',
     'RIO DE JANEIRO': 'RIO',
     'CURITIBA': 'CWB',
-    'PORTO ALEGRE': 'POA'
+    'PORTO ALEGRE': 'POA',
+    'RIBEIRAO PRETO': 'RAO',
+    'RIBEIRAO': 'RAO',
+    'RIBEIRÃO PRETO': 'RAO',
+    'RIBEIRÃO': 'RAO'
 }
 
 def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, valor_nf=None, cubagem=None):
-    """
-    Calcula frete com sistema de agentes: Coleta -> Transferência -> Entrega
-    Retorna opções completas com ranking de melhor custo
+    debug_mode = os.getenv('DEBUG_AGENTES', 'false').lower() == 'true' or (origem == 'RIBEIRÃO PRETO' and destino == 'RIO DE JANEIRO')
     
-    Args:
-        origem (str): Cidade de origem
-        uf_origem (str): UF de origem
-        destino (str): Cidade de destino
-        uf_destino (str): UF de destino
-        peso (float): Peso da carga em kg
-        valor_nf (float, optional): Valor da nota fiscal para cálculo de GRIS
-        cubagem (float, optional): Cubagem em m³ para cálculo de peso cubado
-        
-    Returns:
-        dict: Dicionário com as rotas calculadas e informações adicionais
-    """
-    debug = os.getenv('DEBUG_AGENTES', 'false').lower() == 'true'
-    
-    if debug:
+    # Log de entrada
+    if debug_mode:
         print("\n" + "="*80)
         print(f"[AGENTES] Iniciando cálculo de frete com agentes")
         print(f"[AGENTES] Origem: {origem} ({uf_origem})")
         print(f"[AGENTES] Destino: {destino} ({uf_destino})")
-        print(f"[AGENTES] Peso: {peso}kg, Cubagem: {cubagem if cubagem is not None else 'N/A'}")
-        print(f"[AGENTES] Valor NF: {valor_nf if valor_nf is not None else 'N/A'}")
+        print(f"[AGENTES] Peso: {peso}kg, Cubagem: {cubagem}")
         print("="*80 + "\n")
+    
     # Usar cache para evitar leitura repetida do arquivo
     base_agentes = carregar_base_agentes()
     if not base_agentes:
@@ -4210,6 +4205,15 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
     # 1. Encontrar agentes que coletam na origem
     base_origem_busca = MAPA_BASES_CACHE.get(origem_norm)
     
+    if debug_mode:
+        print(f"[AGENTES] Origem normalizada: {origem_norm}")
+        print(f"[AGENTES] Base de origem encontrada no cache: {base_origem_busca}")
+        print(f"[AGENTES] Todas as chaves do cache: {list(MAPA_BASES_CACHE.keys())}")
+    
+    if debug_mode:
+        print(f"[DEBUG] Origem normalizada: {origem_norm}")
+        print(f"[DEBUG] Base de origem encontrada no cache: {base_origem_busca}")
+    
     # Pré-filtrar agentes baseado no tipo de busca
     if origem_norm == 'SAO PAULO':
         # Para São Paulo, usar agentes FILIAL que atendem cidades de SP
@@ -4218,18 +4222,45 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             (df_agentes['Origem'].str.contains('São|Sao', case=False, na=False))
         ].copy()
         base_origem_busca = 'SAO'  # Forçar base SAO para São Paulo
+        if debug_mode:
+            print(f"[DEBUG] Buscando agentes FILIAL para São Paulo. Encontrados: {len(agentes_coleta)}")
     elif base_origem_busca:
         agentes_coleta = df_agentes[df_agentes['Base Origem'] == base_origem_busca].copy()
+        if debug_mode:
+            print(f"[DEBUG] Buscando agentes na base {base_origem_busca}. Encontrados: {len(agentes_coleta)}")
     else:
         # Usar índice para busca mais rápida
+        if debug_mode:
+            print(f"[DEBUG] Buscando agentes por nome normalizado: {origem_norm}")
+            print(f"[DEBUG] Valores únicos em Origem_Normalizada: {df_agentes['Origem_Normalizada'].dropna().unique()[:10]}")
+            
         agentes_coleta = df_agentes[
             df_agentes['Origem_Normalizada'].str.contains(origem_norm, case=False, na=False)
         ].copy()
+        
+        if debug_mode:
+            print(f"[DEBUG] Agentes encontrados por nome normalizado: {len(agentes_coleta)}")
+            if not agentes_coleta.empty:
+                print(f"[DEBUG] Exemplo de agentes encontrados: {agentes_coleta[['Origem', 'Origem_Normalizada', 'Base Origem']].head().to_dict('records')}")
     
     # Se não houver agentes, retorna vazio
     if agentes_coleta.empty:
-        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
-            print(f"[AGENTES] Nenhum agente encontrado para coleta em {origem}")
+        if debug_mode:
+            print("\n[AGENTES] Nenhum agente de coleta encontrado")
+            print(f"[AGENTES] Origem: {origem} ({uf_origem})")
+            print(f"[AGENTES] Origem normalizada: {origem_norm}")
+            print(f"[AGENTES] Base de busca: {base_origem_busca}")
+            print("[AGENTES] Amostra de origens disponíveis:", df_agentes['Origem'].head(10).tolist())
+            print("[AGENTES] Amostra de origens normalizadas disponíveis:", df_agentes['Origem_Normalizada'].drop_duplicates().head(10).tolist())
+            print("[AGENTES] Bases disponíveis:", df_agentes['Base Origem'].drop_duplicates().tolist())
+        debug_msg = f"[AGENTES] Nenhum agente encontrado para coleta em {origem} ({uf_origem})\n"
+        debug_msg += f"[AGENTES] Origem normalizada: {origem_norm}\n"
+        debug_msg += f"[AGENTES] Bases disponíveis: {df_agentes['Base Origem'].unique()}\n"
+        debug_msg += f"[AGENTES] Valores únicos em Origem_Normalizada: {df_agentes['Origem_Normalizada'].dropna().unique()[:20]}"
+        
+        if debug_mode:
+            print(debug_msg)
+            
         return {
             'rotas': [],
             'total_opcoes': 0,
@@ -4240,7 +4271,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 'peso_cubado': peso_cubado,
                 'maior_peso': maior_peso,
                 'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real'
-            }
+            },
+            'debug': debug_msg if debug_mode else None
         }
     
     if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
@@ -4339,22 +4371,38 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             agentes_base_destino = df_agentes[df_agentes['Base Origem'] == base_destino_transf]
             
             # Primeiro, tentar encontrar por nome de cidade normalizado
+            if debug_mode:
+                print(f"\n[AGENTES] Buscando agentes de entrega para destino: {destino_norm}")
+                print(f"[AGENTES] Agentes na base de destino ({base_destino_transf}): {len(agentes_base_destino)}")
+                print(f"[AGENTES] Valores únicos em Origem_Normalizada:", agentes_base_destino['Origem_Normalizada'].drop_duplicates().tolist())
+            
             agentes_entrega = agentes_base_destino[
                 agentes_base_destino['Origem_Normalizada'].str.contains(destino_norm, case=False, na=False)
             ]
             
+            if debug_mode:
+                print(f"[AGENTES] Agentes encontrados por nome normalizado: {len(agentes_entrega)}")
+            
             # Se não encontrar, buscar por UF
             if agentes_entrega.empty:
+                if debug_mode:
+                    print(f"[AGENTES] Nenhum agente encontrado por nome, buscando por UF: {uf_destino}")
                 agentes_entrega = agentes_base_destino[
                     agentes_base_destino['Origem'].str.contains(f"- {uf_destino}", case=False, na=False)
                 ]
+                if debug_mode:
+                    print(f"[AGENTES] Agentes encontrados por UF: {len(agentes_entrega)}")
                 
                 # Se ainda não encontrar, tentar uma busca mais ampla
                 if agentes_entrega.empty and len(destino_norm) > 3:
+                    if debug_mode:
+                        print(f"[AGENTES] Nenhum agente encontrado por UF, tentando busca parcial: {destino_norm[:4]}")
                     # Buscar por partes do nome da cidade (apenas se o nome for longo o suficiente)
                     agentes_entrega = agentes_base_destino[
                         agentes_base_destino['Origem_Normalizada'].str.contains(destino_norm[:4], case=False, na=False)
                     ]
+                    if debug_mode:
+                        print(f"[AGENTES] Agentes encontrados por busca parcial: {len(agentes_entrega)}")
             
             for _, agente_entrega in agentes_entrega.iterrows():
                 fornecedor_entrega = agente_entrega['Fornecedor']
