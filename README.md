@@ -73,8 +73,8 @@ Sistema abrangente de gestão e cotação de fretes para empresas de logística,
 
 6. **Acesse o sistema**
    - URL: `http://localhost:5000`
-   - Login comercial: `comercial.ptx` / `ptx@123`
-   - Login admin: `adm.ptx` / `portoex@123`
+   - Login comercial: `comercial.ptx` / `***`
+   - Login admin: `adm.ptx` / `***`
 
 ## 📁 Estrutura do Projeto
 
