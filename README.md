@@ -139,12 +139,12 @@ DATABASE_URL=sqlite:///sistema_logs.db
 ```python
 USUARIOS_SISTEMA = {
     'comercial.ptx': {
-        'senha': 'ptx@123',
+        'senha': '***',
         'tipo': 'comercial',
         'permissoes': ['calcular', 'historico', 'exportar']
     },
     'adm.ptx': {
-        'senha': 'portoex@123',
+        'senha': '***',
         'tipo': 'administrador',
         'permissoes': ['calcular', 'historico', 'exportar', 'logs', 'setup', 'admin']
     }
