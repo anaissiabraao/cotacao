@@ -1513,14 +1513,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Definir capacidades dos veículos (peso e volume)
+    // Definir capacidades dos veículos (peso e volume) - SINCRONIZADO COM BACKEND
     const CAPACIDADES_VEICULOS = {
-        'FIORINO': { peso_max: 700, volume_max: 2.8, descricao: 'Utilitário pequeno' },
+        'FIORINO': { peso_max: 500, volume_max: 1.20, descricao: 'Utilitário pequeno' },
         'VAN': { peso_max: 1500, volume_max: 6.0, descricao: 'Van/Kombi' },
         '3/4': { peso_max: 3500, volume_max: 12.0, descricao: 'Caminhão 3/4' },
-        'TOCO': { peso_max: 7000, volume_max: 25.0, descricao: 'Caminhão toco' },
-        'TRUCK': { peso_max: 15000, volume_max: 45.0, descricao: 'Caminhão truck' },
-        'CARRETA': { peso_max: 30000, volume_max: 90.0, descricao: 'Carreta/bitrem' }
+        'TOCO': { peso_max: 7000, volume_max: 40.0, descricao: 'Caminhão toco' },
+        'TRUCK': { peso_max: 12000, volume_max: 70.0, descricao: 'Caminhão truck' },
+        'CARRETA': { peso_max: 28000, volume_max: 110.0, descricao: 'Carreta/bitrem' }
     };
 
     // Função para calcular custos detalhados de cada veículo
@@ -1535,11 +1535,11 @@ document.addEventListener('DOMContentLoaded', function() {
             // Calcular componentes do custo
             const custoOperacional = custoTotal - pedagioBase; // Custo base sem pedágio
             
-            // Pedágio específico por tipo de veículo (baseado no peso do veículo)
+            // Pedágio específico por tipo de veículo (baseado no peso próprio do veículo) - SINCRONIZADO COM BACKEND
             const pesoVeiculo = {
-                'FIORINO': 1200, 'VAN': 2000, '3/4': 4000,
-                'TOCO': 8000, 'TRUCK': 12000, 'CARRETA': 18000
-            }[tipo] || 8000;
+                'FIORINO': 800, 'VAN': 1800, '3/4': 4500,
+                'TOCO': 9000, 'TRUCK': 15000, 'CARRETA': 25000
+            }[tipo] || 9000;
             
             const pedagogioVeiculo = calcularPedagioVeiculo(distancia, pesoVeiculo);
             
@@ -1586,18 +1586,19 @@ document.addEventListener('DOMContentLoaded', function() {
         return detalhes;
     }
 
-    // Função para calcular pedágio específico por veículo
+    // Função para calcular pedágio específico por veículo - SINCRONIZADO COM BACKEND
     function calcularPedagioVeiculo(distancia, pesoVeiculo) {
+        // Taxas baseadas nos limites de peso para determinação do tipo de veículo (sincronizado com backend)
         const taxasPorKm = {
-            700: 0.03,   // FIORINO
-            1500: 0.05,  // VAN  
-            3500: 0.07,  // 3/4
-            7000: 0.10,  // TOCO
-            15000: 0.14, // TRUCK
-            30000: 0.18  // CARRETA
+            500: 0.03,    // FIORINO
+            1500: 0.05,   // VAN  
+            3500: 0.07,   // 3/4
+            7000: 0.10,   // TOCO
+            12000: 0.14,  // TRUCK
+            28000: 0.18   // CARRETA
         };
         
-        let taxa = 0.10; // Taxa padrão
+        let taxa = 0.10; // Taxa padrão (TOCO)
         for (const [pesoLimite, taxaKm] of Object.entries(taxasPorKm)) {
             if (pesoVeiculo <= parseInt(pesoLimite)) {
                 taxa = taxaKm;

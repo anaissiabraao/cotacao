@@ -787,12 +787,12 @@ def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="De
         "rota_pontos": rota_info["rota_pontos"],
         # Capacidades dos veículos para comparação com carga
         "capacidades_veiculos": {
-            'FIORINO': { 'peso_max': 700, 'volume_max': 2.8, 'descricao': 'Utilitário pequeno' },
+            'FIORINO': { 'peso_max': 500, 'volume_max': 1.20, 'descricao': 'Utilitário pequeno' },
             'VAN': { 'peso_max': 1500, 'volume_max': 6.0, 'descricao': 'Van/Kombi' },
             '3/4': { 'peso_max': 3500, 'volume_max': 12.0, 'descricao': 'Caminhão 3/4' },
-            'TOCO': { 'peso_max': 7000, 'volume_max': 25.0, 'descricao': 'Caminhão toco' },
-            'TRUCK': { 'peso_max': 15000, 'volume_max': 45.0, 'descricao': 'Caminhão truck' },
-            'CARRETA': { 'peso_max': 30000, 'volume_max': 90.0, 'descricao': 'Carreta/bitrem' }
+            'TOCO': { 'peso_max': 7000, 'volume_max': 40.0, 'descricao': 'Caminhão toco' },
+            'TRUCK': { 'peso_max': 12000, 'volume_max': 70.0, 'descricao': 'Caminhão truck' },
+            'CARRETA': { 'peso_max': 28000, 'volume_max': 110.0, 'descricao': 'Carreta/bitrem' }
         }
     }
     return analise

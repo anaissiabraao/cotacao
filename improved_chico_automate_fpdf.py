@@ -781,12 +781,12 @@ def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="De
         "rota_pontos": rota_info["rota_pontos"],
         # Capacidades dos veículos para comparação com carga
         "capacidades_veiculos": {
-            'FIORINO': { 'peso_max': 700, 'volume_max': 2.8, 'descricao': 'Utilitário pequeno' },
+            'FIORINO': { 'peso_max': 500, 'volume_max': 1.20, 'descricao': 'Utilitário pequeno' },
             'VAN': { 'peso_max': 1500, 'volume_max': 6.0, 'descricao': 'Van/Kombi' },
             '3/4': { 'peso_max': 3500, 'volume_max': 12.0, 'descricao': 'Caminhão 3/4' },
-            'TOCO': { 'peso_max': 7000, 'volume_max': 25.0, 'descricao': 'Caminhão toco' },
-            'TRUCK': { 'peso_max': 15000, 'volume_max': 45.0, 'descricao': 'Caminhão truck' },
-            'CARRETA': { 'peso_max': 30000, 'volume_max': 90.0, 'descricao': 'Carreta/bitrem' }
+            'TOCO': { 'peso_max': 7000, 'volume_max': 40.0, 'descricao': 'Caminhão toco' },
+            'TRUCK': { 'peso_max': 12000, 'volume_max': 70.0, 'descricao': 'Caminhão truck' },
+            'CARRETA': { 'peso_max': 28000, 'volume_max': 110.0, 'descricao': 'Carreta/bitrem' }
         }
     }
     return analise
@@ -2492,12 +2492,27 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                 
                 # Valor base USANDO O MAIOR PESO
                 valor_base_kg = linha[faixa_peso]
+                
+                # Verificar se valor_base_kg é NaN e corrigir
+                if pd.isna(valor_base_kg) or (isinstance(valor_base_kg, float) and math.isnan(valor_base_kg)):
+                    print(f"[PLANILHA] ⚠️ AVISO {fornecedor}: Valor base kg é NaN na faixa {faixa_peso}, usando 0")
+                    valor_base_kg = 0.0
+                else:
+                    valor_base_kg = float(valor_base_kg)
+                
                 valor_base = maior_peso * valor_base_kg
                 
                 # PEDÁGIO USANDO O MAIOR PESO
                 valor_pedagio_coluna = linha.get('Pedagio (100 Kg)', 0)  # Coluna P
-                if valor_pedagio_coluna is None:
+                if valor_pedagio_coluna is None or pd.isna(valor_pedagio_coluna):
                     valor_pedagio_coluna = 0
+                else:
+                    try:
+                        valor_pedagio_coluna = float(valor_pedagio_coluna)
+                        if math.isnan(valor_pedagio_coluna):
+                            valor_pedagio_coluna = 0
+                    except (ValueError, TypeError):
+                        valor_pedagio_coluna = 0
                 
                 # Calcular pedágio: (maior_peso ÷ 100) arredondado PARA CIMA × valor_coluna_pedagio
                 if maior_peso > 0 and valor_pedagio_coluna > 0:
@@ -2513,26 +2528,55 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                         # Parse percentual da coluna R (Gris Exc)
                         gris_exc_raw = linha.get('Gris Exc', 0)
                         gris_exc_val = 0.0
-                        if gris_exc_raw is not None and str(gris_exc_raw).strip() != '':
-                            gris_exc_val = float(str(gris_exc_raw).replace(',', '.'))
+                        if gris_exc_raw is not None and str(gris_exc_raw).strip() not in ['', 'nan', 'NaN', 'None']:
+                            try:
+                                gris_exc_val = float(str(gris_exc_raw).replace(',', '.'))
+                                # Verificar se o valor é NaN
+                                if pd.isna(gris_exc_val) or math.isnan(gris_exc_val):
+                                    gris_exc_val = 0.0
+                            except (ValueError, TypeError):
+                                gris_exc_val = 0.0
+                        
                         # Se o valor estiver como percentual inteiro (ex: 10 para 10%), converter
                         if gris_exc_val > 1:
                             gris_percentual = gris_exc_val / 100
                         else:
                             gris_percentual = gris_exc_val
+                        
                         # Valor mínimo (coluna Q)
                         gris_min_raw = linha.get('Gris Min', 0)
                         gris_min_val = 0.0
-                        if gris_min_raw is not None and str(gris_min_raw).strip() != '':
-                            gris_min_val = float(str(gris_min_raw).replace(',', '.'))
+                        if gris_min_raw is not None and str(gris_min_raw).strip() not in ['', 'nan', 'NaN', 'None']:
+                            try:
+                                gris_min_val = float(str(gris_min_raw).replace(',', '.'))
+                                # Verificar se o valor é NaN
+                                if pd.isna(gris_min_val) or math.isnan(gris_min_val):
+                                    gris_min_val = 0.0
+                            except (ValueError, TypeError):
+                                gris_min_val = 0.0
+                        
                         gris_calculado = valor_nf * gris_percentual
                         gris = max(gris_calculado, gris_min_val)
+                        
+                        # Verificação final para garantir que gris não é NaN
+                        if pd.isna(gris) or math.isnan(gris):
+                            gris = 0.0
+                            
                 except Exception as e:
                     print(f"[GRIS] Erro ao calcular GRIS: {e}")
                     gris = 0.0
                 
-                # Total
+                # Total com verificação de NaN
                 total = valor_base + pedagio + gris
+                
+                # Verificação final para garantir que o total não é NaN
+                if pd.isna(total) or math.isnan(total):
+                    print(f"[PLANILHA] ⚠️ ERRO {fornecedor}: Total calculado é NaN")
+                    print(f"[DEBUG] valor_base: {valor_base}, pedagio: {pedagio}, gris: {gris}")
+                    total = valor_base + pedagio  # Usar sem GRIS se for problemático
+                    if pd.isna(total) or math.isnan(total):
+                        print(f"[PLANILHA] ⚠️ ERRO {fornecedor}: Total ainda é NaN, pulando registro")
+                        continue
                 
                 # --- NOVO PARSE DO VALOR DA NF (aceita vírgula ou ponto) ---
                 try:
@@ -3251,7 +3295,7 @@ def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
         }
         
         # Determinar tipo de veículo baseado no peso
-        if peso_veiculo <= 700:
+        if peso_veiculo <= 500:
             tipo_veiculo = "FIORINO"
         elif peso_veiculo <= 1500:
             tipo_veiculo = "VAN"
@@ -3259,9 +3303,9 @@ def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
             tipo_veiculo = "3/4"
         elif peso_veiculo <= 7000:
             tipo_veiculo = "TOCO"
-        elif peso_veiculo <= 15000:
+        elif peso_veiculo <= 12000:
             tipo_veiculo = "TRUCK"
-        else:
+        elif peso_veiculo <= 28000:
             tipo_veiculo = "CARRETA"
         
         config = estimativas_pedagio.get(tipo_veiculo, estimativas_pedagio["TOCO"])
@@ -4286,6 +4330,90 @@ def processar_linha_transferencia(linha, peso, valor_nf):
     except Exception as e:
         print(f"[ERRO] Erro ao processar transferência: {str(e)}")
         return None
+
+@app.route("/debug/capacidades")
+def debug_capacidades():
+    """
+    Rota de debug para verificar as capacidades dos veículos em tempo real
+    """
+    try:
+        # Gerar análise de teste
+        analise_teste = gerar_analise_trajeto(
+            [-15.83, -47.86], [-23.55, -46.64], 
+            {'distancia': 100, 'duracao': 60, 'provider': 'teste', 'rota_pontos': []}, 
+            {}, 'Debug'
+        )
+        
+        capacidades = analise_teste.get('capacidades_veiculos', {})
+        
+        # Formatar resposta HTML
+        html_response = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Debug - Capacidades dos Veículos</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .veiculo { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+                .correto { background-color: #d4edda; border-color: #c3e6cb; }
+                .incorreto { background-color: #f8d7da; border-color: #f5c6cb; }
+                .timestamp { color: #666; font-size: 0.9em; }
+            </style>
+        </head>
+        <body>
+            <h1>🔧 Debug - Capacidades dos Veículos</h1>
+            <p class="timestamp">Timestamp: """ + datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S") + """</p>
+            <h2>Capacidades Atuais:</h2>
+        """
+        
+        for veiculo, dados in capacidades.items():
+            peso_max = dados['peso_max']
+            volume_max = dados['volume_max']
+            descricao = dados['descricao']
+            
+            # Verificar se está correto
+            correto = True
+            problema = ""
+            
+            if veiculo == 'FIORINO' and peso_max != 500:
+                correto = False
+                problema = f"❌ PROBLEMA: Deveria ser 500kg, mas está {peso_max}kg"
+            elif veiculo == 'FIORINO' and peso_max == 500:
+                problema = "✅ Correto: 500kg"
+            
+            css_class = "correto" if correto else "incorreto"
+            
+            html_response += f"""
+            <div class="veiculo {css_class}">
+                <h3>{veiculo}</h3>
+                <p><strong>Peso Máximo:</strong> {peso_max}kg</p>
+                <p><strong>Volume Máximo:</strong> {volume_max}m³</p>
+                <p><strong>Descrição:</strong> {descricao}</p>
+                {f'<p><strong>Status:</strong> {problema}</p>' if problema else ''}
+            </div>
+            """
+        
+        html_response += """
+            <h2>Ações:</h2>
+            <p><a href="/clear-cache">🔄 Limpar Cache</a></p>
+            <p><a href="/debug/capacidades">🔄 Recarregar Esta Página</a></p>
+            <p><a href="/">🏠 Voltar ao Sistema</a></p>
+        </body>
+        </html>
+        """
+        
+        return html_response
+        
+    except Exception as e:
+        return f"""
+        <html>
+        <body>
+            <h1>❌ Erro no Debug</h1>
+            <p>Erro: {str(e)}</p>
+            <p><a href="/">Voltar ao Sistema</a></p>
+        </body>
+        </html>
+        """
 
 if __name__ == "__main__":
     # Usar configurações de ambiente para produção
