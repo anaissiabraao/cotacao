@@ -246,7 +246,7 @@
         }
         
         .cubagem-calculator::before {
-            content: "📐 Calculadora de Cubagem";
+            content: "📐 Calculadora de Cubagem (Opcional)";
             position: absolute;
             top: -12px;
             left: 15px;
@@ -257,6 +257,23 @@
             color: #0a6ed1;
             border-radius: 15px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .btn-reset-cubagem {
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            margin-left: 8px;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-reset-cubagem:hover {
+            background: #545b62;
+            transform: translateY(-1px);
         }
         
         .dimensao-input {
@@ -647,10 +664,15 @@
                     </div>
                     <div class="form-group">
                         <label for="cubagem_frac">Cubagem (m³):</label>
-                        <input type="number" id="cubagem_frac" name="cubagem_frac" step="0.001" min="0" required readonly 
-                               class="cubagem-resultado" style="background-color: #f8f9fa; border-color: #ced4da; font-weight: 600; font-size: 1.1rem;">
+                        <input type="number" id="cubagem_frac" name="cubagem_frac" step="0.001" min="0" required 
+                               class="cubagem-resultado" style="font-weight: 600; font-size: 1.1rem;" 
+                               placeholder="Ex: 2.304 ou use a calculadora" 
+                               onchange="marcarCubagemManual()" oninput="marcarCubagemManual()">
                         <small id="cubagem-formula" style="color: #6c757d; font-size: 0.85rem; margin-top: 4px; display: block;">
-                            <i class="fa-solid fa-calculator"></i> <span id="formula-texto">Calculado automaticamente: L × A × C</span>
+                            <i class="fa-solid fa-calculator"></i> <span id="formula-texto">📝 Digite diretamente ou use a calculadora abaixo</span>
+                            <button type="button" class="btn-reset-cubagem" onclick="resetarCubagem()" title="Limpar e voltar ao modo automático">
+                                <i class="fa-solid fa-refresh"></i> Reset
+                            </button>
                         </small>
                     </div>
                 </div>
@@ -844,8 +866,39 @@
         
         console.log("Cache e cookies limpos para acesso livre");
         
+        // Variável global para controlar modo manual
+        let cubagemManual = false;
+        
+        // Função para marcar que cubagem foi inserida manualmente
+        function marcarCubagemManual() {
+            cubagemManual = true;
+            const formulaTexto = document.getElementById('formula-texto');
+            const cubagemValue = document.getElementById('cubagem_frac').value;
+            
+            if (cubagemValue) {
+                formulaTexto.innerHTML = `✏️ Cubagem inserida manualmente: ${cubagemValue}m³`;
+                formulaTexto.style.color = '#0a6ed1';
+                formulaTexto.style.fontWeight = '600';
+                
+                // Limpar campos da calculadora quando cubagem manual é inserida
+                document.getElementById('largura_frac').value = '';
+                document.getElementById('altura_frac').value = '';
+                document.getElementById('comprimento_frac').value = '';
+            } else {
+                cubagemManual = false;
+                formulaTexto.innerHTML = '📝 Digite diretamente ou use a calculadora abaixo';
+                formulaTexto.style.color = '#6c757d';
+                formulaTexto.style.fontWeight = 'normal';
+            }
+        }
+        
         // Função para calcular automaticamente a cubagem
         function calcularCubagem() {
+            // Não sobrescrever se o usuário inseriu manualmente
+            if (cubagemManual) {
+                return;
+            }
+            
             const largura = parseFloat(document.getElementById('largura_frac').value) || 0;
             const altura = parseFloat(document.getElementById('altura_frac').value) || 0;
             const comprimento = parseFloat(document.getElementById('comprimento_frac').value) || 0;
@@ -857,7 +910,7 @@
                 document.getElementById('cubagem_frac').value = cubagem.toFixed(3);
                 
                 // Mostrar a fórmula com os valores
-                formulaTexto.innerHTML = `${largura}m × ${altura}m × ${comprimento}m = ${cubagem.toFixed(3)}m³`;
+                formulaTexto.innerHTML = `🧮 ${largura}m × ${altura}m × ${comprimento}m = ${cubagem.toFixed(3)}m³`;
                 formulaTexto.style.color = '#28a745';
                 formulaTexto.style.fontWeight = '600';
                 
@@ -868,16 +921,45 @@
                 cubagemField.classList.add('cubagem-resultado');
                 
                 setTimeout(() => {
-                    cubagemField.style.backgroundColor = '#f8f9fa';
-                    cubagemField.style.borderColor = '#ced4da';
+                    cubagemField.style.backgroundColor = '';
+                    cubagemField.style.borderColor = '';
                 }, 800);
             } else {
-                document.getElementById('cubagem_frac').value = '';
-                // Mostrar mensagem padrão
-                formulaTexto.innerHTML = 'Calculado automaticamente: L × A × C';
-                formulaTexto.style.color = '#6c757d';
-                formulaTexto.style.fontWeight = 'normal';
+                if (!cubagemManual) {
+                    document.getElementById('cubagem_frac').value = '';
+                    // Mostrar mensagem padrão
+                    formulaTexto.innerHTML = '📝 Digite diretamente ou use a calculadora abaixo';
+                    formulaTexto.style.color = '#6c757d';
+                    formulaTexto.style.fontWeight = 'normal';
+                }
             }
+        }
+        
+        // Função para resetar cubagem e voltar ao modo automático
+        function resetarCubagem() {
+            cubagemManual = false;
+            
+            // Limpar todos os campos
+            document.getElementById('cubagem_frac').value = '';
+            document.getElementById('largura_frac').value = '';
+            document.getElementById('altura_frac').value = '';
+            document.getElementById('comprimento_frac').value = '';
+            
+            // Restaurar mensagem padrão
+            const formulaTexto = document.getElementById('formula-texto');
+            formulaTexto.innerHTML = '📝 Digite diretamente ou use a calculadora abaixo';
+            formulaTexto.style.color = '#6c757d';
+            formulaTexto.style.fontWeight = 'normal';
+            
+            // Feedback visual
+            const cubagemField = document.getElementById('cubagem_frac');
+            cubagemField.style.backgroundColor = '#fff3cd';
+            cubagemField.style.borderColor = '#ffc107';
+            
+            setTimeout(() => {
+                cubagemField.style.backgroundColor = '';
+                cubagemField.style.borderColor = '';
+            }, 500);
         }
         
         // Adicionar event listeners quando a página carregar
