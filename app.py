@@ -1250,7 +1250,7 @@ def calcular_frete_fracionado():
                     rota.get('agente_entrega', {}).get('gris', 0)
                 )
                 
-                # Exemplo: "GLI (R$ 124,50) + Jem (R$ 345,77) + MARCO AURELIO (R$ 60,00)"
+                # Exemplo: "Jem/Dfl (R$ 124,50) + SOL (R$ 345,77)"
                 fornecedor_coleta = rota.get('fornecedor_coleta', '')
                 fornecedor_transferencia = rota.get('fornecedor_transferencia', '')
                 fornecedor_entrega = rota.get('agente_entrega', {}).get('fornecedor', '')
@@ -2464,102 +2464,44 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 print(f"[AGENTES] Erro ao processar transferência: {e}")
                 continue
         
-        # 2. SIMULAR CUSTOS DE AGENTES DE COLETA E ENTREGA
-        # Valores baseados na realidade do mercado brasileiro
-        agentes_coleta = [
-            {'fornecedor': 'GLI', 'custo_base': 0.85, 'custo_km': 1.2},     # Mais econômico
-            {'fornecedor': 'TRANSPORTADORA REGIONAL', 'custo_base': 0.95, 'custo_km': 1.4},
-            {'fornecedor': 'LOGÍSTICA LOCAL', 'custo_base': 1.1, 'custo_km': 1.6}  # Mais caro
-        ]
+        # 2. USAR APENAS TRANSFERÊNCIAS REAIS DA BASE DE DADOS
+        # Sistema agora trabalha exclusivamente com fornecedores reais
         
-        agentes_entrega = [
-            {'fornecedor': 'MARCO AURELIO', 'custo_base': 0.80, 'custo_km': 1.1},  # Mais econômico
-            {'fornecedor': 'ENTREGA EXPRESSA', 'custo_base': 0.90, 'custo_km': 1.3},
-            {'fornecedor': 'DISTRIBUIÇÃO RÁPIDA', 'custo_base': 1.05, 'custo_km': 1.5}  # Mais caro
-        ]
-        
-        # 3. COMBINAR COLETA + TRANSFERÊNCIA + ENTREGA
-        for agente_col in agentes_coleta:
-            for transferencia in transferencias_encontradas:
-                for agente_ent in agentes_entrega:
-                    try:
-                        # Estimar distâncias (simulação baseada em dados históricos)
-                        # Coleta: Cliente → Base (estimativa baseada no tipo de cidade)
-                        if 'CAPITAL' in origem.upper() or uf_origem in ['SP', 'RJ']:
-                            distancia_coleta = 25  # Capital/grande cidade
-                        else:
-                            distancia_coleta = 45  # Interior
-                        
-                        # Entrega: Base → Cliente (estimativa baseada no tipo de cidade)
-                        if 'CAPITAL' in destino.upper() or uf_destino in ['SP', 'RJ']:
-                            distancia_entrega = 25  # Capital/grande cidade
-                        else:
-                            distancia_entrega = 45  # Interior
-                        
-                        # CALCULAR CUSTOS DA COLETA
-                        custo_coleta_base = maior_peso * agente_col['custo_base']  # Por kg
-                        custo_coleta_distancia = distancia_coleta * agente_col['custo_km']  # Por km
-                        custo_coleta_total = custo_coleta_base + custo_coleta_distancia
-                        
-                        # CALCULAR CUSTOS DA ENTREGA
-                        custo_entrega_base = maior_peso * agente_ent['custo_base']  # Por kg
-                        custo_entrega_distancia = distancia_entrega * agente_ent['custo_km']  # Por km
-                        custo_entrega_total = custo_entrega_base + custo_entrega_distancia
-                        
-                        # TOTAL DA ROTA: COLETA + TRANSFERÊNCIA + ENTREGA
-                        total_rota = custo_coleta_total + transferencia['custo'] + transferencia['pedagio'] + transferencia['gris'] + custo_entrega_total
-                        
-                        # Prazo total (soma dos prazos)
-                        prazo_total = 1 + transferencia['prazo'] + 1  # 1 dia coleta + prazo transferência + 1 dia entrega
-                        
-                        # Criar rota completa
-                        rota = {
-                            'fornecedor_coleta': agente_col['fornecedor'],
-                            'fornecedor_transferencia': transferencia['fornecedor'],
-                            'agente_entrega': {'fornecedor': agente_ent['fornecedor']},
-                            'agente_coleta': {
-                                'base_origem': origem,
-                                'base_destino': base_origem,
-                                'custo': float(custo_coleta_total),
-                                'distancia': float(distancia_coleta)
-                            },
-                            'transferencia': {
-                                'base_origem': base_origem,
-                                'base_destino': base_destino,
-                                'custo': float(transferencia['custo']),
-                                'pedagio': float(transferencia['pedagio']),
-                                'gris': float(transferencia['gris'])
-                            },
-                            'agente_entrega_detalhes': {
-                                'base_origem': base_destino,
-                                'base_destino': destino,
-                                'custo': float(custo_entrega_total),
-                                'distancia': float(distancia_entrega)
-                            },
-                            'total': float(total_rota),
-                            'prazo_total': int(prazo_total),
-                            'peso_real': float(peso_real),
-                            'peso_cubado': float(peso_cubado),
-                            'maior_peso': float(maior_peso),
-                            'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real',
-                            'base_origem': base_origem,
-                            'base_destino_transferencia': base_destino,
-                            'detalhamento_custos': {
-                                'coleta': float(custo_coleta_total),
-                                'transferencia': float(transferencia['custo']),
-                                'entrega': float(custo_entrega_total),
-                                'pedagio': float(transferencia['pedagio']),
-                                'gris_total': float(transferencia['gris'])
-                            }
-                        }
-                        
-                        rotas_encontradas.append(rota)
-                        
-                        print(f"[AGENTES] ✅ Rota completa: {agente_col['fornecedor']} (R$ {custo_coleta_total:.2f}) + {transferencia['fornecedor']} (R$ {transferencia['custo']:.2f}) + {agente_ent['fornecedor']} (R$ {custo_entrega_total:.2f}) = R$ {total_rota:.2f}")
-                        
-                    except Exception as e:
-                        print(f"[AGENTES] Erro ao combinar rota: {e}")
-                        continue
+        # 3. USAR APENAS TRANSFERÊNCIAS REAIS - SEM AGENTES FICTÍCIOS
+        # Retornar apenas as transferências reais encontradas na base
+        for transferencia in transferencias_encontradas:
+            try:
+                rota = {
+                    'fornecedor_transferencia': transferencia['fornecedor'],
+                    'transferencia': {
+                        'base_origem': base_origem,
+                        'base_destino': base_destino,
+                        'custo': float(transferencia['custo']),
+                        'pedagio': float(transferencia['pedagio']),
+                        'gris': float(transferencia['gris'])
+                    },
+                    'total': float(transferencia['custo'] + transferencia['pedagio'] + transferencia['gris']),
+                    'prazo_total': int(transferencia['prazo']),
+                    'peso_real': float(peso_real),
+                    'peso_cubado': float(peso_cubado),
+                    'maior_peso': float(maior_peso),
+                    'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real',
+                    'base_origem': base_origem,
+                    'base_destino_transferencia': base_destino,
+                    'detalhamento_custos': {
+                        'transferencia': float(transferencia['custo']),
+                        'pedagio': float(transferencia['pedagio']),
+                        'gris_total': float(transferencia['gris'])
+                    }
+                }
+                
+                rotas_encontradas.append(rota)
+                
+                print(f"[AGENTES] ✅ Transferência real: {transferencia['fornecedor']} - R$ {rota['total']:.2f}")
+                
+            except Exception as e:
+                print(f"[AGENTES] Erro ao processar transferência: {e}")
+                continue
         
         # Ordenar por custo total
         rotas_encontradas = sorted(rotas_encontradas, key=lambda x: x.get('total', float('inf')))
