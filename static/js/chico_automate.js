@@ -727,8 +727,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Botões de exportação
                     let exportBtns = `
                         <div id="dedicado-export-btns" style="margin-top:18px; text-align: center;">
-                            <button class="btn-primary" onclick="window.exportarPDF('Dedicado')" style="margin-right: 10px;">Baixar PDF</button>
-                            <button class="btn-primary" onclick="window.exportarExcel('Dedicado')">Exportar Excel</button>
+                            <button class="btn-primary" onclick="window.exportarPDF('Dedicado')" style="margin-right: 10px;">
+                                <i class="fa-solid fa-file-pdf"></i> Baixar PDF
+                            </button>
+                            <button class="btn-primary" onclick="window.exportarExcel('Dedicado')">
+                                <i class="fa-solid fa-file-excel"></i> Exportar Excel
+                            </button>
                         </div>
                     `;
 
@@ -942,9 +946,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 const resultadosDiv = document.getElementById(ids.aereo.resultados);
                 if (resultadosDiv) {
                     let exportBtns = `
-                        <div id="aereo-export-btns" style="margin-top:18px;">
-                            <button class="btn-primary" onclick="window.exportarPDF('Aéreo')" style="margin-right: 10px;">Baixar PDF</button>
-                            <button class="btn-primary" onclick="window.exportarExcel('Aéreo')">Exportar Excel</button>
+                        <div id="aereo-export-btns" style="margin-top:18px; text-align: center;">
+                            <button class="btn-primary" onclick="window.exportarPDF('Aéreo')" style="margin-right: 10px;">
+                                <i class="fa-solid fa-file-pdf"></i> Baixar PDF
+                            </button>
+                            <button class="btn-primary" onclick="window.exportarExcel('Aéreo')">
+                                <i class="fa-solid fa-file-excel"></i> Exportar Excel
+                            </button>
                         </div>
                     `;
                     resultadosDiv.innerHTML = `
@@ -991,8 +999,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.warn('[DEBUG] Div de resultados aéreo não encontrada');
                 }
                 
-                // Armazenar resultado para exportação
-                window.ultimoResultadoAereo = data.analise;
+                // Armazenar resultado para exportação - dados completos
+                window.ultimoResultadoAereo = data;
             })
             .catch(error => {
                 showLoading(ids.aereo.loading, false);
@@ -1091,15 +1099,37 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Atualiza resultados
                 const resultadosDiv = document.getElementById(ids.fracionado.resultados);
                 if (resultadosDiv) {
-                    resultadosDiv.innerHTML = data.html || '<div class="success">Cálculo realizado com sucesso!</div>';
+                    // Adicionar botões de exportação ao HTML do resultado
+                    let exportBtns = `
+                        <div id="fracionado-export-btns" style="margin-top:18px; text-align: center;">
+                            <button class="btn-primary" onclick="window.exportarPDF('Fracionado')" style="margin-right: 10px;">
+                                <i class="fa-solid fa-file-pdf"></i> Baixar PDF
+                            </button>
+                            <button class="btn-primary" onclick="window.exportarExcel('Fracionado')">
+                                <i class="fa-solid fa-file-excel"></i> Exportar Excel
+                            </button>
+                        </div>
+                    `;
+                    
+                    let htmlContent = data.html || '<div class="success">Cálculo realizado com sucesso!</div>';
+                    
+                    // Adicionar os botões ao final do HTML, antes do fechamento da última div
+                    if (htmlContent.includes('</div>')) {
+                        const lastDivIndex = htmlContent.lastIndexOf('</div>');
+                        htmlContent = htmlContent.substring(0, lastDivIndex) + exportBtns + htmlContent.substring(lastDivIndex);
+                    } else {
+                        htmlContent += exportBtns;
+                    }
+                    
+                    resultadosDiv.innerHTML = htmlContent;
                     resultadosDiv.style.display = 'block';
                     resultadosDiv.scrollIntoView({behavior: 'smooth', block: 'center'});
                 } else {
                     console.warn('[DEBUG] Div de resultados fracionado não encontrada');
                 }
                 
-                // Armazenar resultado para exportação
-                window.ultimoResultadoFracionado = data.analise;
+                // Armazenar resultado para exportação - dados completos como dedicado
+                window.ultimoResultadoFracionado = data;
                 // Mapa removido da aba fracionado
             })
             .catch(error => {
@@ -1232,42 +1262,64 @@ document.addEventListener('DOMContentLoaded', function() {
         let dados = null;
         if (tipo === 'Fracionado' && window.ultimoResultadoFracionado) {
             dados = window.ultimoResultadoFracionado;
+            console.log(`[DEBUG] Dados fracionado para exportação:`, dados);
         } else if (tipo === 'Dedicado' && window.ultimoResultadoDedicado) {
             dados = window.ultimoResultadoDedicado;
+            console.log(`[DEBUG] Dados dedicado para exportação:`, dados);
         } else if (tipo === 'Aereo' && window.ultimoResultadoAereo) {
             dados = window.ultimoResultadoAereo;
+            console.log(`[DEBUG] Dados aéreo para exportação:`, dados);
         }
         
         if (!dados) {
+            console.error(`[DEBUG] Nenhum resultado ${tipo} disponível. Variáveis globais:`, {
+                fracionado: !!window.ultimoResultadoFracionado,
+                dedicado: !!window.ultimoResultadoDedicado,
+                aereo: !!window.ultimoResultadoAereo
+            });
             alert('Nenhum resultado disponível para exportação. Faça um cálculo primeiro.');
             return;
         }
         
+        const payload = { 
+            tipo, 
+            analise: dados.analise || dados, // Para compatibilidade com diferentes estruturas
+            dados: dados 
+        };
+        
+        console.log(`[DEBUG] Payload sendo enviado para ${endpoint}:`, payload);
+        
         fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tipo, analise: dados, dados })
+            body: JSON.stringify(payload)
         })
         .then(response => {
+            console.log(`[DEBUG] Response status: ${response.status}`);
             if (!response.ok) {
-                throw new Error(`Erro HTTP: ${response.status}`);
+                return response.text().then(text => {
+                    throw new Error(`Erro HTTP ${response.status}: ${text}`);
+                });
             }
             return response.blob();
         })
         .then(blob => {
+            console.log(`[DEBUG] Blob recebido, tamanho: ${blob.size} bytes`);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             const dataStr = new Date().toISOString().replace(/[:.]/g, '-');
-            a.download = `${nomeBase}_${tipo.toLowerCase()}_${dataStr}.${endpoint.includes('pdf') ? 'pdf' : 'xlsx'}`;
+            const extension = endpoint.includes('pdf') ? 'pdf' : 'xlsx';
+            a.download = `${nomeBase}_${tipo.toLowerCase()}_${dataStr}.${extension}`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-            console.log(`[DEBUG] Arquivo ${tipo} exportado com sucesso`);
+            console.log(`[DEBUG] Arquivo ${tipo} exportado com sucesso: ${a.download}`);
         })
         .catch(error => {
             console.error(`[DEBUG] Erro ao exportar arquivo: ${error.message}`);
+            console.error(`[DEBUG] Stack trace:`, error);
             alert('Erro ao exportar arquivo: ' + error.message);
         });
     }
