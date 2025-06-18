@@ -18,6 +18,11 @@ import tempfile
 # Carregar variáveis de ambiente
 load_dotenv()
 
+# Cache global para agentes
+_BASE_AGENTES_CACHE = None
+_ULTIMO_CARREGAMENTO = 0
+_CACHE_VALIDADE = 300  # 5 minutos
+
 # SISTEMA DE USUÁRIOS E CONTROLE DE ACESSO
 USUARIOS_SISTEMA = {
     'comercial.ptx': {
@@ -159,8 +164,6 @@ def normalizar_cidade(cidade):
         "SAOPAULO": "SAO PAULO",
         "SAÕPAULO": "SAO PAULO",
         "RIO DE JANEIRO": "RIO DE JANEIRO",
-        "RIO DE JANEIRO RJ": "RIO DE JANEIRO",
-        "RIO DE JANEIRO - RJ": "RIO DE JANEIRO",
         "RJ": "RIO DE JANEIRO",
         "RIODEJANEIRO": "RIO DE JANEIRO",
         "RIO": "RIO DE JANEIRO",
@@ -176,11 +179,7 @@ def normalizar_cidade(cidade):
         "BSB": "BRASILIA",
         "ARACAJU": "ARACAJU",
         "RIBEIRAO PRETO": "RIBEIRAO PRETO",
-        "RIBEIRAO PRETO SP": "RIBEIRAO PRETO",
-        "RIBEIRAO PRETO - SP": "RIBEIRAO PRETO",
         "RIBEIRÃO PRETO": "RIBEIRAO PRETO",
-        "RIBEIRÃO PRETO SP": "RIBEIRAO PRETO",
-        "RIBEIRÃO PRETO - SP": "RIBEIRAO PRETO",
         "RIBEIRÃOPRETO": "RIBEIRAO PRETO",
         "RIBEIRAOPRETO": "RIBEIRAO PRETO",
         "SALVADOR": "SALVADOR",
@@ -1261,7 +1260,9 @@ def calcular_frete_fracionado():
         if len(HISTORICO_PESQUISAS) > 50:
             HISTORICO_PESQUISAS.pop(0)
 
-        return jsonify(resultado_final)
+        # Sanitizar dados antes de converter para JSON
+        resultado_sanitizado = sanitizar_json(resultado_final)
+        return jsonify(resultado_sanitizado)
 
     except Exception as e:
         log_acesso(usuario, 'ERRO_CALCULO_FRACIONADO', ip_cliente, f"Erro: {str(e)}")
@@ -1269,6 +1270,31 @@ def calcular_frete_fracionado():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Erro ao calcular frete fracionado: {str(e)}"})
+
+def sanitizar_json(obj):
+    """
+    Sanitiza objeto Python para ser convertido em JSON válido.
+    Converte NaN, inf, -inf para valores válidos.
+    """
+    import math
+    import pandas as pd
+    
+    if isinstance(obj, dict):
+        return {key: sanitizar_json(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitizar_json(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(sanitizar_json(item) for item in obj)
+    elif pd.isna(obj) or (isinstance(obj, float) and math.isnan(obj)):
+        return None  # ou 0, dependendo do contexto
+    elif isinstance(obj, float) and math.isinf(obj):
+        return None  # ou um valor muito grande/pequeno
+    elif hasattr(obj, 'item'):  # numpy types
+        return sanitizar_json(obj.item())
+    elif hasattr(obj, 'to_dict'):  # pandas objects
+        return sanitizar_json(obj.to_dict())
+    else:
+        return obj
 
 @app.route("/aereo")
 def aereo():
@@ -2638,381 +2664,11 @@ def calcular_eficiencia_fornecedor(fornecedor):
     
     return 0.80  # Eficiência padrão para fornecedores desconhecidos
 
-def buscar_braspress_real(origem, uf_origem, destino, uf_destino, peso):
-    """
-    Busca dados reais do Braspress (simulação baseada em padrões reais)
-    """
-    try:
-        print(f"[BRASPRESS] Consultando API/Site para {origem}/{uf_origem} -> {destino}/{uf_destino}")
-        
-        # Simular consulta real baseada em padrões conhecidos do Braspress
-        peso = float(peso)
-        
-        # Cálculo baseado em tarifas reais do Braspress
-        if peso <= 10:
-            valor_base = 35.80
-        elif peso <= 30:
-            valor_base = 52.40
-        elif peso <= 100:
-            valor_base = 98.60
-        else:
-            valor_base = peso * 1.45
-        
-        # Ajustes regionais baseados na distância estimada
-        fator_regional = calcular_fator_regional_braspress(uf_origem, uf_destino)
-        valor_base *= fator_regional
-        
-        cotacoes = []
-        
-        # Diferentes modalidades do Braspress
-        modalidades = [
-            {'tipo': 'NORMAL', 'mult': 1.0, 'prazo': 3, 'desc': 'Serviço padrão Braspress'},
-            {'tipo': 'ECONOMICO', 'mult': 0.88, 'prazo': 5, 'desc': 'Serviço econômico Braspress'},
-            {'tipo': 'EXPRESSO', 'mult': 1.25, 'prazo': 1, 'desc': 'Serviço expresso Braspress'}
-        ]
-        
-        for modalidade in modalidades:
-            custo_final = valor_base * modalidade['mult']
-            pedagio = custo_final * 0.055  # 5.5% pedagio padrão Braspress
-            
-            cotacao = {
-                'modalidade': 'Braspress',
-                'agente': 'WEB_BRASPRESS',
-                'origem': f"{origem.upper()} - {uf_origem}",
-                'destino': f"{destino.upper()} - {uf_destino}",
-                'tipo_servico': modalidade['tipo'],
-                'descricao_servico': modalidade['desc'],
-                'faixa_peso': f"Peso: {peso} kg",
-                'peso': peso,
-                'valor_base': custo_final,
-                'pedagio': pedagio,
-                'gris': 0,  # GRIS calculado separadamente
-                'custo_total': custo_final + pedagio,
-                'prazo': modalidade['prazo'],
-                'dados_reais': True,
-                'fonte': 'Site Braspress (API simulada)',
-                'url_fonte': 'https://www.braspress.com.br',
-                'eficiencia_fornecedor': 0.90,
-                'ranking_score': custo_final + pedagio
-            }
-            cotacoes.append(cotacao)
-        
-        return cotacoes
-        
-    except Exception as e:
-        print(f"[BRASPRESS] Erro ao consultar: {e}")
-        return None
+# Função removida - apenas dados reais da base de dados são utilizados
 
-def buscar_jamef_real(origem, uf_origem, destino, uf_destino, peso):
-    """
-    Busca dados reais do Jamef (simulação baseada em padrões reais)
-    """
-    try:
-        print(f"[JAMEF] Consultando API/Site para {origem}/{uf_origem} -> {destino}/{uf_destino}")
-        
-        peso = float(peso)
-        
-        # Cálculo baseado em tarifas reais do Jamef
-        if peso <= 10:
-            valor_base = 38.90
-        elif peso <= 30:
-            valor_base = 56.20
-        elif peso <= 100:
-            valor_base = 105.80
-        else:
-            valor_base = peso * 1.52
-        
-        # Ajustes regionais
-        fator_regional = calcular_fator_regional_jamef(uf_origem, uf_destino)
-        valor_base *= fator_regional
-        
-        cotacoes = []
-        
-        modalidades = [
-            {'tipo': 'NORMAL', 'mult': 1.0, 'prazo': 3, 'desc': 'Serviço padrão Jamef'},
-            {'tipo': 'ECONOMICO', 'mult': 0.91, 'prazo': 5, 'desc': 'Serviço econômico Jamef'},
-            {'tipo': 'EXPRESSO', 'mult': 1.28, 'prazo': 2, 'desc': 'Serviço expresso Jamef'}
-        ]
-        
-        for modalidade in modalidades:
-            custo_final = valor_base * modalidade['mult']
-            pedagio = custo_final * 0.063  # 6.3% pedagio padrão Jamef
-            
-            cotacao = {
-                'modalidade': 'Jamef',
-                'agente': 'WEB_JAMEF',
-                'origem': f"{origem.upper()} - {uf_origem}",
-                'destino': f"{destino.upper()} - {uf_destino}",
-                'tipo_servico': modalidade['tipo'],
-                'descricao_servico': modalidade['desc'],
-                'faixa_peso': f"Peso: {peso} kg",
-                'peso': peso,
-                'valor_base': custo_final,
-                'pedagio': pedagio,
-                'gris': 0,
-                'custo_total': custo_final + pedagio,
-                'prazo': modalidade['prazo'],
-                'dados_reais': True,
-                'fonte': 'Site Jamef (API simulada)',
-                'url_fonte': 'https://www.jamef.com.br',
-                'eficiencia_fornecedor': 0.88,
-                'ranking_score': custo_final + pedagio
-            }
-            cotacoes.append(cotacao)
-        
-        return cotacoes
-        
-    except Exception as e:
-        print(f"[JAMEF] Erro ao consultar: {e}")
-        return None
+# Função removida - apenas dados reais da base de dados são utilizados
 
-def buscar_tnt_real(origem, uf_origem, destino, uf_destino, peso):
-    """
-    Busca dados reais do TNT (simulação baseada em padrões reais)
-    """
-    try:
-        print(f"[TNT] Consultando API/Site para {origem}/{uf_origem} -> {destino}/{uf_destino}")
-        
-        peso = float(peso)
-        
-        # TNT tem valores mais altos mas é mais rápido
-        if peso <= 10:
-            valor_base = 42.30
-        elif peso <= 30:
-            valor_base = 65.80
-        elif peso <= 100:
-            valor_base = 125.40
-        else:
-            valor_base = peso * 1.68
-        
-        fator_regional = calcular_fator_regional_tnt(uf_origem, uf_destino)
-        valor_base *= fator_regional
-        
-        cotacoes = []
-        
-        modalidades = [
-            {'tipo': 'NORMAL', 'mult': 1.0, 'prazo': 2, 'desc': 'Serviço padrão TNT'},
-            {'tipo': 'ECONOMICO', 'mult': 0.95, 'prazo': 4, 'desc': 'Serviço econômico TNT'},
-            {'tipo': 'EXPRESSO', 'mult': 1.35, 'prazo': 1, 'desc': 'Serviço expresso TNT'}
-        ]
-        
-        for modalidade in modalidades:
-            custo_final = valor_base * modalidade['mult']
-            pedagio = custo_final * 0.048  # 4.8% pedagio TNT (menor por ser mais caro)
-            
-            cotacao = {
-                'modalidade': 'TNT',
-                'agente': 'WEB_TNT',
-                'origem': f"{origem.upper()} - {uf_origem}",
-                'destino': f"{destino.upper()} - {uf_destino}",
-                'tipo_servico': modalidade['tipo'],
-                'descricao_servico': modalidade['desc'],
-                'faixa_peso': f"Peso: {peso} kg",
-                'peso': peso,
-                'valor_base': custo_final,
-                'pedagio': pedagio,
-                'gris': 0,
-                'custo_total': custo_final + pedagio,
-                'prazo': modalidade['prazo'],
-                'dados_reais': True,
-                'fonte': 'Site TNT (API simulada)',
-                'url_fonte': 'https://www.tnt.com.br',
-                'eficiencia_fornecedor': 0.85,
-                'ranking_score': custo_final + pedagio
-            }
-            cotacoes.append(cotacao)
-        
-        return cotacoes
-        
-    except Exception as e:
-        print(f"[TNT] Erro ao consultar: {e}")
-        return None
-
-def buscar_sequoia_real(origem, uf_origem, destino, uf_destino, peso):
-    """
-    Busca dados reais do Sequoia (simulação baseada em padrões reais)
-    """
-    try:
-        print(f"[SEQUOIA] Consultando API/Site para {origem}/{uf_origem} -> {destino}/{uf_destino}")
-        
-        peso = float(peso)
-        
-        # Sequoia tem preços competitivos
-        if peso <= 10:
-            valor_base = 36.50
-        elif peso <= 30:
-            valor_base = 53.80
-        elif peso <= 100:
-            valor_base = 102.30
-        else:
-            valor_base = peso * 1.48
-        
-        fator_regional = calcular_fator_regional_sequoia(uf_origem, uf_destino)
-        valor_base *= fator_regional
-        
-        cotacoes = []
-        
-        modalidades = [
-            {'tipo': 'NORMAL', 'mult': 1.0, 'prazo': 3, 'desc': 'Serviço padrão Sequoia'},
-            {'tipo': 'ECONOMICO', 'mult': 0.89, 'prazo': 5, 'desc': 'Serviço econômico Sequoia'},
-            {'tipo': 'EXPRESSO', 'mult': 1.25, 'prazo': 2, 'desc': 'Serviço expresso Sequoia'}
-        ]
-        
-        for modalidade in modalidades:
-            custo_final = valor_base * modalidade['mult']
-            pedagio = custo_final * 0.058  # 5.8% pedagio Sequoia
-            
-            cotacao = {
-                'modalidade': 'Sequoia',
-                'agente': 'WEB_SEQUOIA',
-                'origem': f"{origem.upper()} - {uf_origem}",
-                'destino': f"{destino.upper()} - {uf_destino}",
-                'tipo_servico': modalidade['tipo'],
-                'descricao_servico': modalidade['desc'],
-                'faixa_peso': f"Peso: {peso} kg",
-                'peso': peso,
-                'valor_base': custo_final,
-                'pedagio': pedagio,
-                'gris': 0,
-                'custo_total': custo_final + pedagio,
-                'prazo': modalidade['prazo'],
-                'dados_reais': True,
-                'fonte': 'Site Sequoia (API simulada)',
-                'url_fonte': 'https://www.sequoialog.com.br',
-                'eficiencia_fornecedor': 0.92,
-                'ranking_score': custo_final + pedagio
-            }
-            cotacoes.append(cotacao)
-        
-        return cotacoes
-        
-    except Exception as e:
-        print(f"[SEQUOIA] Erro ao consultar: {e}")
-        return None
-
-def buscar_rodonaves_real(origem, uf_origem, destino, uf_destino, peso):
-    """
-    Busca dados reais do Rodonaves (simulação baseada em padrões reais)
-    """
-    try:
-        print(f"[RODONAVES] Consultando API/Site para {origem}/{uf_origem} -> {destino}/{uf_destino}")
-        
-        peso = float(peso)
-        
-        # Rodonaves tem preços competitivos
-        if peso <= 10:
-            valor_base = 37.50
-        elif peso <= 30:
-            valor_base = 55.00
-        elif peso <= 100:
-            valor_base = 100.00
-        else:
-            valor_base = peso * 1.50
-        
-        fator_regional = calcular_fator_regional_rodonaves(uf_origem, uf_destino)
-        valor_base *= fator_regional
-        
-        cotacoes = []
-        
-        modalidades = [
-            {'tipo': 'NORMAL', 'mult': 1.0, 'prazo': 3, 'desc': 'Serviço padrão Rodonaves'},
-            {'tipo': 'ECONOMICO', 'mult': 0.88, 'prazo': 5, 'desc': 'Serviço econômico Rodonaves'},
-            {'tipo': 'EXPRESSO', 'mult': 1.20, 'prazo': 2, 'desc': 'Serviço expresso Rodonaves'}
-        ]
-        
-        for modalidade in modalidades:
-            custo_final = valor_base * modalidade['mult']
-            pedagio = custo_final * 0.055  # 5.5% pedagio Rodonaves
-            
-            cotacao = {
-                'modalidade': 'Rodonaves',
-                'agente': 'WEB_RODONAVES',
-                'origem': f"{origem.upper()} - {uf_origem}",
-                'destino': f"{destino.upper()} - {uf_destino}",
-                'tipo_servico': modalidade['tipo'],
-                'descricao_servico': modalidade['desc'],
-                'faixa_peso': f"Peso: {peso} kg",
-                'peso': peso,
-                'valor_base': custo_final,
-                'pedagio': pedagio,
-                'gris': 0,
-                'custo_total': custo_final + pedagio,
-                'prazo': modalidade['prazo'],
-                'dados_reais': True,
-                'fonte': 'Site Rodonaves (API simulada)',
-                'url_fonte': 'https://www.rodonaves.com.br',
-                'eficiencia_fornecedor': 0.90,
-                'ranking_score': custo_final + pedagio
-            }
-            cotacoes.append(cotacao)
-        
-        return cotacoes
-        
-    except Exception as e:
-        print(f"[RODONAVES] Erro ao consultar: {e}")
-        return None
-
-def buscar_total_express_real(origem, uf_origem, destino, uf_destino, peso):
-    """
-    Busca dados reais do Total Express (simulação baseada em padrões reais)
-    """
-    try:
-        print(f"[TOTAL EXPRESS] Consultando API/Site para {origem}/{uf_origem} -> {destino}/{uf_destino}")
-        
-        peso = float(peso)
-        
-        # Total Express tem preços competitivos
-        if peso <= 10:
-            valor_base = 39.00
-        elif peso <= 30:
-            valor_base = 57.00
-        elif peso <= 100:
-            valor_base = 107.00
-        else:
-            valor_base = peso * 1.55
-        
-        fator_regional = calcular_fator_regional_total_express(uf_origem, uf_destino)
-        valor_base *= fator_regional
-        
-        cotacoes = []
-        
-        modalidades = [
-            {'tipo': 'NORMAL', 'mult': 1.0, 'prazo': 3, 'desc': 'Serviço padrão Total Express'},
-            {'tipo': 'ECONOMICO', 'mult': 0.87, 'prazo': 5, 'desc': 'Serviço econômico Total Express'},
-            {'tipo': 'EXPRESSO', 'mult': 1.22, 'prazo': 2, 'desc': 'Serviço expresso Total Express'}
-        ]
-        
-        for modalidade in modalidades:
-            custo_final = valor_base * modalidade['mult']
-            pedagio = custo_final * 0.050  # 5.0% pedagio Total Express
-            
-            cotacao = {
-                'modalidade': 'Total Express',
-                'agente': 'WEB_TOTAL_EXPRESS',
-                'origem': f"{origem.upper()} - {uf_origem}",
-                'destino': f"{destino.upper()} - {uf_destino}",
-                'tipo_servico': modalidade['tipo'],
-                'descricao_servico': modalidade['desc'],
-                'faixa_peso': f"Peso: {peso} kg",
-                'peso': peso,
-                'valor_base': custo_final,
-                'pedagio': pedagio,
-                'gris': 0,
-                'custo_total': custo_final + pedagio,
-                'prazo': modalidade['prazo'],
-                'dados_reais': True,
-                'fonte': 'Site Total Express (API simulada)',
-                'url_fonte': 'https://www.totalexpress.com.br',
-                'eficiencia_fornecedor': 0.85,
-                'ranking_score': custo_final + pedagio
-            }
-            cotacoes.append(cotacao)
-        
-        return cotacoes
-        
-    except Exception as e:
-        print(f"[TOTAL EXPRESS] Erro ao consultar: {e}")
-        return None
+# Funções removidas - apenas dados reais da base de dados são utilizados
 
 def buscar_mercurio_real(origem, uf_origem, destino, uf_destino, peso):
     """
@@ -4155,378 +3811,308 @@ def carregar_base_agentes():
 # Cache para mapeamento de cidades para bases
 MAPA_BASES_CACHE = {
     'SAO PAULO': 'SAO',
-    'ARACAJU': 'AJU',
+    'ARACAJU': 'AJU', 
     'CAMPINAS': 'CPQ',
     'BRASILIA': 'BSB',
     'BELO HORIZONTE': 'BHZ',
     'RIO DE JANEIRO': 'RIO',
     'CURITIBA': 'CWB',
-    'PORTO ALEGRE': 'POA',
-    'RIBEIRAO PRETO': 'RAO',
-    'RIBEIRAO': 'RAO',
-    'RIBEIRÃO PRETO': 'RAO',
-    'RIBEIRÃO': 'RAO'
+    'PORTO ALEGRE': 'POA'
 }
 
-def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, valor_nf=None, cubagem=None):
-    debug_mode = os.getenv('DEBUG_AGENTES', 'false').lower() == 'true' or (origem == 'RIBEIRÃO PRETO' and destino == 'RIO DE JANEIRO')
+def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, valor_nf=None, cubagem=None, base_filtro=None):
+    """
+    Calcula frete com sistema de agentes: Coleta -> Transferência -> Entrega
+    Estrutura CORRETA: Agente Coleta (Cliente → Base) + Transferência (Base → Base) + Agente Entrega (Base → Cliente)
+    Exemplo: Agente busca no cliente e leva até RAO (R$ 124,50) + RAO → RIO direto (R$ 345,77) + Agente entrega da base RIO até cliente final (R$ 60,00)
+    """
+    print(f"[AGENTES] Calculando rotas com agentes: {origem}/{uf_origem} → {destino}/{uf_destino}")
+    print(f"[AGENTES] Peso: {peso}kg, Base filtro: {base_filtro}")
     
-    # Log de entrada
-    if debug_mode:
-        print("\n" + "="*80)
-        print(f"[AGENTES] Iniciando cálculo de frete com agentes")
-        print(f"[AGENTES] Origem: {origem} ({uf_origem})")
-        print(f"[AGENTES] Destino: {destino} ({uf_destino})")
-        print(f"[AGENTES] Peso: {peso}kg, Cubagem: {cubagem}")
-        print("="*80 + "\n")
-    
-    # Usar cache para evitar leitura repetida do arquivo
-    base_agentes = carregar_base_agentes()
-    if not base_agentes:
-        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
-            print("[AGENTES] Erro ao carregar base de agentes")
-        return None
+    try:
+        # Carregar base unificada para usar dados reais de transferência
+        df_base = carregar_base_unificada()
+        if df_base is None:
+            print("[AGENTES] Erro: Não foi possível carregar a base de dados")
+            return None
+
+        # Carregar base de agentes reais
+        dados_agentes = carregar_base_agentes()
+        if dados_agentes is None:
+            print("[AGENTES] Erro: Não foi possível carregar a base de agentes")
+            return None
         
-    df_agentes, df_transferencias = base_agentes
-    
-    # Log principal da operação (apenas em modo debug)
-    if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
-        print(f"\n[AGENTES] Iniciando cálculo: {origem}/{uf_origem} -> {destino}/{uf_destino} | Peso: {peso}kg")
-    
-    # Normalizar cidades para comparação (uma única vez)
-    origem_norm = normalizar_cidade(origem)
-    destino_norm = normalizar_cidade(destino)
-    
-    # Calcular peso cubado (uma única vez)
-    peso_real = float(peso)
-    peso_cubado = float(cubagem) * 166 if cubagem and cubagem > 0 else peso_real * 0.17
-    maior_peso = max(peso_real, peso_cubado)
-    
-    # 1. Encontrar agentes que coletam na origem
-    base_origem_busca = MAPA_BASES_CACHE.get(origem_norm)
-    
-    if debug_mode:
-        print(f"[AGENTES] Origem normalizada: {origem_norm}")
-        print(f"[AGENTES] Base de origem encontrada no cache: {base_origem_busca}")
-        print(f"[AGENTES] Todas as chaves do cache: {list(MAPA_BASES_CACHE.keys())}")
-    
-    if debug_mode:
-        print(f"[DEBUG] Origem normalizada: {origem_norm}")
-        print(f"[DEBUG] Base de origem encontrada no cache: {base_origem_busca}")
-    
-    # Pré-filtrar agentes baseado no tipo de busca
-    if origem_norm == 'SAO PAULO':
-        # Para São Paulo, usar agentes FILIAL que atendem cidades de SP
-        agentes_coleta = df_agentes[
-            (df_agentes['Base Origem'] == 'FILIAL') & 
-            (df_agentes['Origem'].str.contains('São|Sao', case=False, na=False))
-        ].copy()
-        base_origem_busca = 'SAO'  # Forçar base SAO para São Paulo
-        if debug_mode:
-            print(f"[DEBUG] Buscando agentes FILIAL para São Paulo. Encontrados: {len(agentes_coleta)}")
-    elif base_origem_busca:
-        agentes_coleta = df_agentes[df_agentes['Base Origem'] == base_origem_busca].copy()
-        if debug_mode:
-            print(f"[DEBUG] Buscando agentes na base {base_origem_busca}. Encontrados: {len(agentes_coleta)}")
-    else:
-        # Usar índice para busca mais rápida
-        if debug_mode:
-            print(f"[DEBUG] Buscando agentes por nome normalizado: {origem_norm}")
-            print(f"[DEBUG] Valores únicos em Origem_Normalizada: {df_agentes['Origem_Normalizada'].dropna().unique()[:10]}")
-            
-        agentes_coleta = df_agentes[
-            df_agentes['Origem_Normalizada'].str.contains(origem_norm, case=False, na=False)
-        ].copy()
+        # Desempacotar os dados retornados pela função
+        df_agentes, df_transferencias = dados_agentes
         
-        if debug_mode:
-            print(f"[DEBUG] Agentes encontrados por nome normalizado: {len(agentes_coleta)}")
-            if not agentes_coleta.empty:
-                print(f"[DEBUG] Exemplo de agentes encontrados: {agentes_coleta[['Origem', 'Origem_Normalizada', 'Base Origem']].head().to_dict('records')}")
-    
-    # Se não houver agentes, retorna vazio
-    if agentes_coleta.empty:
-        if debug_mode:
-            print("\n[AGENTES] Nenhum agente de coleta encontrado")
-            print(f"[AGENTES] Origem: {origem} ({uf_origem})")
-            print(f"[AGENTES] Origem normalizada: {origem_norm}")
-            print(f"[AGENTES] Base de busca: {base_origem_busca}")
-            print("[AGENTES] Amostra de origens disponíveis:", df_agentes['Origem'].head(10).tolist())
-            print("[AGENTES] Amostra de origens normalizadas disponíveis:", df_agentes['Origem_Normalizada'].drop_duplicates().head(10).tolist())
-            print("[AGENTES] Bases disponíveis:", df_agentes['Base Origem'].drop_duplicates().tolist())
-        debug_msg = f"[AGENTES] Nenhum agente encontrado para coleta em {origem} ({uf_origem})\n"
-        debug_msg += f"[AGENTES] Origem normalizada: {origem_norm}\n"
-        debug_msg += f"[AGENTES] Bases disponíveis: {df_agentes['Base Origem'].unique()}\n"
-        debug_msg += f"[AGENTES] Valores únicos em Origem_Normalizada: {df_agentes['Origem_Normalizada'].dropna().unique()[:20]}"
+        # Calcular peso cubado
+        peso_real = float(peso)
+        peso_cubado = float(cubagem) * 166 if cubagem and cubagem > 0 else peso_real * 0.17
+        maior_peso = max(peso_real, peso_cubado)
         
-        if debug_mode:
-            print(debug_msg)
-            
-        return {
-            'rotas': [],
-            'total_opcoes': 0,
-            'origem': f"{origem}/{uf_origem}",
-            'destino': f"{destino}/{uf_destino}",
-            'peso_info': {
-                'peso_real': peso_real,
-                'peso_cubado': peso_cubado,
-                'maior_peso': maior_peso,
-                'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real'
-            },
-            'debug': debug_msg if debug_mode else None
+        # Definir bases disponíveis (conforme especificado pelo usuário)
+        bases_disponiveis = {
+            'FILIAL': 'São Paulo',        # Base real na planilha
+            'MII': 'Minas Gerais',       # Base real na planilha  
+            'SJK': 'São José dos Campos', # Base real na planilha
+            'RIO': 'Rio de Janeiro',      # Base real na planilha
+            'POA': 'Porto Alegre',       # Para cidades do RS
+            'CWB': 'Curitiba',           # Para cidades do PR
+            'BHZ': 'Belo Horizonte',     # Para cidades de MG
+            'BSB': 'Brasília',           # Para cidades do DF/GO
+            'SSA': 'Salvador',           # Para cidades da BA
+            'FOR': 'Fortaleza',          # Para cidades do CE
+            'REC': 'Recife'              # Para cidades de PE
         }
-    
-    if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
-        print(f"[AGENTES] Encontrados {len(agentes_coleta)} agentes de coleta em {origem}/{uf_origem}")
-    
-    # 2. Processar cada agente de coleta
-    rotas_completas = []
-    
-    # Pré-processar transferências para melhor performance
-    transferencias_por_base = df_transferencias.groupby('Base Origem')
-    
-    # Controle de bases já processadas para evitar duplicação
-    bases_processadas = set()
-    
-    # Contador de agentes processados para feedback
-    total_agentes = len(agentes_coleta)
-    debug_mode = os.getenv('DEBUG_AGENTES', 'false').lower() == 'true'
-    
-    if debug_mode:
-        print(f"[AGENTES] Processando {total_agentes} agentes...")
-    
-    # Pré-calcular valores que serão usados repetidamente
-    peso_maior_que_max = maior_peso  # Evitar acessar o dicionário várias vezes
-    
-    # Converter para lista de dicionários uma única vez para melhor performance
-    agentes_lista = agentes_coleta.to_dict('records')
-    
-    for idx, agente_coleta in enumerate(agentes_lista):
-        # Feedback de progresso a cada 10% dos agentes processados (apenas em modo debug)
-        if debug_mode and total_agentes > 10 and (idx + 1) % max(1, total_agentes // 10) == 0:
-            print(f"[AGENTES] Progresso: {idx+1}/{total_agentes} agentes processados")
-            
-        # Base onde o agente de coleta entrega
-        base_transferencia = agente_coleta.get('Base Origem')
-        fornecedor_coleta = agente_coleta.get('Fornecedor', 'Desconhecido')
         
-        # Para agentes FILIAL em São Paulo, usar transferências da base SAO
-        if base_transferencia == 'FILIAL' and origem_norm == 'SAO PAULO':
-            base_transferencia = 'SAO'
-            
-        # Pular se já processamos esta base
-        if base_transferencia in bases_processadas:
-            continue
-            
-        bases_processadas.add(base_transferencia)
+        # Determinar base de origem baseada na UF de origem ou filtro especificado
+        if base_filtro and base_filtro in bases_disponiveis:
+            base_origem = base_filtro
+        else:
+            # Mapear UF para base mais próxima usando códigos reais da planilha
+            if uf_origem == 'SP':
+                base_origem = 'FILIAL'  # São Paulo usa FILIAL na planilha
+            else:
+                mapa_uf_base = {
+                    'RJ': 'RIO',
+                    'MG': 'MII',     # Minas Gerais usa MII na planilha
+                    'RS': 'POA',
+                    'PR': 'CWB',
+                    'DF': 'BSB',
+                    'GO': 'BSB',
+                    'BA': 'SSA',
+                    'CE': 'FOR',
+                    'PE': 'REC'
+                }
+                base_origem = mapa_uf_base.get(uf_origem, 'FILIAL')  # Default para FILIAL
         
-        # Obter transferências para esta base (usando o grupo pré-calculado)
-        if base_transferencia not in transferencias_por_base.groups:
-            if debug_mode:
-                print(f"[AGENTES] Nenhuma transferência encontrada para a base {base_transferencia}")
-            continue
-            
-        transferencias_base = transferencias_por_base.get_group(base_transferencia)
+        # Determinar base de destino baseada na UF de destino usando códigos reais
+        mapa_uf_base = {
+            'SP': 'FILIAL',  # São Paulo usa FILIAL na planilha
+            'RJ': 'RIO',
+            'MG': 'MII',     # Minas Gerais usa MII na planilha
+            'RS': 'POA',
+            'PR': 'CWB',
+            'DF': 'BSB',
+            'GO': 'BSB',
+            'BA': 'SSA',
+            'CE': 'FOR',
+            'PE': 'REC'
+        }
+        base_destino = mapa_uf_base.get(uf_destino, 'RIO')  # Default para RIO
         
-        # Verificar peso máximo do agente de coleta
-        peso_max_coleta = agente_coleta.get('PESO MÁXIMO TRANSPORTADO')
-        if peso_max_coleta and peso_maior_que_max > float(peso_max_coleta):
-            if debug_mode:
-                print(f"[AGENTES] ⚠️ {fornecedor_coleta}: Peso excede limite ({peso_maior_que_max:.1f}kg > {peso_max_coleta}kg)")
-            continue
+        print(f"[AGENTES] Base origem: {base_origem} ({bases_disponiveis.get(base_origem)})")
+        print(f"[AGENTES] Base destino: {base_destino} ({bases_disponiveis.get(base_destino)})")
         
-        # Calcular custo da coleta
-        valor_min_coleta = float(agente_coleta.get('VALOR MÍNIMO ATÉ 10', 0))
-        excedente_coleta = float(agente_coleta.get('EXCEDENTE', 0))
+        rotas_encontradas = []
         
-        # Custo coleta = valor mínimo + (peso × excedente)
-        custo_coleta = valor_min_coleta + (peso_maior_que_max * excedente_coleta)
+        # Se origem e destino são da mesma base, não usar agente (usar direto)
+        if base_origem == base_destino:
+            print(f"[AGENTES] Origem e destino na mesma base ({base_origem}), usando transferência direta")
+            return None
         
-        # 2. Encontrar transferências dessa base
-        transferencias_base = df_transferencias[
-            (df_transferencias['Base Origem'] == base_transferencia)
+        # 1. BUSCAR TRANSFERÊNCIA ENTRE BASES NA PLANILHA REAL
+        transferencias_encontradas = []
+        
+        # Usar dados de transferência do cache
+        transferencias_base = df_transferencias.copy()
+        
+        # Filtrar transferências diretas entre as bases na planilha
+        origem_base = bases_disponiveis.get(base_origem, '')
+        destino_base = bases_disponiveis.get(base_destino, '')
+        
+        # Normalizar nomes das bases para busca
+        origem_base_norm = normalizar_cidade(origem_base)
+        destino_base_norm = normalizar_cidade(destino_base)
+        
+        print(f"[AGENTES] Buscando transferência: {origem_base_norm} → {destino_base_norm}")
+        
+        # Normalizar colunas para busca
+        transferencias_base['Origem_Normalizada'] = transferencias_base['Origem'].apply(normalizar_cidade)
+        transferencias_base['Destino_Normalizado'] = transferencias_base['Destino'].apply(normalizar_cidade)
+        
+        # Buscar correspondência entre bases
+        matches_transferencia = transferencias_base[
+            (transferencias_base['Origem_Normalizada'] == origem_base_norm) &
+            (transferencias_base['Destino_Normalizado'] == destino_base_norm)
         ]
         
-        for _, transferencia in transferencias_base.iterrows():
-            fornecedor_transf = transferencia['Fornecedor']
-            base_destino_transf = transferencia['Base Destino']
-            destino_transf = transferencia['Destino']
-            
-            # Verificar se a transferência vai para o destino correto ou próximo
-            destino_transf_norm = normalizar_cidade(destino_transf)
-            
-            # Para transferências, verificar apenas se a base de destino tem agentes que atendem o destino final
-            # Não precisamos que o destino da transferência seja exatamente o destino final
-            # A verificação real será feita ao buscar agentes de entrega
-            
-            # Calcular custo da transferência (usar lógica existente)
-            cotacao_transf = processar_linha_transferencia(
-                transferencia, maior_peso, valor_nf
-            )
-            
-            if not cotacao_transf:
-                continue
-            
-            # 3. Encontrar agentes que entregam no destino final
-            # Pré-filtrar agentes pela base de destino
-            agentes_base_destino = df_agentes[df_agentes['Base Origem'] == base_destino_transf]
-            
-            # Primeiro, tentar encontrar por nome de cidade normalizado
-            if debug_mode:
-                print(f"\n[AGENTES] Buscando agentes de entrega para destino: {destino_norm}")
-                print(f"[AGENTES] Agentes na base de destino ({base_destino_transf}): {len(agentes_base_destino)}")
-                print(f"[AGENTES] Valores únicos em Origem_Normalizada:", agentes_base_destino['Origem_Normalizada'].drop_duplicates().tolist())
-            
-            agentes_entrega = agentes_base_destino[
-                agentes_base_destino['Origem_Normalizada'].str.contains(destino_norm, case=False, na=False)
+        if matches_transferencia.empty:
+            # Tentar busca mais flexível
+            matches_transferencia = transferencias_base[
+                (transferencias_base['Origem_Normalizada'].str.contains(origem_base_norm[:3], case=False, na=False)) &
+                (transferencias_base['Destino_Normalizado'].str.contains(destino_base_norm[:3], case=False, na=False))
             ]
-            
-            if debug_mode:
-                print(f"[AGENTES] Agentes encontrados por nome normalizado: {len(agentes_entrega)}")
-            
-            # Se não encontrar, buscar por UF
-            if agentes_entrega.empty:
-                if debug_mode:
-                    print(f"[AGENTES] Nenhum agente encontrado por nome, buscando por UF: {uf_destino}")
-                agentes_entrega = agentes_base_destino[
-                    agentes_base_destino['Origem'].str.contains(f"- {uf_destino}", case=False, na=False)
-                ]
-                if debug_mode:
-                    print(f"[AGENTES] Agentes encontrados por UF: {len(agentes_entrega)}")
-                
-                # Se ainda não encontrar, tentar uma busca mais ampla
-                if agentes_entrega.empty and len(destino_norm) > 3:
-                    if debug_mode:
-                        print(f"[AGENTES] Nenhum agente encontrado por UF, tentando busca parcial: {destino_norm[:4]}")
-                    # Buscar por partes do nome da cidade (apenas se o nome for longo o suficiente)
-                    agentes_entrega = agentes_base_destino[
-                        agentes_base_destino['Origem_Normalizada'].str.contains(destino_norm[:4], case=False, na=False)
-                    ]
-                    if debug_mode:
-                        print(f"[AGENTES] Agentes encontrados por busca parcial: {len(agentes_entrega)}")
-            
-            for _, agente_entrega in agentes_entrega.iterrows():
-                fornecedor_entrega = agente_entrega['Fornecedor']
-                
-                # Verificar peso máximo do agente de entrega
-                peso_max_entrega = agente_entrega.get('PESO MÁXIMO TRANSPORTADO', float('inf'))
-                if peso_max_entrega and maior_peso > peso_max_entrega:
-                    continue
-                
-                # Calcular custo da entrega
-                valor_min_entrega = agente_entrega.get('VALOR MÍNIMO ATÉ 10', 0)
-                excedente_entrega = agente_entrega.get('EXCEDENTE', 0)
-                custo_entrega = float(valor_min_entrega) + (maior_peso * float(excedente_entrega))
-                
-                # Calcular custo total da rota
-                custo_total = custo_coleta + cotacao_transf['total'] + custo_entrega
-                
-                # Calcular prazo total (soma dos prazos)
-                prazo_coleta = 1  # Assumir 1 dia para coleta
-                prazo_transf = cotacao_transf.get('prazo', 3)
-                prazo_entrega = 1  # Assumir 1 dia para entrega
-                prazo_total = prazo_coleta + prazo_transf + prazo_entrega
-                
-                rota_completa = {
-                    'opcao': len(rotas_completas) + 1,
-                    'agente_coleta': {
-                        'fornecedor': fornecedor_coleta,
-                        'origem': agente_coleta['Origem'],
-                        'base_destino': base_transferencia,
-                        'custo': custo_coleta,
-                        'valor_minimo': valor_min_coleta,
-                        'excedente': excedente_coleta,
-                        'peso_maximo': peso_max_coleta
-                    },
-                    'transferencia': {
-                        'fornecedor': fornecedor_transf,
-                        'base_origem': base_transferencia,
-                        'origem': transferencia['Origem'],
-                        'base_destino': base_destino_transf,
-                        'destino': destino_transf,
-                        'custo': cotacao_transf['total'],
-                        'frete': cotacao_transf['valor_base'],
-                        'pedagio': cotacao_transf['pedagio'],
-                        'gris': cotacao_transf['gris']
-                    },
-                    'agente_entrega': {
-                        'fornecedor': fornecedor_entrega,
-                        'base_origem': base_destino_transf,
-                        'destino': agente_entrega['Origem'],
-                        'custo': custo_entrega,
-                        'valor_minimo': valor_min_entrega,
-                        'excedente': excedente_entrega,
-                        'peso_maximo': peso_max_entrega
-                    },
-                    'total': custo_total,
-                    'prazo_total': prazo_total,
-                    'peso_real': peso_real,
-                    'peso_cubado': peso_cubado,
-                    'maior_peso': maior_peso,
-                    'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real',
-                    'resumo': f"{fornecedor_coleta} + {fornecedor_transf} + {fornecedor_entrega}"
-                }
-                
-                rotas_completas.append(rota_completa)
-    
-    # Otimização: Usar um dicionário ordenado para agrupar rotas
-    rotas_agrupadas = {}
-    
-    # Ordenar rotas por custo total
-    rotas_completas.sort(key=lambda x: x['total'])
-    
-    # Limitar o número de rotas a processar para melhor performance
-    max_rotas_processar = 1000  # Ajuste conforme necessário
-    rotas_para_processar = rotas_completas[:max_rotas_processar]
-    
-    # Agrupar rotas por resumo de forma mais eficiente
-    for rota in rotas_para_processar:
-        resumo = rota['resumo']
         
-        if resumo not in rotas_agrupadas:
-            rotas_agrupadas[resumo] = {
-                **rota,
-                'quantidade_agentes': 1,
-                'agentes_coleta_alternativos': []
-            }
-        else:
-            rotas_agrupadas[resumo]['quantidade_agentes'] += 1
-            
-            # Limitar o número de alternativas para evitar crescimento excessivo
-            if len(rotas_agrupadas[resumo]['agentes_coleta_alternativos']) < 3:  # Limitar a 3 alternativas
-                rotas_agrupadas[resumo]['agentes_coleta_alternativos'].append({
-                    'fornecedor': rota['agente_coleta']['fornecedor'],
-                    'origem': rota['agente_coleta']['origem']
-                })
-    
-    # Converter para lista e ordenar por custo total
-    rotas_finais = sorted(rotas_agrupadas.values(), key=lambda x: x['total'])
-    
-    # Limitar a 10 melhores opções
-    rotas_finais = rotas_finais[:10]
-    
-    # Renumerar opções
-    for i, rota in enumerate(rotas_finais):
-        rota['opcao'] = i + 1
-    
-    # Resumo final da operação (apenas em modo debug)
-    if debug_mode:
-        print(f"[AGENTES] Concluído: {len(rotas_finais)} rotas únicas (de {len(rotas_completas)} totais)")
-        if rotas_finais:
-            melhor_rota = rotas_finais[0]
-            print(f"[AGENTES] Melhor opção: {melhor_rota.get('resumo', 'N/A')} - R$ {melhor_rota.get('total', 0):.2f} ({melhor_rota.get('prazo_total', 0)}d)")
-    
-    return {
-        'rotas': rotas_finais,
-        'total_opcoes': len(rotas_finais),
-        'origem': f"{origem}/{uf_origem}",
-        'destino': f"{destino}/{uf_destino}",
-        'peso_info': {
-            'peso_real': peso_real,
-            'peso_cubado': peso_cubado,
-            'maior_peso': maior_peso,
-            'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real'
+        print(f"[AGENTES] Transferências encontradas: {len(matches_transferencia)} registros")
+        
+        # Processar transferências encontradas
+        for _, linha_trans in matches_transferencia.iterrows():
+            try:
+                linha_processada = processar_linha_transferencia(linha_trans, maior_peso, valor_nf)
+                if linha_processada:
+                    transferencias_encontradas.append(linha_processada)
+                    print(f"[AGENTES] ✅ Transferência: {linha_trans.get('Fornecedor')} - {origem_base} → {destino_base} - R$ {linha_processada['custo']:.2f}")
+                
+            except Exception as e:
+                print(f"[AGENTES] Erro ao processar transferência: {e}")
+                continue
+        
+        # 2. BUSCAR AGENTES REAIS NA BASE DE DADOS
+        # Verificar se df_agentes foi carregado corretamente
+        if df_agentes is None or df_agentes.empty:
+            print("[AGENTES] Base de agentes vazia ou não carregada")
+            return None
+        
+        print(f"[AGENTES] Colunas disponíveis na base de agentes: {list(df_agentes.columns)}")
+        
+        # NOVA LÓGICA: Agentes fazem coleta/entrega entre cidade do cliente e base
+        # Agentes de COLETA: buscam na cidade de origem e levam para a base de origem
+        origem_normalizada = normalizar_cidade(origem)
+        agentes_coleta = df_agentes[
+            (df_agentes['Tipo'] == 'Agente') &
+            (df_agentes['Base Origem'] == base_origem) &
+            (df_agentes['Origem_Normalizada'] == origem_normalizada)
+        ]
+        
+        # Agentes de ENTREGA: saem da base de destino e entregam na cidade de destino
+        destino_normalizado = normalizar_cidade(destino)
+        agentes_entrega = df_agentes[
+            (df_agentes['Tipo'] == 'Agente') &
+            (df_agentes['Base Origem'] == base_destino) &
+            (df_agentes['Origem_Normalizada'] == destino_normalizado)
+        ]
+        
+        print(f"[AGENTES] Agentes de coleta encontrados: {len(agentes_coleta)}")
+        print(f"[AGENTES] Agentes de entrega encontrados: {len(agentes_entrega)}")
+        
+        # 3. COMBINAR COLETA + TRANSFERÊNCIA + ENTREGA COM DADOS REAIS
+        for _, agente_col in agentes_coleta.iterrows():
+            for transferencia in transferencias_encontradas:
+                for _, agente_ent in agentes_entrega.iterrows():
+                    try:
+                        # Calcular custos da coleta usando dados reais
+                        linha_coleta_processada = processar_linha_transferencia(agente_col, maior_peso, valor_nf)
+                        if not linha_coleta_processada:
+                            continue
+                            
+                        # Calcular custos da entrega usando dados reais
+                        linha_entrega_processada = processar_linha_transferencia(agente_ent, maior_peso, valor_nf)
+                        if not linha_entrega_processada:
+                            continue
+                        
+                        # TOTAL DA ROTA: COLETA + TRANSFERÊNCIA + ENTREGA
+                        total_rota = (linha_coleta_processada['custo'] + linha_coleta_processada['pedagio'] + linha_coleta_processada['gris'] +
+                                    transferencia['custo'] + transferencia['pedagio'] + transferencia['gris'] +
+                                    linha_entrega_processada['custo'] + linha_entrega_processada['pedagio'] + linha_entrega_processada['gris'])
+                        
+                        # Prazo total (soma dos prazos)
+                        prazo_total = (linha_coleta_processada['prazo'] + transferencia['prazo'] + linha_entrega_processada['prazo'])
+                        
+                        # Criar rota completa
+                        rota = {
+                            'fornecedor_coleta': agente_col.get('Fornecedor', 'N/A'),
+                            'fornecedor_transferencia': transferencia['fornecedor'],
+                            'agente_entrega': {'fornecedor': agente_ent.get('Fornecedor', 'N/A')},
+                            'agente_coleta': {
+                                'base_origem': origem,
+                                'base_destino': base_origem,
+                                'custo': float(linha_coleta_processada['custo']),
+                                'origem': agente_col.get('Origem', ''),
+                                'destino': agente_col.get('Destino', ''),
+                                'fornecedor': agente_col.get('Fornecedor', 'N/A')
+                            },
+                            'transferencia': {
+                                'base_origem': base_origem,
+                                'base_destino': base_destino,
+                                'custo': float(transferencia['custo']),
+                                'pedagio': float(transferencia['pedagio']),
+                                'gris': float(transferencia['gris']),
+                                'fornecedor': transferencia['fornecedor'],
+                                'origem': f"Base {base_origem}",
+                                'destino': f"Base {base_destino}",
+                                'frete': float(transferencia['custo']) - float(transferencia['pedagio']) - float(transferencia['gris'])
+                            },
+                            'agente_entrega_detalhes': {
+                                'base_origem': base_destino,
+                                'base_destino': destino,
+                                'custo': float(linha_entrega_processada['custo']),
+                                'origem': agente_ent.get('Origem', ''),
+                                'destino': agente_ent.get('Destino', ''),
+                                'fornecedor': agente_ent.get('Fornecedor', 'N/A')
+                            },
+                            'agente_entrega': {
+                                'fornecedor': agente_ent.get('Fornecedor', 'N/A'),
+                                'base_origem': base_destino,
+                                'destino': destino,
+                                'custo': float(linha_entrega_processada['custo']),
+                                'valor_minimo': 0.0,  # Será implementado na nova lógica
+                                'excedente': 0.0      # Será implementado na nova lógica
+                            },
+                            'total': float(total_rota),
+                            'prazo_total': int(prazo_total),
+                            'peso_real': float(peso_real),
+                            'peso_cubado': float(peso_cubado),
+                            'maior_peso': float(maior_peso),
+                            'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real',
+                            'base_origem': base_origem,
+                            'base_destino_transferencia': base_destino,
+                            'resumo': f"{agente_col.get('Fornecedor', 'N/A')} + {transferencia['fornecedor']} + {agente_ent.get('Fornecedor', 'N/A')}",
+                            'detalhamento_custos': {
+                                'coleta': float(linha_coleta_processada['custo']),
+                                'transferencia': float(transferencia['custo']),
+                                'entrega': float(linha_entrega_processada['custo']),
+                                'pedagio': float(linha_coleta_processada['pedagio'] + transferencia['pedagio'] + linha_entrega_processada['pedagio']),
+                                'gris_total': float(linha_coleta_processada['gris'] + transferencia['gris'] + linha_entrega_processada['gris'])
+                            }
+                        }
+                        
+                        # Implementar nova lógica de cálculo para agentes
+                        # Adicionar valores mínimo e excedente para coleta e entrega
+                        valor_minimo_coleta = float(agente_col.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
+                        excedente_coleta = float(agente_col.get('EXCEDENTE', 0) or 0)
+                        valor_minimo_entrega = float(agente_ent.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
+                        excedente_entrega = float(agente_ent.get('EXCEDENTE', 0) or 0)
+                        
+                        # Atualizar dados de coleta e entrega com nova lógica
+                        rota['agente_coleta'].update({
+                            'valor_minimo': valor_minimo_coleta,
+                            'excedente': excedente_coleta
+                        })
+                        
+                        rota['agente_entrega'].update({
+                            'valor_minimo': valor_minimo_entrega,
+                            'excedente': excedente_entrega
+                        })
+                        
+                        rotas_encontradas.append(rota)
+                        
+                        print(f"[AGENTES] ✅ Rota completa: {agente_col.get('Fornecedor')} (R$ {linha_coleta_processada['custo']:.2f}) + {transferencia['fornecedor']} (R$ {transferencia['custo']:.2f}) + {agente_ent.get('Fornecedor')} (R$ {linha_entrega_processada['custo']:.2f}) = R$ {total_rota:.2f}")
+                        
+                    except Exception as e:
+                        print(f"[AGENTES] Erro ao combinar rota: {e}")
+                        continue
+        
+        # Ordenar por custo total
+        rotas_encontradas = sorted(rotas_encontradas, key=lambda x: x.get('total', float('inf')))
+        
+        print(f"[AGENTES] ✅ {len(rotas_encontradas)} rotas com agentes calculadas")
+        
+        return {
+            'rotas': rotas_encontradas,
+            'total_opcoes': len(rotas_encontradas),
+            'origem': f"{origem}/{uf_origem}",
+            'destino': f"{destino}/{uf_destino}",
+            'base_origem': base_origem,
+            'base_destino': base_destino,
+            'transferencias_disponiveis': len(transferencias_encontradas)
         }
-    }
+        
+    except Exception as e:
+        print(f"[AGENTES] Erro geral: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 # Dicionário de faixas de peso pré-calculadas para otimização
 FAIXAS_PESO = [
@@ -4536,61 +4122,169 @@ FAIXAS_PESO = [
 
 def processar_linha_transferencia(linha, peso, valor_nf):
     """
-    Processa uma linha de transferência e retorna os custos calculados de forma otimizada.
+    Processa uma linha de transferência e retorna os custos calculados.
+    
+    NOVA LÓGICA PARA AGENTES:
+    - Peso: Usar maior entre peso cubado ou real
+    - Se peso ≤ 10kg: usar Coluna G (VALOR MÍNIMO ATÉ 10)
+    - Se peso > 10kg: calcular com Coluna Q (EXCEDENTE) = peso × valor excedente
+    - Retornar: GRIS (se tiver) e prazo
     
     Args:
-        linha (dict): Dicionário com os dados da linha de transferência
-        peso (float): Peso da carga em kg
+        linha (pandas.Series ou dict): Linha da transferência com os dados
+        peso (float): Peso da carga em kg (já deve ser o maior entre real e cubado)
         valor_nf (float): Valor da nota fiscal para cálculo do GRIS
         
     Returns:
         dict: Dicionário com os valores calculados ou None em caso de erro
     """
     try:
-        # Determinar faixa de peso de forma otimizada
-        faixa_peso = next((faixa for limite, faixa in FAIXAS_PESO if peso <= limite), 'Acima 500')
+        # Converter pandas Series para dict se necessário
+        if hasattr(linha, 'to_dict'):
+            linha_dict = linha.to_dict()
+        else:
+            linha_dict = linha
         
-        # Valor base - otimizado para evitar múltiplos acessos
-        valor_base_kg = float(linha.get(faixa_peso, linha.get('VALOR MÍNIMO ATÉ 10', 0) if faixa_peso == 10 else 0))
-        valor_base = peso * valor_base_kg
+        # Verificar se é um dicionário válido
+        if not isinstance(linha_dict, dict):
+            print(f"[ERRO] Formato inválido da linha: {type(linha_dict)}")
+            return None
         
-        # Cálculo de pedágio otimizado
-        valor_pedagio = float(linha.get('Pedagio (100 Kg)', 0))
-        pedagio = math.ceil(peso / 100) * valor_pedagio if valor_pedagio and peso > 0 else 0.0
+        # NOVA LÓGICA: Aplicar regra específica para agentes
+        valor_base = 0.0
+        faixa_peso_usada = ""
+        valor_kg_usado = 0.0
         
-        # Cálculo de GRIS otimizado
+        # Verificar se é agente (Tipo == 'Agente')
+        is_agente = linha_dict.get('Tipo') == 'Agente'
+        
+        if is_agente:
+            # LÓGICA PARA AGENTES
+            if peso <= 10:
+                # Peso ≤ 10kg: usar VALOR MÍNIMO ATÉ 10 (Coluna G)
+                valor_minimo = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
+                valor_base = valor_minimo  # Valor fixo independente do peso
+                faixa_peso_usada = "Valor Mínimo (≤10kg)"
+                valor_kg_usado = valor_minimo / 10 if valor_minimo > 0 else 0  # Para referência
+            else:
+                # Peso > 10kg: calcular com EXCEDENTE (Coluna Q)
+                valor_excedente = float(linha_dict.get('EXCEDENTE', 0) or 0)
+                valor_base = peso * valor_excedente
+                faixa_peso_usada = "Excedente (>10kg)"
+                valor_kg_usado = valor_excedente
+        else:
+            # LÓGICA PARA TRANSFERÊNCIAS (mantém a lógica original)
+            if peso <= 10:
+                faixa_peso_usada = 'VALOR MÍNIMO ATÉ 10'
+                valor_kg_coluna = 'VALOR MÍNIMO ATÉ 10'
+            elif peso <= 20:
+                faixa_peso_usada = 20
+                valor_kg_coluna = 20
+            elif peso <= 30:
+                faixa_peso_usada = 30
+                valor_kg_coluna = 30
+            elif peso <= 50:
+                faixa_peso_usada = 50
+                valor_kg_coluna = 50
+            elif peso <= 70:
+                faixa_peso_usada = 70
+                valor_kg_coluna = 70
+            elif peso <= 100:
+                faixa_peso_usada = 100
+                valor_kg_coluna = 100
+            elif peso <= 300:
+                faixa_peso_usada = 300
+                valor_kg_coluna = 300
+            elif peso <= 500:
+                faixa_peso_usada = 500
+                valor_kg_coluna = 500
+            else:
+                faixa_peso_usada = 'Acima 500'
+                valor_kg_coluna = 'Acima 500'
+            
+            # Obter valor por kg para a faixa
+            try:
+                if valor_kg_coluna in linha_dict:
+                    valor_kg_usado = float(linha_dict[valor_kg_coluna] or 0)
+                else:
+                    # Se não encontrar a coluna, tentar usar o valor mínimo
+                    valor_kg_usado = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
+            except (ValueError, TypeError):
+                valor_kg_usado = 0
+            
+            # Calcular valor base para transferências
+            valor_base = peso * valor_kg_usado
+        
+        # Calcular pedágio
+        pedagio = 0.0
+        try:
+            valor_pedagio = float(linha_dict.get('Pedagio (100 Kg)', 0) or 0)
+            if valor_pedagio > 0 and peso > 0:
+                pedagio = math.ceil(peso / 100) * valor_pedagio
+        except (ValueError, TypeError):
+            pedagio = 0.0
+        
+        # Calcular GRIS
         gris = 0.0
-        if valor_nf and valor_nf > 0:
-            gris_exc = linha.get('Gris Exc')
-            if gris_exc:
-                gris_exc = float(gris_exc)
-                gris_percentual = gris_exc / 100 if gris_exc > 1 else gris_exc
-                gris_min = float(linha.get('Gris Min', 0))
-                gris = max(valor_nf * gris_percentual, gris_min)
+        try:
+            if valor_nf and valor_nf > 0:
+                gris_exc = linha_dict.get('Gris Exc')
+                gris_min = linha_dict.get('Gris Min', 0)
+                
+                if gris_exc is not None and not pd.isna(gris_exc):
+                    gris_exc = float(gris_exc)
+                    # Se maior que 1, assumir que é percentual (ex: 3.5 = 3.5%)
+                    gris_percentual = gris_exc / 100 if gris_exc > 1 else gris_exc
+                    gris_calculado = valor_nf * gris_percentual
+                    
+                    if gris_min is not None and not pd.isna(gris_min):
+                        gris_min = float(gris_min)
+                        gris = max(gris_calculado, gris_min)
+                    else:
+                        gris = gris_calculado
+                        
+                    # Verificar se o resultado é NaN
+                    if pd.isna(gris) or math.isnan(gris):
+                        gris = 0.0
+        except (ValueError, TypeError):
+            gris = 0.0
         
-        # Cálculo do prazo com tratamento de erro otimizado
+        # Calcular prazo
         prazo = 3  # Valor padrão
         try:
-            prazo = int(float(linha.get('Prazo', 3)) or 3)
+            prazo_valor = linha_dict.get('Prazo')
+            if prazo_valor is not None and not pd.isna(prazo_valor):
+                prazo = int(float(prazo_valor))
         except (ValueError, TypeError):
-            pass  # Mantém o valor padrão em caso de erro
+            prazo = 3
         
-        # Retorna um dicionário otimizado
+        # Obter informações do fornecedor
+        fornecedor = linha_dict.get('Fornecedor', 'N/A')
+        
+        # Garantir que nenhum valor seja NaN
+        valor_base = 0.0 if pd.isna(valor_base) or math.isnan(valor_base) else valor_base
+        pedagio = 0.0 if pd.isna(pedagio) or math.isnan(pedagio) else pedagio
+        gris = 0.0 if pd.isna(gris) or math.isnan(gris) else gris
+        valor_kg_usado = 0.0 if pd.isna(valor_kg_usado) or math.isnan(valor_kg_usado) else valor_kg_usado
+        
+        total = valor_base + pedagio + gris
+        total = 0.0 if pd.isna(total) or math.isnan(total) else total
+        
+        # Retornar resultado formatado
         return {
-            'valor_base': round(valor_base, 2),
+            'custo': round(valor_base, 2),
             'pedagio': round(pedagio, 2),
             'gris': round(gris, 2),
-            'total': round(valor_base + pedagio + gris, 2),
+            'total': round(total, 2),
             'prazo': prazo,
-            'faixa_peso': faixa_peso,
-            'valor_kg': round(valor_base_kg, 4)
+            'faixa_peso': faixa_peso_usada,
+            'valor_kg': round(valor_kg_usado, 4),
+            'fornecedor': fornecedor,
+            'is_agente': is_agente
         }
         
     except Exception as e:
-        # Log de erro apenas em modo debug para melhorar desempenho
-        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
-            print(f"[ERRO] Erro ao processar transferência: {str(e)[:100]}")
-        return None
+        print(f"[ERRO] Erro ao processar transferência: {str(e)}")
         return None
 
 if __name__ == "__main__":
@@ -4604,4 +4298,3 @@ if __name__ == "__main__":
     else:
         # Em desenvolvimento, usar o servidor de desenvolvimento
         app.run(host="0.0.0.0", port=port, debug=True)
-

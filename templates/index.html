@@ -305,6 +305,34 @@
                         </small>
                     </div>
                 </div>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="tipo_filtro_frac">Filtrar por Tipo:</label>
+                        <select id="tipo_filtro_frac" name="tipo_filtro_frac">
+                            <option value="">Todos os Tipos</option>
+                            <option value="Agente">Agente</option>
+                            <option value="Transferência">Transferência</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="base_filtro_frac">Filtrar por Base:</label>
+                        <select id="base_filtro_frac" name="base_filtro_frac">
+                            <option value="">Todas as Bases</option>
+                            <option value="SAO">São Paulo (SAO)</option>
+                            <option value="CPQ">Campinas (CPQ)</option>
+                            <option value="RIO">Rio de Janeiro (RIO)</option>
+                            <option value="BHZ">Belo Horizonte (BHZ)</option>
+                            <option value="CWB">Curitiba (CWB)</option>
+                            <option value="POA">Porto Alegre (POA)</option>
+                            <option value="AJU">Aracaju (AJU)</option>
+                            <option value="BSB">Brasília (BSB)</option>
+                            <option value="GYN">Goiânia (GYN)</option>
+                            <option value="FOR">Fortaleza (FOR)</option>
+                            <option value="REC">Recife (REC)</option>
+                            <option value="SSA">Salvador (SSA)</option>
+                        </select>
+                    </div>
+                </div>
                 <button type="submit" class="btn-primary">Calcular Frete Fracionado</button>
                 <div id="loading-fracionado" class="loading-spinner"></div>
             </form>
@@ -434,6 +462,32 @@
         });
         
         console.log("Cache e cookies limpos para acesso livre");
+        
+        // Função para abrir uma aba
+        function openTab(evt, tabName) {
+            // Esconder todos os conteúdos de abas
+            var tabcontent = document.getElementsByClassName("tab-content");
+            for (var i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+                tabcontent[i].classList.remove("active");
+            }
+
+            // Remover a classe "active" de todos os botões de abas
+            var tablinks = document.getElementsByClassName("tab-btn");
+            for (var i = 0; i < tablinks.length; i++) {
+                tablinks[i].classList.remove("active");
+            }
+
+            // Mostrar a aba atual e adicionar a classe "active" ao botão que abriu a aba
+            document.getElementById(tabName).style.display = "block";
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }
+        
+        // Abrir a primeira aba por padrão
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('.tab-btn').click();
+        });
     </script>
 </body>
 </html> 

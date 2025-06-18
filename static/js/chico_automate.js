@@ -838,7 +838,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                     // Criar mapa com dados atualizados (incluindo pedágios)
                     setTimeout(() => {
-                        criarMapaUniversal(data.rota_pontos, 'map-dedicado');
+                    criarMapaUniversal(data.rota_pontos, 'map-dedicado');
                     }, 100); // Pequeno delay para garantir que os dados estejam disponíveis
                 } else {
                     console.warn('[DEBUG] Pontos de rota inválidos para mapa dedicado:', data.rota_pontos);
@@ -1008,6 +1008,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const formFracionado = document.getElementById(ids.fracionado.form);
     if (formFracionado) {
         console.log('[DEBUG] form-fracionado encontrado');
+        
+        // Adicionar evento para mostrar/esconder campo de base
+        const tipoFiltroSelect = document.getElementById('tipo_filtro_frac');
+        const baseFiltroGroup = document.getElementById('base_filtro_frac').parentElement;
+        
+        if (tipoFiltroSelect && baseFiltroGroup) {
+            tipoFiltroSelect.addEventListener('change', function() {
+                if (this.value === 'Agente') {
+                    baseFiltroGroup.style.display = 'block';
+                } else {
+                    baseFiltroGroup.style.display = 'none';
+                    document.getElementById('base_filtro_frac').value = '';
+                }
+            });
+            
+            // Inicializar estado
+            baseFiltroGroup.style.display = tipoFiltroSelect.value === 'Agente' ? 'block' : 'none';
+        }
+        
         formFracionado.addEventListener('submit', function(e) {
             e.preventDefault();
             console.log('[DEBUG] Submit do fracionado acionado');
@@ -1020,8 +1039,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const peso = document.getElementById(ids.fracionado.peso) ? document.getElementById(ids.fracionado.peso).value : '';
             const cubagem = document.getElementById(ids.fracionado.cubagem) ? document.getElementById(ids.fracionado.cubagem).value : '';
             const valor_nf = document.getElementById(ids.fracionado.valorNf) ? document.getElementById(ids.fracionado.valorNf).value : '';
+            const tipo_filtro = document.getElementById('tipo_filtro_frac') ? document.getElementById('tipo_filtro_frac').value : '';
+            const base_filtro = document.getElementById('base_filtro_frac') ? document.getElementById('base_filtro_frac').value : '';
             
-            console.log('[DEBUG] Dados enviados:', {uf_origem, municipio_origem, uf_destino, municipio_destino, peso, cubagem, valor_nf});
+            console.log('[DEBUG] Dados enviados:', {uf_origem, municipio_origem, uf_destino, municipio_destino, peso, cubagem, valor_nf, tipo_filtro, base_filtro});
             
             // Validar campos obrigatórios
             if (!uf_origem || !municipio_origem || !uf_destino || !municipio_destino) {
@@ -1045,7 +1066,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     municipio_destino,
                     peso: peso ? parseFloat(peso) : 0,
                     cubagem: cubagem ? parseFloat(cubagem) : 0,
-                    valor_nf: valor_nf ? parseFloat(valor_nf) : null
+                    valor_nf: valor_nf ? parseFloat(valor_nf) : null,
+                    tipo_filtro: tipo_filtro || null,
+                    base_filtro: base_filtro || null
                 })
             })
             .then(response => {
@@ -1671,4 +1694,18 @@ document.addEventListener('DOMContentLoaded', function() {
     window.obterPosicionamentoComercial = obterPosicionamentoComercial;
     
     console.log('[DEBUG] Inicialização concluída');
+
+    // Inicialização quando o documento estiver pronto
+    $(document).ready(function() {
+        // Inicializar componentes da interface
+        carregarEstadosSeNecessario();
+        carregarEstadosQuandoNecessario();
+        configurarEventosMunicipios();
+        carregarHistorico();
+        
+        // Inicializar mapa aéreo vazio
+        criarMapaUniversal([], 'map-aereo');
+        
+        console.log('[DEBUG] Componentes inicializados');
+    });
 });

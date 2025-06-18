@@ -176,6 +176,12 @@ buscar_*.py
 analisar_*.py
 temp_*.py
 *_backup.py
+demo_*.py
+gerar_*.py
+testar_*.py
+check_*.py
+test_*.py
+test_*.txt
 
 # Dados sensíveis
 # Base_Unificada.xlsx (permitido temporariamente para demo)
@@ -196,12 +202,14 @@ fretes.db/
 # Arquivos de backup
 *_backup.*
 backup_*
+Base_Unificada_backup.xlsx
+response.json
+Obs.txt
 
 # Fontes e assets temporários
 dejavu-fonts-ttf-*/
 photos/
 license.pdf
-Obs.txt
 
 # Pasta de automação antiga
 Automates/ 

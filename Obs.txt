@@ -1,2 +1,0 @@
-- Comercial (pricing)
-- Tabela JEM e Concept (são diferentes, sendo operações da JEM de envio a base e Concept porta-porta
