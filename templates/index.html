@@ -2,7 +2,11 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="theme-color" content="#1e3c72">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="PortoEx">
     <title>PortoEx - Cálculo de Frete</title>
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='portoex-logo.png') }}">
@@ -61,10 +65,42 @@
         .error, .success { padding: 12px 18px; border-radius: 8px; margin-bottom: 18px; font-weight: 600; font-size: 1.08rem; }
         .error { background: #ffeaea; color: #ff9800; border: 1.5px solid #ff9800; }
         .success { background: #eaffea; color: #28a745; border: 1.5px solid #28a745; }
+        /* === RESPONSIVIDADE MOBILE APRIMORADA === */
+        @media (max-width: 1024px) {
+            .card { margin: 16px 8px; padding: 20px 16px; }
+            .form-grid { gap: 12px; }
+            .form-group { min-width: 200px; }
+        }
+        
         @media (max-width: 900px) {
-            .form-grid { flex-direction: column; gap: 10px; }
-            .tabs { flex-direction: column; }
-            .tab-btn { width: 100%; }
+            .form-grid { 
+                flex-direction: column; 
+                gap: 15px; 
+            }
+            .form-group { 
+                min-width: auto; 
+                max-width: 100%; 
+            }
+            .tabs { 
+                flex-direction: column; 
+                margin: 20px 0 0 0;
+            }
+            .tab-btn { 
+                width: 100%; 
+                font-size: 1rem;
+                padding: 12px 20px 8px 20px;
+            }
+            .card h2 { 
+                font-size: 1.4rem; 
+                text-align: center; 
+                margin-bottom: 20px;
+            }
+            .btn-primary { 
+                width: 100%; 
+                padding: 12px 18px; 
+                font-size: 1.1rem; 
+                margin-top: 10px;
+            }
         }
         .loading-spinner {
             display: none;
@@ -198,24 +234,342 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
         }
+        
+        /* === ESTILOS CALCULADORA DE CUBAGEM === */
+        .cubagem-calculator {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 2px dashed #0a6ed1;
+            border-radius: 12px;
+            padding: 15px;
+            margin: 10px 0;
+            position: relative;
+        }
+        
+        .cubagem-calculator::before {
+            content: "📐 Calculadora de Cubagem";
+            position: absolute;
+            top: -12px;
+            left: 15px;
+            background: white;
+            padding: 5px 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #0a6ed1;
+            border-radius: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .dimensao-input {
+            transition: all 0.3s ease;
+        }
+        
+        .dimensao-input:focus {
+            border-color: #ff9800 !important;
+            box-shadow: 0 0 0 0.2rem rgba(255, 152, 0, 0.25) !important;
+        }
+        
+        .cubagem-resultado {
+            animation: pulse 0.5s ease-in-out;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
 
         @media (max-width: 768px) {
+            /* === HEADER MOBILE === */
             header .container {
                 flex-direction: column;
                 gap: 15px;
+                padding: 0 15px;
+            }
+
+            .logo h1 {
+                font-size: 1.5rem;
+            }
+
+            .logo img {
+                width: 40px;
+                height: 40px;
             }
 
             .user-menu {
                 flex-direction: column;
                 align-items: center;
                 gap: 10px;
+                width: 100%;
+            }
+
+            .user-greeting {
+                font-size: 0.9rem;
+                padding: 6px 12px;
             }
 
             .user-actions {
                 flex-wrap: wrap;
                 justify-content: center;
+                gap: 8px;
+            }
+
+            .btn-admin, .btn-logout, .btn-login {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+
+            /* === LAYOUT MOBILE === */
+            body {
+                font-size: 0.95rem;
+            }
+
+            .card {
+                margin: 12px 6px;
+                padding: 16px 12px;
+                border-radius: 12px;
+            }
+
+            .form-group label {
+                font-size: 0.95rem;
+                margin-bottom: 4px;
+            }
+
+            .form-group input, .form-group select {
+                font-size: 16px; /* Evita zoom no iOS */
+                padding: 12px 10px;
+                height: auto;
+                min-height: 44px; /* Touch target mínimo */
+            }
+
+            /* === CALCULADORA CUBAGEM MOBILE === */
+            .cubagem-calculator {
+                padding: 12px;
+                margin: 8px 0;
+            }
+
+            .cubagem-calculator::before {
+                font-size: 0.8rem;
+                padding: 3px 8px;
+                top: -10px;
+                left: 10px;
+            }
+
+            /* === TABELAS MOBILE === */
+            .results {
+                font-size: 0.8rem;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            .results th, .results td {
+                padding: 6px 4px;
+                min-width: 80px;
+            }
+
+            /* === MAPAS MOBILE === */
+            .map-container {
+                height: 250px;
+                margin: 15px 0;
+            }
+
+            .map-title {
+                font-size: 1.1rem;
+                margin-bottom: 8px;
+            }
+
+            /* === LOADING MOBILE === */
+            .loading-spinner {
+                width: 36px;
+                height: 36px;
+                border-width: 4px;
+            }
+
+            /* === TEXTOS E MENSAGENS === */
+            .error, .success {
+                padding: 10px 12px;
+                font-size: 0.95rem;
+                margin-bottom: 12px;
+            }
+
+            .analise-container {
+                padding: 12px;
+                margin: 12px 0;
+            }
+
+            .analise-title {
+                font-size: 1rem;
+            }
+
+            .analise-item {
+                font-size: 0.9rem;
             }
         }
+
+        /* === CELULARES PEQUENOS === */
+        @media (max-width: 480px) {
+            header {
+                padding: 10px 0;
+            }
+
+            .logo {
+                gap: 8px;
+            }
+
+            .logo h1 {
+                font-size: 1.3rem;
+            }
+
+            .logo img {
+                width: 35px;
+                height: 35px;
+            }
+
+            .tabs {
+                margin: 15px 0 0 0;
+            }
+
+            .tab-btn {
+                font-size: 0.9rem;
+                padding: 10px 16px 6px 16px;
+            }
+
+            .card {
+                margin: 8px 4px;
+                padding: 12px 8px;
+            }
+
+            .card h2 {
+                font-size: 1.2rem;
+                margin-bottom: 15px;
+            }
+
+            .form-group input, .form-group select {
+                padding: 10px 8px;
+                font-size: 16px;
+            }
+
+            .cubagem-calculator {
+                padding: 8px;
+                margin: 6px 0;
+            }
+
+            .cubagem-calculator::before {
+                font-size: 0.75rem;
+                padding: 2px 6px;
+            }
+
+            .btn-primary {
+                padding: 10px 16px;
+                font-size: 1rem;
+            }
+
+            .map-container {
+                height: 200px;
+                margin: 10px 0;
+            }
+
+            .results {
+                font-size: 0.75rem;
+            }
+
+            .results th, .results td {
+                padding: 4px 2px;
+                min-width: 60px;
+            }
+
+            .user-greeting {
+                font-size: 0.8rem;
+                padding: 4px 8px;
+            }
+
+            .btn-admin, .btn-logout, .btn-login {
+                padding: 4px 8px;
+                font-size: 0.75rem;
+            }
+
+            .admin-badge {
+                font-size: 0.7rem;
+                padding: 2px 6px;
+            }
+        }
+
+        /* === MELHORIAS GERAIS MOBILE === */
+        @media (max-width: 768px) {
+            /* Evitar zoom em inputs no iOS */
+            input[type="text"], input[type="number"], input[type="email"], 
+            input[type="tel"], input[type="url"], input[type="password"], 
+            input[type="search"], textarea, select {
+                font-size: 16px !important;
+            }
+
+            /* Melhorar touch targets */
+            button, .btn, .tab-btn, select, input {
+                min-height: 44px;
+                min-width: 44px;
+            }
+
+            /* Scroll suave para mobile */
+            html {
+                scroll-behavior: smooth;
+            }
+
+                         /* Melhorar seleção de texto */
+             body {
+                 -webkit-text-size-adjust: 100%;
+                 -webkit-tap-highlight-color: transparent;
+             }
+         }
+
+         /* === ESTILOS PARA DISPOSITIVOS TOUCH === */
+         .touch-device .btn-primary:active,
+         .touch-device .tab-btn:active,
+         .touch-device .btn-secondary:active {
+             transform: scale(0.98);
+             transition: transform 0.1s ease;
+         }
+
+         .touch-device .form-group input:focus,
+         .touch-device .form-group select:focus {
+             border-color: #ff9800;
+             box-shadow: 0 0 0 0.2rem rgba(255, 152, 0, 0.25);
+             transform: scale(1.02);
+             transition: all 0.2s ease;
+         }
+
+         /* === ORIENTAÇÃO LANDSCAPE MOBILE === */
+         @media (max-width: 768px) and (orientation: landscape) {
+             header {
+                 padding: 8px 0;
+             }
+
+             .tabs {
+                 margin: 10px 0 0 0;
+             }
+
+             .tab-btn {
+                 padding: 8px 16px 4px 16px;
+                 font-size: 0.9rem;
+             }
+
+             .card {
+                 margin: 8px 6px;
+                 padding: 12px 10px;
+             }
+
+             .map-container {
+                 height: 200px;
+             }
+
+             .form-grid {
+                 flex-direction: row;
+                 flex-wrap: wrap;
+             }
+
+             .form-group {
+                 flex: 1 1 45%;
+                 min-width: 200px;
+             }
+         }
     </style>
 </head>
 <body>
@@ -293,7 +647,34 @@
                     </div>
                     <div class="form-group">
                         <label for="cubagem_frac">Cubagem (m³):</label>
-                        <input type="number" id="cubagem_frac" name="cubagem_frac" step="0.001" min="0" required>
+                        <input type="number" id="cubagem_frac" name="cubagem_frac" step="0.001" min="0" required readonly 
+                               class="cubagem-resultado" style="background-color: #f8f9fa; border-color: #ced4da; font-weight: 600; font-size: 1.1rem;">
+                        <small id="cubagem-formula" style="color: #6c757d; font-size: 0.85rem; margin-top: 4px; display: block;">
+                            <i class="fa-solid fa-calculator"></i> <span id="formula-texto">Calculado automaticamente: L × A × C</span>
+                        </small>
+                    </div>
+                </div>
+                <div class="form-grid cubagem-calculator">
+                    <div class="form-group">
+                        <label for="largura_frac">
+                            <i class="fa-solid fa-arrows-left-right"></i> Largura (m):
+                        </label>
+                        <input type="number" id="largura_frac" name="largura_frac" step="0.01" min="0.01" 
+                               class="dimensao-input" placeholder="Ex: 1.20" onchange="calcularCubagem()" oninput="calcularCubagem()">
+                    </div>
+                    <div class="form-group">
+                        <label for="altura_frac">
+                            <i class="fa-solid fa-arrows-up-down"></i> Altura (m):
+                        </label>
+                        <input type="number" id="altura_frac" name="altura_frac" step="0.01" min="0.01" 
+                               class="dimensao-input" placeholder="Ex: 0.80" onchange="calcularCubagem()" oninput="calcularCubagem()">
+                    </div>
+                    <div class="form-group">
+                        <label for="comprimento_frac">
+                            <i class="fa-solid fa-ruler"></i> Comprimento (m):
+                        </label>
+                        <input type="number" id="comprimento_frac" name="comprimento_frac" step="0.01" min="0.01" 
+                               class="dimensao-input" placeholder="Ex: 2.40" onchange="calcularCubagem()" oninput="calcularCubagem()">
                     </div>
                 </div>
                 <div class="form-grid">
@@ -462,6 +843,85 @@
         });
         
         console.log("Cache e cookies limpos para acesso livre");
+        
+        // Função para calcular automaticamente a cubagem
+        function calcularCubagem() {
+            const largura = parseFloat(document.getElementById('largura_frac').value) || 0;
+            const altura = parseFloat(document.getElementById('altura_frac').value) || 0;
+            const comprimento = parseFloat(document.getElementById('comprimento_frac').value) || 0;
+            
+            const formulaTexto = document.getElementById('formula-texto');
+            
+            if (largura > 0 && altura > 0 && comprimento > 0) {
+                const cubagem = largura * altura * comprimento;
+                document.getElementById('cubagem_frac').value = cubagem.toFixed(3);
+                
+                // Mostrar a fórmula com os valores
+                formulaTexto.innerHTML = `${largura}m × ${altura}m × ${comprimento}m = ${cubagem.toFixed(3)}m³`;
+                formulaTexto.style.color = '#28a745';
+                formulaTexto.style.fontWeight = '600';
+                
+                // Adicionar feedback visual temporário
+                const cubagemField = document.getElementById('cubagem_frac');
+                cubagemField.style.backgroundColor = '#e8f5e8';
+                cubagemField.style.borderColor = '#28a745';
+                cubagemField.classList.add('cubagem-resultado');
+                
+                setTimeout(() => {
+                    cubagemField.style.backgroundColor = '#f8f9fa';
+                    cubagemField.style.borderColor = '#ced4da';
+                }, 800);
+            } else {
+                document.getElementById('cubagem_frac').value = '';
+                // Mostrar mensagem padrão
+                formulaTexto.innerHTML = 'Calculado automaticamente: L × A × C';
+                formulaTexto.style.color = '#6c757d';
+                formulaTexto.style.fontWeight = 'normal';
+            }
+        }
+        
+        // Adicionar event listeners quando a página carregar
+        document.addEventListener('DOMContentLoaded', function() {
+            // Adicionar tooltip informativo para os campos de dimensões
+            const tooltipTexts = {
+                'largura_frac': 'Largura do pacote em metros (ex: 1.20m)',
+                'altura_frac': 'Altura do pacote em metros (ex: 0.80m)', 
+                'comprimento_frac': 'Comprimento do pacote em metros (ex: 2.40m)'
+            };
+            
+            Object.keys(tooltipTexts).forEach(fieldId => {
+                const field = document.getElementById(fieldId);
+                if (field) {
+                    field.title = tooltipTexts[fieldId];
+                    field.setAttribute('data-toggle', 'tooltip');
+                    
+                    // Melhorar experiência mobile nos campos de dimensão
+                    field.addEventListener('focus', function() {
+                        // Scroll suave para o campo em mobile
+                        if (window.innerWidth <= 768) {
+                            setTimeout(() => {
+                                this.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 300);
+                        }
+                    });
+                }
+            });
+            
+            // Melhorar experiência de touch em dispositivos móveis
+            if ('ontouchstart' in window) {
+                document.body.classList.add('touch-device');
+                
+                // Adicionar feedback visual para touch nos botões
+                document.querySelectorAll('.btn-primary, .tab-btn, .btn-secondary').forEach(btn => {
+                    btn.addEventListener('touchstart', function() {
+                        this.style.opacity = '0.8';
+                    });
+                    btn.addEventListener('touchend', function() {
+                        this.style.opacity = '1';
+                    });
+                });
+            }
+        });
         
         // Função para abrir uma aba
         function openTab(evt, tabName) {
