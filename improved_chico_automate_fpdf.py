@@ -1141,12 +1141,7 @@ def calcular_frete_fracionado():
                 "error": "Nenhuma cotação válida encontrada na Base_Unificada.xlsx"
             })
 
-        # NOVO: Calcular também rotas com agentes
-        rotas_agentes = calcular_frete_com_agentes(
-            cidade_origem, uf_origem,
-            cidade_destino, uf_destino,
-            peso, valor_nf, cubagem
-        )
+        # REMOVIDO: Cálculo de rotas com agentes para usar apenas dados reais da planilha
 
         # Melhor opção (menor custo)
         melhor_opcao = cotacoes_ranking[0] if cotacoes_ranking else {}
@@ -1186,9 +1181,7 @@ def calcular_frete_fracionado():
             "cotacoes_rejeitadas": 0,  # Sem simulações, sem rejeições
             "criterios_qualidade": "APENAS dados reais da planilha Base_Unificada.xlsx",
             
-            # NOVO: Adicionar rotas com agentes
-            "rotas_agentes": rotas_agentes if rotas_agentes else None,
-            "tem_rotas_agentes": bool(rotas_agentes and rotas_agentes.get('total_opcoes', 0) > 0),
+            # REMOVIDO: Sem rotas com agentes - apenas dados reais
             
             # Melhor opção
             "fornecedor": melhor_opcao.get('modalidade', 'N/A'),
@@ -1235,9 +1228,8 @@ def calcular_frete_fracionado():
             'peso_cubado': peso_cubado,
             'cubagem': cubagem,
             'valor_nf': valor_nf,
-            'estrategia_busca': "PLANILHA_REAL_APENAS",
-            # NOVO: Passar rotas com agentes
-            'rotas_agentes': rotas_agentes
+            'estrategia_busca': "PLANILHA_REAL_APENAS"
+            # REMOVIDO: Sem rotas com agentes
         })
 
         # Salvar no histórico
@@ -1755,7 +1747,7 @@ def historico_detalhe(id_historico):
 
 def formatar_resultado_fracionado(resultado):
     """
-    Gera HTML formatado para exibir resultado do frete fracionado com dados FILTRADOS e links das fontes
+    Gera HTML formatado para exibir resultado do frete fracionado APENAS com dados REAIS da planilha
     """
     melhor_opcao = resultado.get('melhor_opcao', {})
     dados_fonte = resultado.get('dados_fonte', 'N/A')
@@ -1890,45 +1882,17 @@ def formatar_resultado_fracionado(resultado):
         </div>
     """
     
-    # UNIFICAR RANKING: Combinar cotações diretas + rotas com agentes
+    # APENAS DADOS DIRETOS da planilha - SEM simulações ou agentes fictícios
     ranking_completo = resultado.get('cotacoes_ranking', [])
-    rotas_agentes = resultado.get('rotas_agentes')
     
-    # Lista unificada para todas as opções
-    todas_opcoes = []
+    print(f"[DEBUG] Opções diretas (planilha): {len(ranking_completo)}")
     
-    # Adicionar cotações diretas
-    for cotacao in ranking_completo:
-        todas_opcoes.append({
-            'tipo': 'direto',
-            'fornecedor': cotacao.get('modalidade', 'N/A'),
-            'total': cotacao.get('total', 0),
-            'prazo': cotacao.get('prazo', 0),
-            'dados': cotacao
-        })
-    
-    # Adicionar rotas com agentes
-    if rotas_agentes and rotas_agentes.get('rotas'):
-        for rota in rotas_agentes.get('rotas', []):
-            todas_opcoes.append({
-                'tipo': 'agente',
-                'fornecedor': rota['resumo'],
-                'total': rota['total'],
-                'prazo': rota['prazo_total'],
-                'dados': rota
-            })
-    
-    # Ordenar todas as opções por custo total
-    todas_opcoes.sort(key=lambda x: x['total'])
-    
-    print(f"[DEBUG] Total de opções unificadas: {len(todas_opcoes)}")
-    
-    if todas_opcoes:
-        html += """
+    if ranking_completo:
+        html += f"""
         <div class="analise-container">
-            <div class="analise-title">🥇 Ranking Completo de Fornecedores (Diretos + Agentes)</div>
+            <div class="analise-title">🏆 Ranking de Fornecedores (Dados Reais)</div>
             <div style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">
-                Todas as opções de frete ordenadas por melhor custo-benefício.
+                Opções de frete da planilha Base_Unificada.xlsx ordenadas por melhor custo-benefício.
             </div>
             <table class="results" style="font-size: 0.9rem;">
                 <thead>
@@ -1944,7 +1908,8 @@ def formatar_resultado_fracionado(resultado):
                 <tbody>
         """
         
-        for i, opcao in enumerate(todas_opcoes[:10]):  # Mostrar até 10 melhores
+        # Mostrar opções diretas da planilha
+        for i, cotacao in enumerate(ranking_completo):
             pos_class = ""
             if i == 0:
                 pos_class = "style='background-color: #e8f5e8; font-weight: bold;'"  # Verde para 1º
@@ -1954,42 +1919,33 @@ def formatar_resultado_fracionado(resultado):
                 pos_class = "style='background-color: #f3e5f5; font-weight: bold;'"  # Roxo para 3º
             
             # Posição com medalha
-            posicao = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}º"
-            
-            # Tipo de serviço
-            tipo_badge = "🚛 Direto" if opcao['tipo'] == 'direto' else "🚚 Agentes"
-            tipo_color = "#2196F3" if opcao['tipo'] == 'direto' else "#FF9800"
-            
-            # ID único para os detalhes
-            detalhe_id = f"detalhe_unificado_{i}"
+            posicao_texto = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else f"{i+1}º"
             
             html += f"""
                     <tr {pos_class}>
-                        <td style="text-align: center; font-size: 1.1rem;"><strong>{posicao}</strong></td>
+                        <td style="text-align: center; font-size: 1.1rem;"><strong>{posicao_texto}</strong></td>
                         <td style="text-align: center;">
-                            <span style="background: {tipo_color}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">
-                                {tipo_badge}
+                            <span style="background: #2196F3; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">
+                                🚛 Direto
                             </span>
                         </td>
-                        <td><strong>{opcao['fornecedor']}</strong></td>
-                        <td style="font-weight: bold; color: #0a6ed1; font-size: 1.1rem;">R$ {opcao['total']:,.2f}</td>
-                        <td style="text-align: center;">{opcao['prazo']} dias</td>
+                        <td><strong>{cotacao.get('modalidade', 'N/A')}</strong></td>
+                        <td style="font-weight: bold; color: #0a6ed1; font-size: 1.1rem;">R$ {cotacao.get('total', 0):,.2f}</td>
+                        <td style="text-align: center;">{cotacao.get('prazo', 0)} dias</td>
                         <td style="text-align: center;">
-                            <button class="btn-secondary" onclick="toggleDetails('{detalhe_id}')" style="font-size: 0.8rem; padding: 5px 10px;">
+                            <button class="btn-secondary" onclick="toggleDetails('detalhe_direto_{i}')" style="font-size: 0.8rem; padding: 5px 10px;">
                                 📋 Ver Detalhes
                             </button>
                         </td>
                     </tr>
-                    <tr id="{detalhe_id}" style="display: none;">
+                    <tr id="detalhe_direto_{i}" style="display: none;">
                         <td colspan="6" style="background-color: #f8f9fa; padding: 15px;">
             """
             
-            # Detalhes específicos por tipo
-            if opcao['tipo'] == 'direto':
-                cotacao = opcao['dados']
-                html += f"""
+            # Detalhes da cotação direta
+            html += f"""
                             <div style="font-size: 0.9rem;">
-                                <strong>📊 Detalhes da Cotação Direta - {cotacao.get('modalidade', 'N/A')}</strong><br><br>
+                                <strong>📊 Detalhes da Cotação - {cotacao.get('modalidade', 'N/A')}</strong><br><br>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                                     <div>
                                         <strong>💰 Composição do Custo:</strong><br>
@@ -1999,88 +1955,12 @@ def formatar_resultado_fracionado(resultado):
                                         • <strong>Total: R$ {cotacao.get('total', 0):,.2f}</strong>
                                     </div>
                                     <div>
-                                        <strong>📍 Informações da Rota:</strong><br>
+                                        <strong>📍 Informações:</strong><br>
                                         • Origem: {cotacao.get('origem', 'N/A')}<br>
                                         • Destino: {cotacao.get('destino', 'N/A')}<br>
                                         • Prazo: {cotacao.get('prazo', 'N/A')} dias úteis<br>
-                                        • Fonte: {cotacao.get('fonte', 'Planilha Real')}
+                                        • Fonte: Base_Unificada.xlsx
                                     </div>
-                                </div>
-                                
-                                <div style="margin-top: 15px; text-align: center;">
-                                    <button class="btn-info" onclick="toggleDetails('detalhes_peso_unif_{i}')" style="margin: 5px; font-size: 0.8rem;">
-                                        ⚖️ Detalhes do Peso
-                                    </button>
-                                    <button class="btn-info" onclick="toggleDetails('detalhes_pedagio_unif_{i}')" style="margin: 5px; font-size: 0.8rem;">
-                                        🛣️ Detalhes do Pedágio
-                                    </button>
-                            </div>
-                                
-                                <div id="detalhes_peso_unif_{i}" style="display: none; margin-top: 10px; background: #f0f8ff; padding: 10px; border-radius: 5px;">
-                                    <strong>⚖️ Análise Detalhada do Peso:</strong><br>
-                                    • <strong>Peso Real:</strong> {cotacao.get('peso_real', 0):.1f} kg<br>
-                                    • <strong>Peso Cubado:</strong> {cotacao.get('peso_cubado', 0):.1f} kg<br>
-                                    • <strong>Maior Peso (Usado):</strong> <span style="color: #e74c3c; font-weight: bold;">{cotacao.get('maior_peso', 0):.1f} kg ({cotacao.get('peso_usado', 'N/A')})</span><br>
-                                    • <strong>Faixa de Peso:</strong> {cotacao.get('detalhes_peso', {}).get('faixa_peso_usada', 'N/A')} kg<br>
-                                    • <strong>Valor por kg:</strong> R$ {cotacao.get('detalhes_peso', {}).get('valor_kg', 0):.2f}
-                                </div>
-                                
-                                <div id="detalhes_pedagio_unif_{i}" style="display: none; margin-top: 10px; background: #fff8dc; padding: 10px; border-radius: 5px;">
-                                    <strong>🛣️ Cálculo Detalhado do Pedágio:</strong><br>
-                                    • <strong>Peso para Cálculo:</strong> {cotacao.get('detalhes_pedagio', {}).get('peso_calculo', 0):.1f} kg<br>
-                                    • <strong>Fator Pedágio:</strong> {cotacao.get('detalhes_pedagio', {}).get('fator_pedagio', 0)}<br>
-                                    • <strong>Valor Base:</strong> R$ {cotacao.get('detalhes_pedagio', {}).get('valor_base_pedagio', 0):.2f}<br>
-                                    • <strong>Total Pedágio:</strong> R$ {cotacao.get('pedagio', 0):.2f}
-                                </div>
-                            </div>
-                """
-            else:  # tipo == 'agente'
-                rota = opcao['dados']
-                html += f"""
-                            <div style="font-size: 0.85rem;">
-                                <strong>📍 Detalhamento da Rota com Agentes</strong><br><br>
-                                
-                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;">
-                                    <div style="background: #e3f2fd; padding: 10px; border-radius: 5px;">
-                                        <strong>1️⃣ Coleta (Agente Local)</strong><br>
-                                        • Fornecedor: {rota['agente_coleta']['fornecedor']}<br>
-                                        • Origem: {rota['agente_coleta']['origem']}<br>
-                                        • Destino: Base {rota['agente_coleta']['base_destino']}<br>
-                                        • Custo: R$ {rota['agente_coleta']['custo']:,.2f}<br>
-                                        • Valor Mínimo: R$ {rota['agente_coleta']['valor_minimo']:,.2f}<br>
-                                        • Excedente: R$ {rota['agente_coleta']['excedente']:,.2f}/kg
-                                        {f'<br><br><span style="color: #1976d2; font-size: 0.85rem;">📍 <strong>{rota.get("quantidade_agentes", 1)} agentes disponíveis</strong> para esta rota</span>' if rota.get('quantidade_agentes', 1) > 1 else ''}
-                                    </div>
-                                    
-                                    <div style="background: #fff3e0; padding: 10px; border-radius: 5px;">
-                                        <strong>2️⃣ Transferência</strong><br>
-                                        • Fornecedor: {rota['transferencia']['fornecedor']}<br>
-                                        • Origem: {rota['transferencia']['origem']}<br>
-                                        • Destino: {rota['transferencia']['destino']}<br>
-                                        • Custo Total: R$ {rota['transferencia']['custo']:,.2f}<br>
-                                        • Frete: R$ {rota['transferencia']['frete']:,.2f}<br>
-                                        • Pedágio: R$ {rota['transferencia']['pedagio']:,.2f}<br>
-                                        • GRIS: R$ {rota['transferencia']['gris']:,.2f}
-                                    </div>
-                                    
-                                    <div style="background: #e8f5e9; padding: 10px; border-radius: 5px;">
-                                        <strong>3️⃣ Entrega (Agente Local)</strong><br>
-                                        • Fornecedor: {rota['agente_entrega']['fornecedor']}<br>
-                                        • Origem: Base {rota['agente_entrega']['base_origem']}<br>
-                                        • Destino: {rota['agente_entrega']['destino']}<br>
-                                        • Custo: R$ {rota['agente_entrega']['custo']:,.2f}<br>
-                                        • Valor Mínimo: R$ {rota['agente_entrega']['valor_minimo']:,.2f}<br>
-                                        • Excedente: R$ {rota['agente_entrega']['excedente']:,.2f}/kg
-                                    </div>
-                                </div>
-                                
-                                <div style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 5px;">
-                                    <strong>📊 Resumo da Rota</strong><br>
-                                    • Peso Real: {rota['peso_real']:.1f} kg<br>
-                                    • Peso Cubado: {rota['peso_cubado']:.1f} kg<br>
-                                    • Peso Usado: {rota['maior_peso']:.1f} kg ({rota['peso_usado']})<br>
-                                    • <strong>Custo Total: R$ {rota['total']:,.2f}</strong><br>
-                                    • Prazo Total: {rota['prazo_total']} dias úteis
                                 </div>
                             </div>
                 """
@@ -2096,8 +1976,7 @@ def formatar_resultado_fracionado(resultado):
             <div style="margin-top: 10px; font-size: 0.85rem; color: #666; text-align: center;">
                 <strong>Legenda:</strong> 
                 🥇 Melhor preço | 🥈 2º melhor | 🥉 3º melhor | 
-                🚛 Frete Direto | 🚚 Com Agentes |
-                📋 Clique em "Ver Detalhes" para informações completas
+                🚛 Dados reais da planilha Base_Unificada.xlsx
             </div>
         </div>
         """
@@ -2127,30 +2006,16 @@ def formatar_resultado_fracionado(resultado):
     </script>
     """
     
-    # Resumo estatístico com informações de qualidade
-    total_opcoes = resultado.get('total_opcoes', 0)
-    total_agentes = len(rotas_agentes.get('rotas', [])) if rotas_agentes else 0
-    total_geral = total_opcoes + total_agentes
-    fornecedores_count = resultado.get('fornecedores_count', 0)
+    # Resumo final apenas com dados reais
+    total_opcoes = len(ranking_completo)
     
-    if total_geral > 0:
-        # Preparar valores para evitar erro de formato
-        melhor_fornecedor = todas_opcoes[0]['fornecedor'] if todas_opcoes else 'N/A'
-        melhor_valor = f"R$ {todas_opcoes[0]['total']:,.2f}" if todas_opcoes else "R$ 0,00"
-        
+    if total_opcoes > 0:        
         html += f"""
         <div class="analise-container">
             <div class="analise-title">📈 Resumo da Consulta</div>
-            <div class="analise-item"><strong>🚛 Opções Diretas:</strong> {total_opcoes}</div>
-            <div class="analise-item"><strong>🚚 Rotas com Agentes:</strong> {total_agentes}</div>
-            <div class="analise-item"><strong>📊 Total de Opções:</strong> <span style="color: #27ae60; font-weight: bold;">{total_geral}</span></div>
-            <div class="analise-item"><strong>🏢 Fornecedores:</strong> {fornecedores_count}</div>
-            <div class="analise-item"><strong>📍 Rota:</strong> {resultado.get('origem', 'N/A')}/{resultado.get('uf_origem', 'N/A')} → {resultado.get('destino', 'N/A')}/{resultado.get('uf_destino', 'N/A')}</div>
-            <div class="analise-item"><strong>⚖️ Carga:</strong> {resultado.get('peso', 0)}kg (Cubado: {resultado.get('peso_cubado', 0):.2f}kg)</div>
-            <div class="analise-item"><strong>🏆 Melhor Opção Geral:</strong> 
-                <span style="color: #0a6ed1; font-weight: bold;">
-                    {melhor_fornecedor} - {melhor_valor}
-                </span>
+            <div class="analise-item"><strong>📊 Total de Fornecedores:</strong> <span style="color: #27ae60; font-weight: bold;">{total_opcoes}</span></div>
+            <div class="analise-item"><strong>💰 Melhor Opção:</strong> {ranking_completo[0].get('modalidade', 'N/A')} - R$ {ranking_completo[0].get('total', 0):,.2f}</div>
+            <div class="analise-item"><strong>📊 Fonte dos Dados:</strong> <span style="color: #27ae60;">Base_Unificada.xlsx (dados reais)</span></div>
             </div>
         </div>
         """
@@ -2426,27 +2291,11 @@ def processar_dados_planilha(df_base, origem, uf_origem, destino, uf_destino, pe
                     any(palavra in destino_planilha_limpo for palavra in destino_limpo.split() if len(palavra) > 3)
                 )
                 
-                # REJEITAR se não houver compatibilidade REAL (salvo exceções)
-                # Forçar aceitação de Concept para SP->RJ se nomes baterem parcialmente
-                if fornecedor == 'Concept':
-                    if ('SAOPAULO' in origem_limpa and 'RIODEJANEIRO' in destino_limpo) or ('SAOPAULO' in origem_planilha_limpa and 'RIODEJANEIRO' in destino_planilha_limpo):
-                        origem_compativel = True
-                        destino_compativel = True
-                
+                # REJEITAR se não houver compatibilidade REAL - SEM EXCEÇÕES
                 if not (origem_compativel and destino_compativel):
-                    # Debug especial para Concept
-                    if fornecedor == 'Concept':
-                        print(f"[CONCEPT] ❌ REJEITADO: Rota incompatível")
-                        print(f"[CONCEPT] Consulta: '{origem}' -> '{destino}'")
-                        print(f"[CONCEPT] Planilha: '{origem_planilha}' -> '{destino_planilha}'")
-                        print(f"[CONCEPT] Normalizado consulta: '{origem_limpa}' -> '{destino_limpo}'")
-                        print(f"[CONCEPT] Normalizado planilha: '{origem_planilha_limpa}' -> '{destino_planilha_limpo}'")
-                        print(f"[CONCEPT] Origem compatível: {origem_compativel}")
-                        print(f"[CONCEPT] Destino compatível: {destino_compativel}")
-                    else:
-                        print(f"[PLANILHA] ❌ REJEITADO {fornecedor}: Rota incompatível")
-                        print(f"[DEBUG] Consulta: {origem_norm} -> {destino_norm}")
-                        print(f"[DEBUG] Planilha: {origem_planilha_norm} -> {destino_planilha_norm}")
+                    print(f"[PLANILHA] ❌ REJEITADO {fornecedor}: Rota incompatível")
+                    print(f"[DEBUG] Consulta: {origem_norm} -> {destino_norm}")
+                    print(f"[DEBUG] Planilha: {origem_planilha_norm} -> {destino_planilha_norm}")
                     continue
                 
                 # Evitar duplicatas do mesmo fornecedor
@@ -2680,7 +2529,7 @@ def calcular_eficiencia_fornecedor(fornecedor):
     """
     eficiencias = {
         'Jem/Dfl': 0.95,
-        'Concept': 0.93,  # Adicionado Concept
+
         'Braspress': 0.90,
         'Sequoia': 0.92,
         'Jamef': 0.88,
@@ -2944,7 +2793,7 @@ def calcular_frete_base_unificada_simulado_original(origem, uf_origem, destino, 
     # Dados simulados para fallback
     fornecedores_simulados = [
         {'modalidade': 'Jem/Dfl_SIM', 'agente': 'APS_SIM', 'multiplicador_base': 1.0, 'eficiencia': 0.95},
-        {'modalidade': 'Concept_SIM', 'agente': 'CWB_SIM', 'multiplicador_base': 0.94, 'eficiencia': 0.93},  # Adicionado Concept
+
         {'modalidade': 'Braspress_SIM', 'agente': 'SPO_SIM', 'multiplicador_base': 1.15, 'eficiencia': 0.90},
         {'modalidade': 'Sequoia_SIM', 'agente': 'CWB_SIM', 'multiplicador_base': 1.08, 'eficiencia': 0.92},
         {'modalidade': 'Direct_SIM', 'agente': 'POA_SIM', 'multiplicador_base': 0.96, 'eficiencia': 0.89},  # Adicionado Direct
