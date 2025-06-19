@@ -3074,6 +3074,101 @@ def debug_capacidades():
         </html>
         """
 
+def carregar_base_unificada():
+    """
+    Carrega a base unificada com dados de frete fracionado.
+    """
+    if not BASE_UNIFICADA_FILE or not os.path.exists(BASE_UNIFICADA_FILE):
+        print("Base_Unificada.xlsx não encontrada")
+        return None
+    
+    try:
+        df_base = pd.read_excel(BASE_UNIFICADA_FILE)
+        
+        # Debug: Verificar colunas carregadas
+        print(f"Base Unificada carregada com {len(df_base)} registros")
+        print(f"Colunas encontradas: {df_base.columns.tolist()}")
+        
+        # Verificar se as colunas esperadas existem
+        colunas_esperadas = ['Fornecedor', 'Base Origem', 'Origem', 'Base Destino', 'Destino']
+        colunas_faltando = [col for col in colunas_esperadas if col not in df_base.columns]
+        
+        if colunas_faltando:
+            print(f"ERRO: Colunas faltando: {colunas_faltando}")
+            print(f"Colunas disponíveis: {df_base.columns.tolist()}")
+            return None
+        
+        # Limpar dados nulos nas colunas principais
+        df_base = df_base.dropna(subset=['Fornecedor', 'Origem', 'Destino'])
+        
+        print(f"Base processada com {len(df_base)} registros válidos")
+        return df_base
+        
+    except Exception as e:
+        print(f"Erro ao carregar Base_Unificada.xlsx: {e}")
+        return None
+
+def carregar_base_agentes():
+    """
+    Carrega a base de agentes com cache para evitar leitura repetida do arquivo
+    """
+    global _BASE_AGENTES_CACHE, _ULTIMO_CARREGAMENTO
+    
+    agora = time.time()
+    
+    # Se o cache ainda é válido, retorna os dados em cache
+    if _BASE_AGENTES_CACHE is not None and (agora - _ULTIMO_CARREGAMENTO) < _CACHE_VALIDADE:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print("[AGENTES] Retornando dados do cache")
+        return _BASE_AGENTES_CACHE
+    
+    if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+        print("[AGENTES] Carregando base de agentes...")
+    
+    # Se não, carrega os dados
+    df_base = carregar_base_completa()
+    if df_base is None:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print("[AGENTES] Erro: Não foi possível carregar a base completa")
+        return None
+    
+    # Verifica se as colunas necessárias existem
+    colunas_necessarias = ['Tipo', 'Origem']
+    colunas_faltando = [col for col in colunas_necessarias if col not in df_base.columns]
+    
+    if colunas_faltando:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print(f"[AGENTES] Erro: Colunas faltando na base: {', '.join(colunas_faltando)}")
+            print(f"[AGENTES] Colunas disponíveis: {', '.join(df_base.columns)}")
+        return None
+    
+    # Processa os dados uma única vez
+    try:
+        df_agentes = df_base[df_base['Tipo'] == 'Agente'].copy()
+        df_transferencias = df_base[df_base['Tipo'] == 'Transferência'].copy()
+        
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print(f"[AGENTES] {len(df_agentes)} agentes e {len(df_transferencias)} transferências carregados")
+        
+        # Pré-processa os dados para melhor performance
+        df_agentes['Origem_Normalizada'] = df_agentes['Origem'].apply(normalizar_cidade)
+        
+        # Atualiza o cache
+        _BASE_AGENTES_CACHE = (df_agentes, df_transferencias)
+        _ULTIMO_CARREGAMENTO = agora
+        
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print("[AGENTES] Base de agentes carregada com sucesso")
+            
+        return _BASE_AGENTES_CACHE
+        
+    except Exception as e:
+        if os.getenv('DEBUG_AGENTES', 'false').lower() == 'true':
+            print(f"[AGENTES] Erro ao processar base de agentes: {str(e)}")
+        return None
+    
+    return _BASE_AGENTES_CACHE
+
 if __name__ == "__main__":
     # Usar configurações de ambiente para produção
     debug_mode = os.getenv("DEBUG", "False").lower() == "true"
