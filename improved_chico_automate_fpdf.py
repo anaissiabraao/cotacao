@@ -3806,7 +3806,19 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             'GYN': 'Goiânia',            # Para cidades de GO - NOVA BASE
             'SSA': 'Salvador',           # Para cidades da BA
             'FOR': 'Fortaleza',          # Para cidades do CE
-            'REC': 'Recife'              # Para cidades de PE
+            'REC': 'Recife',             # Para cidades de PE
+            'NAT': 'Natal',              # Para cidades do RN
+            'JPA': 'João Pessoa',        # Para cidades da PB
+            'MCZ': 'Maceió',             # Para cidades de AL
+            'AJU': 'Aracaju',            # Para cidades de SE
+            'SLZ': 'São Luís',           # Para cidades do MA
+            'THE': 'Teresina',           # Para cidades do PI
+            'CGB': 'Cuiabá',             # Para cidades de MT
+            'CGR': 'Campo Grande',       # Para cidades de MS
+            'VIX': 'Vitória',            # Para cidades do ES
+            'MAO': 'Manaus',             # Para cidades do AM
+            'MAB': 'Marabá',             # Para cidades do PA
+            'PMW': 'Palmas'              # Para cidades do TO
         }
         
         # Determinar base de origem baseada na UF de origem ou filtro especificado
@@ -3826,14 +3838,26 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             else:
                 mapa_uf_base = {
                     'RJ': 'RIO',
-                    'MG': 'MII',     # Minas Gerais usa MII na planilha
+                    'MG': 'BHZ',     # Minas Gerais usa BHZ (Belo Horizonte) - CORRIGIDO  
                     'RS': 'POA',
                     'PR': 'CWB',
                     'DF': 'BSB',
-                    'GO': 'GYN',     # Goiás usa GYN - CORRIGIDO
+                    'GO': 'GYN',     # Goiás usa GYN (Goiânia) - CORRIGIDO
                     'BA': 'SSA',
                     'CE': 'FOR',
-                    'PE': 'REC'
+                    'PE': 'REC',
+                    'RN': 'NAT',     # Rio Grande do Norte
+                    'PB': 'JPA',     # Paraíba
+                    'AL': 'MCZ',     # Alagoas
+                    'SE': 'AJU',     # Sergipe
+                    'MA': 'SLZ',     # Maranhão
+                    'PI': 'THE',     # Piauí
+                    'MT': 'CGB',     # Mato Grosso
+                    'MS': 'CGR',     # Mato Grosso do Sul
+                    'ES': 'VIX',     # Espírito Santo
+                    'AM': 'MAO',     # Amazonas
+                    'PA': 'MAB',     # Pará
+                    'TO': 'PMW'      # Tocantins
                 }
                 base_origem = mapa_uf_base.get(uf_origem, 'FILIAL')  # Default para FILIAL
         
@@ -3850,14 +3874,26 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         else:
             mapa_uf_base = {
                 'RJ': 'RIO',
-                'MG': 'MII',     # Minas Gerais usa MII na planilha
+                'MG': 'BHZ',     # Minas Gerais usa BHZ (Belo Horizonte) - CORRIGIDO
                 'RS': 'POA',
                 'PR': 'CWB',
                 'DF': 'BSB',
-                'GO': 'GYN',     # Goiás usa GYN - CORRIGIDO
+                'GO': 'GYN',     # Goiás usa GYN (Goiânia) - CORRIGIDO
                 'BA': 'SSA',
                 'CE': 'FOR',
-                'PE': 'REC'
+                'PE': 'REC',
+                'RN': 'NAT',     # Rio Grande do Norte
+                'PB': 'JPA',     # Paraíba
+                'AL': 'MCZ',     # Alagoas
+                'SE': 'AJU',     # Sergipe
+                'MA': 'SLZ',     # Maranhão
+                'PI': 'THE',     # Piauí
+                'MT': 'CGB',     # Mato Grosso
+                'MS': 'CGR',     # Mato Grosso do Sul
+                'ES': 'VIX',     # Espírito Santo
+                'AM': 'MAO',     # Amazonas
+                'PA': 'MAB',     # Pará
+                'TO': 'PMW'      # Tocantins
             }
             base_destino = mapa_uf_base.get(uf_destino, 'RIO')  # Default para RIO
         
