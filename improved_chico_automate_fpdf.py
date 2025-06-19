@@ -1753,6 +1753,10 @@ def formatar_resultado_fracionado(resultado):
     melhor_opcao = resultado.get('melhor_opcao', {})
     dados_fonte = resultado.get('dados_fonte', 'Rotas com Agentes')
     
+    # Definir variáveis necessárias para rotas com agentes
+    criterios_qualidade = resultado.get('criterios_qualidade', 'APENAS rotas com agentes reais')
+    cotacoes_rejeitadas = resultado.get('cotacoes_rejeitadas', 0)
+    
     html = f"""
     <div class="success">
         <h3><i class="fa-solid fa-check-circle"></i> Cotação com Agentes Calculada - {resultado.get('id_historico', 'N/A')}</h3>
