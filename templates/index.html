@@ -627,7 +627,7 @@
     </header>
 
     <div class="tabs">
-        <button class="tab-btn active" onclick="openTab(event, 'fracionado')" aria-controls="fracionado">Frete Fracionado</button>
+                        <button class="tab-btn active" onclick="openTab(event, 'fracionado')" aria-controls="fracionado">Agentes (Collection + Transfer + Delivery)</button>
         <button class="tab-btn" onclick="openTab(event, 'dedicado')" aria-controls="dedicado">Frete Dedicado</button>
         <button class="tab-btn" onclick="openTab(event, 'aereo')" aria-controls="aereo">Frete Aéreo</button>
         <button class="tab-btn" onclick="openTab(event, 'historico')" aria-controls="historico">Histórico</button>
@@ -635,7 +635,7 @@
     </div>
     <div id="fracionado" class="tab-content active">
         <div class="card">
-            <h2><i class="fa-solid fa-box"></i> Cotação de Frete Fracionado</h2>
+                            <h2><i class="fa-solid fa-box"></i> Cotação com Agentes (Collection + Transfer + Delivery)</h2>
             <form id="form-fracionado">
                 <div class="form-grid">
                     <div class="form-group">
@@ -736,7 +736,7 @@
                         </select>
                     </div>
                 </div>
-                <button type="submit" class="btn-primary">Calcular Frete Fracionado</button>
+                <button type="submit" class="btn-primary">Calcular Rota com Agentes</button>
                 <div id="loading-fracionado" class="loading-spinner"></div>
             </form>
             <div id="fracionado-resultado"></div>

@@ -1121,27 +1121,25 @@ def calcular_frete_fracionado():
         peso_real = float(peso)
         peso_cubado = float(cubagem) * 166  # Usando 166kg/m³ conforme regra da ANTT
 
-        # USAR APENAS A BASE_UNIFICADA.XLSX - SEM SIMULAÇÕES
-        cotacoes_base = calcular_frete_base_unificada(
-            cidade_origem, uf_origem, 
-            cidade_destino, uf_destino, 
+        # USAR APENAS ROTAS COM AGENTES - SEM FRETES DIRETOS
+        rotas_agentes = calcular_frete_com_agentes(
+            cidade_origem, uf_origem,
+            cidade_destino, uf_destino,
             peso, valor_nf, cubagem
         )
 
-        if not cotacoes_base or cotacoes_base.get('total_opcoes', 0) == 0:
+        if not rotas_agentes or rotas_agentes.get('total_opcoes', 0) == 0:
             return jsonify({
-                "error": "Nenhuma cotação real encontrada na planilha para esta rota. Verifique se existe dados para origem/destino na Base_Unificada.xlsx"
+                "error": "Nenhuma rota com agentes encontrada para esta origem/destino. Sistema trabalha apenas com Agent Collection + Transfer + Agent Delivery."
             })
 
-        # Pegar cotações ranking da planilha
-        cotacoes_ranking = cotacoes_base.get('cotacoes_ranking', [])
+        # Pegar rotas com agentes
+        cotacoes_ranking = rotas_agentes.get('rotas', [])
         
         if not cotacoes_ranking:
             return jsonify({
-                "error": "Nenhuma cotação válida encontrada na Base_Unificada.xlsx"
+                "error": "Nenhuma rota válida com agentes encontrada"
             })
-
-        # REMOVIDO: Cálculo de rotas com agentes para usar apenas dados reais da planilha
 
         # Melhor opção (menor custo)
         melhor_opcao = cotacoes_ranking[0] if cotacoes_ranking else {}
@@ -1152,9 +1150,9 @@ def calcular_frete_fracionado():
         # ID do histórico
         id_historico = f"Fra{CONTADOR_FRACIONADO:03d}"
 
-        # Identificar qual peso foi usado na melhor opção (sempre o maior)
+        # Identificar qual peso foi usado na melhor opção (rotas com agentes)
         maior_peso_usado = melhor_opcao.get('maior_peso', max(peso_real, peso_cubado))
-        peso_usado_tipo = melhor_opcao.get('peso_usado_tipo', 'Real' if maior_peso_usado == peso_real else 'Cubado')
+        peso_usado_tipo = melhor_opcao.get('peso_usado', 'Real' if maior_peso_usado == peso_real else 'Cubado')
 
         # Criar resultado final apenas com dados REAIS
         resultado_final = {
@@ -1172,37 +1170,39 @@ def calcular_frete_fracionado():
             "valor_nf": valor_nf,
             "tipo_calculo": "Fracionado",
             
-            # Informações do ranking REAL - SEM SIMULAÇÕES
+            # Informações do ranking COM AGENTES - SEM FRETES DIRETOS
             "cotacoes_ranking": cotacoes_ranking,  
             "ranking_completo": cotacoes_ranking,  
-            "fornecedores_disponiveis": list(set(c['modalidade'] for c in cotacoes_ranking)),
-            "total_opcoes": cotacoes_base['total_opcoes'],
-            "fornecedores_count": cotacoes_base['fornecedores_count'],
+            "fornecedores_disponiveis": list(set(c.get('resumo', 'N/A') for c in cotacoes_ranking)),
+            "total_opcoes": rotas_agentes['total_opcoes'],
+            "fornecedores_count": len(set(c.get('resumo', 'N/A') for c in cotacoes_ranking)),
             "cotacoes_rejeitadas": 0,  # Sem simulações, sem rejeições
-            "criterios_qualidade": "APENAS dados reais da planilha Base_Unificada.xlsx",
+            "criterios_qualidade": "APENAS rotas com agentes: Agent Collection + Transfer + Agent Delivery",
             
-            # REMOVIDO: Sem rotas com agentes - apenas dados reais
+            # Dados de rotas com agentes
+            "rotas_agentes": rotas_agentes,
+            "tem_rotas_agentes": True,
             
-            # Melhor opção
-            "fornecedor": melhor_opcao.get('modalidade', 'N/A'),
-            "agente": melhor_opcao.get('agente', 'N/A'),
-            "base_origem": melhor_opcao.get('origem', cidade_origem),
-            "base_destino": melhor_opcao.get('destino', cidade_destino),
-            "valor_base": melhor_opcao.get('valor_base', 0),
-            "pedagio": melhor_opcao.get('pedagio', 0),
-            "gris": melhor_opcao.get('gris', 0),
+            # Melhor opção (rota com agentes)
+            "fornecedor": melhor_opcao.get('resumo', 'N/A'),
+            "agente": melhor_opcao.get('agente_coleta', {}).get('fornecedor', 'N/A'),
+            "base_origem": melhor_opcao.get('agente_coleta', {}).get('origem', cidade_origem),
+            "base_destino": melhor_opcao.get('agente_entrega', {}).get('destino', cidade_destino),
+            "valor_base": melhor_opcao.get('total', 0),
+            "pedagio": melhor_opcao.get('transferencia', {}).get('pedagio', 0),
+            "gris": melhor_opcao.get('transferencia', {}).get('gris', 0),
             "custo_total": melhor_opcao.get('total', 0),
-            "prazo_total": melhor_opcao.get('prazo', 1),
+            "prazo_total": melhor_opcao.get('prazo_total', 1),
             "observacoes": melhor_opcao.get('observacoes', ''),
             
             # Fonte dos dados
-            "dados_fonte": cotacoes_base.get('dados_fonte', 'Base_Unificada.xlsx'),
-            "estrategia_busca": "PLANILHA_REAL_APENAS",
+            "dados_fonte": "Rotas com Agentes: Collection + Transfer + Delivery",
+            "estrategia_busca": "AGENTES_REAL_APENAS",
             "cidades_origem": [cidade_origem],
             "cidades_destino": [cidade_destino],
             "rota_pontos": [],
             "distancia": 0,
-            "detalhamento": f"Busca APENAS na planilha real - {len(cotacoes_ranking)} opções encontradas"
+            "detalhamento": f"Busca APENAS rotas com agentes reais - {len(cotacoes_ranking)} opções encontradas"
         }
 
         # Sem mapa na aba fracionado - dados vêm da planilha
@@ -1213,12 +1213,12 @@ def calcular_frete_fracionado():
         resultado_final["html"] = formatar_resultado_fracionado({
             'melhor_opcao': melhor_opcao,
             'cotacoes_ranking': cotacoes_ranking,
-            'total_opcoes': cotacoes_base['total_opcoes'],
-            'fornecedores_count': cotacoes_base['fornecedores_count'],
-            'dados_fonte': cotacoes_base.get('dados_fonte', 'Base_Unificada.xlsx'),
+            'total_opcoes': rotas_agentes['total_opcoes'],
+            'fornecedores_count': len(set(c.get('resumo', 'N/A') for c in cotacoes_ranking)),
+            'dados_fonte': 'Rotas com Agentes: Collection + Transfer + Delivery',
             'id_historico': id_historico,
             'cotacoes_rejeitadas': 0,
-            'criterios_qualidade': 'Dados reais da planilha',
+            'criterios_qualidade': 'Rotas com agentes reais',
             # Passar TODOS os dados necessários
             'origem': cidade_origem,
             'uf_origem': uf_origem,
@@ -1228,8 +1228,9 @@ def calcular_frete_fracionado():
             'peso_cubado': peso_cubado,
             'cubagem': cubagem,
             'valor_nf': valor_nf,
-            'estrategia_busca': "PLANILHA_REAL_APENAS"
-            # REMOVIDO: Sem rotas com agentes
+            'estrategia_busca': "AGENTES_REAL_APENAS",
+            # Dados de rotas com agentes
+            'rotas_agentes': rotas_agentes
         })
 
         # Salvar no histórico
@@ -1243,7 +1244,7 @@ def calcular_frete_fracionado():
             "origem": f"{cidade_origem}/{uf_origem}",
             "destino": f"{cidade_destino}/{uf_destino}",
             "peso": peso,
-            "melhor_opcao": melhor_opcao.get('modalidade', 'N/A'),
+            "melhor_opcao": melhor_opcao.get('resumo', 'N/A'),
             "custo": melhor_opcao.get('total', 0),
             "resultado_completo": resultado_final
         })
@@ -1747,40 +1748,28 @@ def historico_detalhe(id_historico):
 
 def formatar_resultado_fracionado(resultado):
     """
-    Gera HTML formatado para exibir resultado do frete fracionado APENAS com dados REAIS da planilha
+    Gera HTML formatado para exibir resultado do frete fracionado APENAS com ROTAS DE AGENTES REAIS
     """
     melhor_opcao = resultado.get('melhor_opcao', {})
-    dados_fonte = resultado.get('dados_fonte', 'N/A')
-    
-    # Verificar se há informações de qualidade
-    cotacoes_rejeitadas = resultado.get('cotacoes_rejeitadas', 0)
-    criterios_qualidade = resultado.get('criterios_qualidade', 'N/A')
+    dados_fonte = resultado.get('dados_fonte', 'Rotas com Agentes')
     
     html = f"""
     <div class="success">
-        <h3><i class="fa-solid fa-check-circle"></i> Cotação FILTRADA Calculada - {resultado.get('id_historico', 'N/A')}</h3>
+        <h3><i class="fa-solid fa-check-circle"></i> Cotação com Agentes Calculada - {resultado.get('id_historico', 'N/A')}</h3>
         
         <div class="analise-container">
-            <div class="analise-title">🏆 Melhor Opção (Dados Filtrados)</div>
-            <div class="analise-item"><strong>Fornecedor:</strong> {melhor_opcao.get('modalidade', 'N/A')}</div>
-            <div class="analise-item"><strong>Agente:</strong> {melhor_opcao.get('agente', 'N/A')}</div>
-            <div class="analise-item"><strong>Fonte:</strong> 
-                {'<a href="' + melhor_opcao.get('url_fonte', '#') + '" target="_blank" style="color: #0066cc; text-decoration: none;">' if melhor_opcao.get('url_fonte') and melhor_opcao.get('url_fonte') != '#' else ''}{melhor_opcao.get('fonte', 'N/A')}{'</a>' if melhor_opcao.get('url_fonte') and melhor_opcao.get('url_fonte') != '#' else ''}
-            </div>
-            <div class="analise-item"><strong>Dados Completos:</strong> 
-                <span style="color: #27ae60; font-weight: bold;">
-                    ✅ {'Sim' if melhor_opcao.get('dados_completos', False) else 'Parciais'}
-                </span>
-            </div>
+            <div class="analise-title">🏆 Melhor Rota com Agentes</div>
+            <div class="analise-item"><strong>Rota:</strong> {melhor_opcao.get('resumo', 'N/A')}</div>
+            <div class="analise-item"><strong>Fonte:</strong> {dados_fonte}</div>
             <div class="analise-item" style="font-size: 1.3rem; font-weight: bold; color: #0a6ed1; background: #e8f4fd; padding: 12px; border-radius: 8px; text-align: center;">
                 💰 <strong>CUSTO TOTAL: R$ {melhor_opcao.get('total', 0):,.2f}</strong>
             </div>
             <div class="analise-item" style="font-size: 1.1rem; font-weight: bold; text-align: center;">
-                ⏱️ <strong>Prazo: {melhor_opcao.get('prazo', 'N/A')} dias úteis</strong>
+                ⏱️ <strong>Prazo: {melhor_opcao.get('prazo_total', 'N/A')} dias úteis</strong>
             </div>
             <div class="analise-item" style="text-align: center; margin-top: 10px;">
                 <button class="btn-primary" onclick="toggleDetails('detalhes_melhor_opcao')" style="font-size: 0.9rem;">
-                    📋 Ver Detalhes e Fórmulas de Cálculo
+                    📋 Ver Detalhes da Rota com Agentes
                 </button>
             </div>
         </div>
