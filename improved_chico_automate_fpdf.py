@@ -1935,7 +1935,7 @@ def formatar_resultado_fracionado(resultado):
                         <td colspan="6" style="background-color: #f8f9fa; padding: 15px;">
             """
             
-            # Detalhes da rota com agentes
+            # Detalhes da rota com agentes com botões individuais
             html += f"""
                             <div style="font-size: 0.85rem;">
                                 <strong>📍 Detalhamento da Rota com Agentes</strong><br><br>
@@ -1945,22 +1945,72 @@ def formatar_resultado_fracionado(resultado):
                                         <strong>1️⃣ Coleta</strong><br>
                                         • {rota.get('agente_coleta', {}).get('fornecedor', 'N/A')}<br>
                                         • {rota.get('agente_coleta', {}).get('origem', 'N/A')} → Base {rota.get('agente_coleta', {}).get('base_destino', 'N/A')}<br>
-                                        • <strong>R$ {rota.get('agente_coleta', {}).get('custo', 0):,.2f}</strong>
+                                        • <strong>R$ {rota.get('agente_coleta', {}).get('custo', 0):,.2f}</strong><br>
+                                        <button class="btn-sm" onclick="toggleDetails('coleta_detalhes_{i}')" style="font-size: 0.75rem; margin-top: 5px; background: #2196F3; color: white; border: none; padding: 3px 8px; border-radius: 3px; cursor: pointer;">
+                                            🔍 Ver Detalhes
+                                        </button>
                                     </div>
                                     
                                     <div style="background: #fff3e0; padding: 10px; border-radius: 5px;">
                                         <strong>2️⃣ Transferência</strong><br>
                                         • {rota.get('transferencia', {}).get('fornecedor', 'N/A')}<br>
                                         • {rota.get('transferencia', {}).get('origem', 'N/A')} → {rota.get('transferencia', {}).get('destino', 'N/A')}<br>
-                                        • <strong>R$ {rota.get('transferencia', {}).get('custo', 0):,.2f}</strong>
+                                        • <strong>R$ {rota.get('transferencia', {}).get('custo', 0):,.2f}</strong><br>
+                                        <button class="btn-sm" onclick="toggleDetails('transferencia_detalhes_{i}')" style="font-size: 0.75rem; margin-top: 5px; background: #FF9800; color: white; border: none; padding: 3px 8px; border-radius: 3px; cursor: pointer;">
+                                            🔍 Ver Detalhes
+                                        </button>
                                     </div>
                                     
                                     <div style="background: #e8f5e9; padding: 10px; border-radius: 5px;">
                                         <strong>3️⃣ Entrega</strong><br>
                                         • {rota.get('agente_entrega', {}).get('fornecedor', 'N/A')}<br>
                                         • Base {rota.get('agente_entrega', {}).get('base_origem', 'N/A')} → {rota.get('agente_entrega', {}).get('destino', 'N/A')}<br>
-                                        • <strong>R$ {rota.get('agente_entrega', {}).get('custo', 0):,.2f}</strong>
+                                        • <strong>R$ {rota.get('agente_entrega', {}).get('custo', 0):,.2f}</strong><br>
+                                        <button class="btn-sm" onclick="toggleDetails('entrega_detalhes_{i}')" style="font-size: 0.75rem; margin-top: 5px; background: #4CAF50; color: white; border: none; padding: 3px 8px; border-radius: 3px; cursor: pointer;">
+                                            🔍 Ver Detalhes
+                                        </button>
                                     </div>
+                                </div>
+                                
+                                <!-- Detalhes expandidos para cada etapa -->
+                                <div id="coleta_detalhes_{i}" style="display: none; margin-top: 15px; padding: 10px; background: #f0f8ff; border-radius: 5px; border-left: 4px solid #2196F3;">
+                                    <strong>📋 Detalhes da Coleta</strong><br>
+                                    <small>
+                                        • <strong>Fornecedor:</strong> {rota.get('agente_coleta', {}).get('fornecedor', 'N/A')}<br>
+                                        • <strong>Origem:</strong> {rota.get('agente_coleta', {}).get('origem', 'N/A')}<br>
+                                        • <strong>Base de Destino:</strong> {rota.get('agente_coleta', {}).get('base_destino', 'N/A')}<br>
+                                        • <strong>Peso Utilizado:</strong> {rota.get('maior_peso', 0):.1f} kg ({rota.get('peso_usado', 'N/A')})<br>
+                                        • <strong>Valor Mínimo:</strong> R$ {rota.get('agente_coleta', {}).get('valor_minimo', 0):,.2f}<br>
+                                        • <strong>Excedente:</strong> R$ {rota.get('agente_coleta', {}).get('excedente', 0):,.2f}<br>
+                                        • <strong>Custo Total:</strong> R$ {rota.get('agente_coleta', {}).get('custo', 0):,.2f}
+                                    </small>
+                                </div>
+                                
+                                <div id="transferencia_detalhes_{i}" style="display: none; margin-top: 15px; padding: 10px; background: #fffef0; border-radius: 5px; border-left: 4px solid #FF9800;">
+                                    <strong>📋 Detalhes da Transferência</strong><br>
+                                    <small>
+                                        • <strong>Fornecedor:</strong> {rota.get('transferencia', {}).get('fornecedor', 'N/A')}<br>
+                                        • <strong>Base Origem:</strong> {rota.get('transferencia', {}).get('origem', 'N/A')}<br>
+                                        • <strong>Base Destino:</strong> {rota.get('transferencia', {}).get('destino', 'N/A')}<br>
+                                        • <strong>Peso Utilizado:</strong> {rota.get('maior_peso', 0):.1f} kg ({rota.get('peso_usado', 'N/A')})<br>
+                                        • <strong>Frete Base:</strong> R$ {rota.get('transferencia', {}).get('frete', 0):,.2f}<br>
+                                        • <strong>Pedágio:</strong> R$ {rota.get('transferencia', {}).get('pedagio', 0):,.2f}<br>
+                                        • <strong>GRIS:</strong> R$ {rota.get('transferencia', {}).get('gris', 0):,.2f}<br>
+                                        • <strong>Custo Total:</strong> R$ {rota.get('transferencia', {}).get('custo', 0):,.2f}
+                                    </small>
+                                </div>
+                                
+                                <div id="entrega_detalhes_{i}" style="display: none; margin-top: 15px; padding: 10px; background: #f0fff0; border-radius: 5px; border-left: 4px solid #4CAF50;">
+                                    <strong>📋 Detalhes da Entrega</strong><br>
+                                    <small>
+                                        • <strong>Fornecedor:</strong> {rota.get('agente_entrega', {}).get('fornecedor', 'N/A')}<br>
+                                        • <strong>Base Origem:</strong> {rota.get('agente_entrega', {}).get('base_origem', 'N/A')}<br>
+                                        • <strong>Destino Final:</strong> {rota.get('agente_entrega', {}).get('destino', 'N/A')}<br>
+                                        • <strong>Peso Utilizado:</strong> {rota.get('maior_peso', 0):.1f} kg ({rota.get('peso_usado', 'N/A')})<br>
+                                        • <strong>Valor Mínimo:</strong> R$ {rota.get('agente_entrega', {}).get('valor_minimo', 0):,.2f}<br>
+                                        • <strong>Excedente:</strong> R$ {rota.get('agente_entrega', {}).get('excedente', 0):,.2f}<br>
+                                        • <strong>Custo Total:</strong> R$ {rota.get('agente_entrega', {}).get('custo', 0):,.2f}
+                                    </small>
                                 </div>
                             </div>
                 """
@@ -3744,7 +3794,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         # Definir bases disponíveis (conforme especificado pelo usuário)
         bases_disponiveis = {
-            'FILIAL': 'São Paulo',        # Base real na planilha
+            'FILIAL': 'São Paulo',        # Base real na planilha - SOMENTE São Paulo Capital
+            'RAO': 'Ribeirão Preto',      # Base real na planilha - Ribeirão Preto
             'MII': 'Minas Gerais',       # Base real na planilha  
             'SJK': 'São José dos Campos', # Base real na planilha
             'RIO': 'Rio de Janeiro',      # Base real na planilha
@@ -3763,7 +3814,14 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         else:
             # Mapear UF para base mais próxima usando códigos reais da planilha
             if uf_origem == 'SP':
-                base_origem = 'FILIAL'  # São Paulo usa FILIAL na planilha
+                # São Paulo: FILIAL só atende São Paulo Capital, RAO atende Ribeirão Preto
+                origem_normalizada = normalizar_cidade(origem)
+                if origem_normalizada == 'SAO PAULO':
+                    base_origem = 'FILIAL'  # São Paulo Capital usa FILIAL
+                elif origem_normalizada == 'RIBEIRAO PRETO':
+                    base_origem = 'RAO'     # Ribeirão Preto usa RAO
+                else:
+                    base_origem = 'FILIAL'  # Outras cidades SP usam FILIAL como padrão
             else:
                 mapa_uf_base = {
                     'RJ': 'RIO',
@@ -3779,22 +3837,42 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 base_origem = mapa_uf_base.get(uf_origem, 'FILIAL')  # Default para FILIAL
         
         # Determinar base de destino baseada na UF de destino usando códigos reais
-        mapa_uf_base = {
-            'SP': 'FILIAL',  # São Paulo usa FILIAL na planilha
-            'RJ': 'RIO',
-            'MG': 'MII',     # Minas Gerais usa MII na planilha
-            'RS': 'POA',
-            'PR': 'CWB',
-            'DF': 'BSB',
-            'GO': 'BSB',
-            'BA': 'SSA',
-            'CE': 'FOR',
-            'PE': 'REC'
-        }
-        base_destino = mapa_uf_base.get(uf_destino, 'RIO')  # Default para RIO
+        if uf_destino == 'SP':
+            # São Paulo: FILIAL só atende São Paulo Capital, RAO atende Ribeirão Preto
+            destino_normalizado = normalizar_cidade(destino)
+            if destino_normalizado == 'SAO PAULO':
+                base_destino = 'FILIAL'  # São Paulo Capital usa FILIAL
+            elif destino_normalizado == 'RIBEIRAO PRETO':
+                base_destino = 'RAO'     # Ribeirão Preto usa RAO
+            else:
+                base_destino = 'FILIAL'  # Outras cidades SP usam FILIAL como padrão
+        else:
+            mapa_uf_base = {
+                'RJ': 'RIO',
+                'MG': 'MII',     # Minas Gerais usa MII na planilha
+                'RS': 'POA',
+                'PR': 'CWB',
+                'DF': 'BSB',
+                'GO': 'BSB',
+                'BA': 'SSA',
+                'CE': 'FOR',
+                'PE': 'REC'
+            }
+            base_destino = mapa_uf_base.get(uf_destino, 'RIO')  # Default para RIO
         
         print(f"[AGENTES] Base origem: {base_origem} ({bases_disponiveis.get(base_origem)})")
         print(f"[AGENTES] Base destino: {base_destino} ({bases_disponiveis.get(base_destino)})")
+        
+        # Debug: verificar se RAO e FILIAL estão sendo usados corretamente
+        if base_origem == 'FILIAL':
+            print(f"[AGENTES] ✅ FILIAL sendo usada para origem: {origem} (São Paulo Capital)")
+        elif base_origem == 'RAO':
+            print(f"[AGENTES] ✅ RAO sendo usada para origem: {origem} (Ribeirão Preto)")
+        
+        if base_destino == 'FILIAL':
+            print(f"[AGENTES] ✅ FILIAL sendo usada para destino: {destino} (São Paulo Capital)")
+        elif base_destino == 'RAO':
+            print(f"[AGENTES] ✅ RAO sendo usada para destino: {destino} (Ribeirão Preto)")
         
         rotas_encontradas = []
         
