@@ -3670,7 +3670,7 @@ def carregar_base_completa():
         if debug:
             print(f"[AGENTES] Base carregada com sucesso. Total de registros: {len(df_base)}")
             if len(df_base) > 0:
-                print("[AGENTES] Primeiras colunas:", ", ".join(df_base.columns.tolist()[:10]))
+                print("[AGENTES] Primeiras colunas:", ", ".join([str(col) for col in df_base.columns.tolist()[:10]]))
             else:
                 print("[AGENTES] Aviso: A base está vazia")
         
@@ -3802,7 +3802,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             'POA': 'Porto Alegre',       # Para cidades do RS
             'CWB': 'Curitiba',           # Para cidades do PR
             'BHZ': 'Belo Horizonte',     # Para cidades de MG
-            'BSB': 'Brasília',           # Para cidades do DF/GO
+            'BSB': 'Brasília',           # Para cidades do DF
+            'GYN': 'Goiânia',            # Para cidades de GO - NOVA BASE
             'SSA': 'Salvador',           # Para cidades da BA
             'FOR': 'Fortaleza',          # Para cidades do CE
             'REC': 'Recife'              # Para cidades de PE
@@ -3829,7 +3830,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     'RS': 'POA',
                     'PR': 'CWB',
                     'DF': 'BSB',
-                    'GO': 'BSB',
+                    'GO': 'GYN',     # Goiás usa GYN - CORRIGIDO
                     'BA': 'SSA',
                     'CE': 'FOR',
                     'PE': 'REC'
@@ -3853,7 +3854,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 'RS': 'POA',
                 'PR': 'CWB',
                 'DF': 'BSB',
-                'GO': 'BSB',
+                'GO': 'GYN',     # Goiás usa GYN - CORRIGIDO
                 'BA': 'SSA',
                 'CE': 'FOR',
                 'PE': 'REC'
