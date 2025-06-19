@@ -275,6 +275,258 @@
             background: #545b62;
             transform: translateY(-1px);
         }
+
+        .btn-calculator-avancada {
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            margin-left: 8px;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-calculator-avancada:hover {
+            background: #218838;
+            transform: translateY(-1px);
+        }
+
+        /* Modal da Calculadora Avançada */
+        .calculadora-modal {
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+        }
+
+        .calculadora-content {
+            background-color: #fefefe;
+            margin: 2% auto;
+            padding: 0;
+            border: none;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+        }
+
+        .calculadora-header {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .calculadora-header h3 {
+            margin: 0;
+            font-size: 1.3rem;
+        }
+
+        .close-calculadora {
+            color: white;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+            opacity: 0.8;
+            transition: all 0.2s ease;
+        }
+
+        .close-calculadora:hover {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        .calculadora-body {
+            padding: 25px;
+        }
+
+        .volumes-container {
+            border: 2px dashed #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            background: #f8f9fa;
+        }
+
+        .volumes-container h4 {
+            margin: 0 0 15px 0;
+            color: #495057;
+        }
+
+        .sku-item {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: white;
+            position: relative;
+        }
+
+        .sku-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .sku-title {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .btn-remove-sku {
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-remove-sku:hover {
+            background: #c82333;
+        }
+
+        .sku-fields {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .sku-fields .form-group {
+            margin: 0;
+        }
+
+        .sku-fields label {
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+
+        .sku-fields input {
+            padding: 8px;
+            font-size: 0.9rem;
+        }
+
+        .sku-resultado {
+            background: #e8f5e8;
+            border: 1px solid #c3e6cb;
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 0.9rem;
+            color: #155724;
+        }
+
+        .btn-add-sku {
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 15px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 15px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-add-sku:hover {
+            background: #0056b3;
+        }
+
+        .calculadora-resultado {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            background: #fff;
+        }
+
+        .resultado-header {
+            border-bottom: 2px solid #e9ecef;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+        .resultado-header h4 {
+            margin: 0;
+            color: #495057;
+        }
+
+        .resumo-detalhado {
+            line-height: 1.6;
+        }
+
+        .resumo-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f8f9fa;
+        }
+
+        .resumo-item:last-child {
+            border-bottom: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #28a745;
+            border-top: 2px solid #28a745;
+            margin-top: 10px;
+            padding-top: 10px;
+        }
+
+        .calculadora-actions {
+            border-top: 1px solid #dee2e6;
+            padding: 20px 25px;
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+            background: #f8f9fa;
+            border-radius: 0 0 12px 12px;
+        }
+
+        .calculadora-actions .btn-secondary {
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .calculadora-actions .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .calculadora-actions .btn-primary {
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .calculadora-actions .btn-primary:hover {
+            background: #218838;
+        }
         
         .dimensao-input {
             transition: all 0.3s ease;
@@ -419,6 +671,62 @@
 
             .analise-item {
                 font-size: 0.9rem;
+            }
+
+            /* === CALCULADORA AVANÇADA MOBILE === */
+            .calculadora-content {
+                width: 95%;
+                margin: 1% auto;
+                max-height: 95vh;
+            }
+
+            .calculadora-header {
+                padding: 15px;
+            }
+
+            .calculadora-header h3 {
+                font-size: 1.1rem;
+            }
+
+            .calculadora-body {
+                padding: 15px;
+            }
+
+            .sku-fields {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+
+            .sku-fields .form-group {
+                margin-bottom: 8px;
+            }
+
+            .sku-fields input {
+                padding: 10px 8px;
+                font-size: 16px; /* Evita zoom no iOS */
+            }
+
+            .volumes-container {
+                padding: 15px;
+                margin: 15px 0;
+            }
+
+            .sku-item {
+                padding: 12px;
+                margin-bottom: 12px;
+            }
+
+            .calculadora-actions {
+                padding: 15px;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .calculadora-actions .btn-primary,
+            .calculadora-actions .btn-secondary {
+                width: 100%;
+                padding: 12px 20px;
+                font-size: 16px;
             }
         }
 
@@ -673,6 +981,9 @@
                             <button type="button" class="btn-reset-cubagem" onclick="resetarCubagem()" title="Limpar e voltar ao modo automático">
                                 <i class="fa-solid fa-refresh"></i> Reset
                             </button>
+                            <button type="button" class="btn-calculator-avancada" onclick="abrirCalculadoraAvancada()" title="Calculadora Avançada de Volumes">
+                                <i class="fa-solid fa-cubes"></i> Volumes
+                            </button>
                         </small>
                     </div>
                 </div>
@@ -699,6 +1010,55 @@
                                class="dimensao-input" placeholder="Ex: 2.40" onchange="calcularCubagem()" oninput="calcularCubagem()">
                     </div>
                 </div>
+
+                <!-- Calculadora Avançada Modal -->
+                <div id="calculadora-modal" class="calculadora-modal" style="display: none;">
+                    <div class="calculadora-content">
+                        <div class="calculadora-header">
+                            <h3><i class="fa-solid fa-cubes"></i> Calculadora de Volumes Múltiplos</h3>
+                            <span class="close-calculadora" onclick="fecharCalculadoraAvancada()">&times;</span>
+                        </div>
+                        
+                        <div class="calculadora-body">
+                            <div class="form-group">
+                                <label for="total-volumes">Total de Volumes:</label>
+                                <input type="number" id="total-volumes" min="1" value="1" onchange="atualizarListaVolumes()">
+                                <small style="color: #6c757d; margin-top: 4px; display: block;">
+                                    Ex: 100 volumes com 3 medidas diferentes
+                                </small>
+                            </div>
+                            
+                            <div class="volumes-container">
+                                <h4>📦 Configure as medidas por SKU:</h4>
+                                <div id="lista-volumes">
+                                    <!-- Volumes serão gerados dinamicamente -->
+                                </div>
+                                <button type="button" class="btn-add-sku" onclick="adicionarSku()">
+                                    <i class="fa-solid fa-plus"></i> Adicionar SKU
+                                </button>
+                            </div>
+                            
+                            <div class="calculadora-resultado">
+                                <div class="resultado-header">
+                                    <h4>📊 Resumo do Cálculo:</h4>
+                                </div>
+                                <div id="resumo-calculo" class="resumo-detalhado">
+                                    <p>Configure pelo menos um SKU para ver o resumo</p>
+                                </div>
+                            </div>
+                            
+                            <div class="calculadora-actions">
+                                <button type="button" class="btn-secondary" onclick="fecharCalculadoraAvancada()">
+                                    <i class="fa-solid fa-times"></i> Cancelar
+                                </button>
+                                <button type="button" class="btn-primary" onclick="aplicarCubagemCalculada()">
+                                    <i class="fa-solid fa-check"></i> Aplicar Cubagem
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-grid">
                     <div class="form-group">
                         <label for="valor_nf_frac">Valor da NF (R$) - Opcional:</label>
@@ -1044,6 +1404,245 @@
             evt.currentTarget.classList.add("active");
         }
         
+        // ===== CALCULADORA AVANÇADA DE VOLUMES =====
+        
+        // Variáveis globais para a calculadora avançada
+        let skuCounter = 1;
+        let skusData = [];
+        
+        // Função para abrir a calculadora avançada
+        function abrirCalculadoraAvancada() {
+            const modal = document.getElementById('calculadora-modal');
+            modal.style.display = 'block';
+            
+            // Inicializar com um SKU padrão
+            if (skusData.length === 0) {
+                adicionarSku();
+            }
+            
+            // Focar no primeiro campo
+            setTimeout(() => {
+                const firstInput = modal.querySelector('input[type="number"]');
+                if (firstInput) firstInput.focus();
+            }, 100);
+        }
+        
+        // Função para fechar a calculadora avançada
+        function fecharCalculadoraAvancada() {
+            document.getElementById('calculadora-modal').style.display = 'none';
+        }
+        
+        // Fechar modal ao clicar fora
+        window.onclick = function(event) {
+            const modal = document.getElementById('calculadora-modal');
+            if (event.target == modal) {
+                fecharCalculadoraAvancada();
+            }
+        }
+        
+        // Função para adicionar um novo SKU
+        function adicionarSku() {
+            const skuId = `sku-${skuCounter++}`;
+            const skuData = {
+                id: skuId,
+                quantidade: 1,
+                largura: 0,
+                altura: 0,
+                comprimento: 0,
+                cubagem_unitaria: 0,
+                cubagem_total: 0
+            };
+            
+            skusData.push(skuData);
+            
+            const listaVolumes = document.getElementById('lista-volumes');
+            const skuHtml = `
+                <div class="sku-item" id="${skuId}">
+                    <div class="sku-header">
+                        <span class="sku-title">📦 SKU ${skusData.length}</span>
+                        <button type="button" class="btn-remove-sku" onclick="removerSku('${skuId}')">
+                            <i class="fa-solid fa-trash"></i> Remover
+                        </button>
+                    </div>
+                    
+                    <div class="sku-fields">
+                        <div class="form-group">
+                            <label>Quantidade:</label>
+                            <input type="number" min="1" value="1" onchange="atualizarSku('${skuId}', 'quantidade', this.value)">
+                        </div>
+                        <div class="form-group">
+                            <label>Largura (m):</label>
+                            <input type="number" step="0.01" min="0.01" placeholder="1.20" onchange="atualizarSku('${skuId}', 'largura', this.value)">
+                        </div>
+                        <div class="form-group">
+                            <label>Altura (m):</label>
+                            <input type="number" step="0.01" min="0.01" placeholder="0.80" onchange="atualizarSku('${skuId}', 'altura', this.value)">
+                        </div>
+                        <div class="form-group">
+                            <label>Comprimento (m):</label>
+                            <input type="number" step="0.01" min="0.01" placeholder="2.40" onchange="atualizarSku('${skuId}', 'comprimento', this.value)">
+                        </div>
+                    </div>
+                    
+                    <div class="sku-resultado" id="resultado-${skuId}">
+                        <strong>📏 Cubagem unitária:</strong> 0.000 m³ | <strong>📦 Cubagem total:</strong> 0.000 m³
+                    </div>
+                </div>
+            `;
+            
+            listaVolumes.insertAdjacentHTML('beforeend', skuHtml);
+            atualizarResumoCalculadora();
+        }
+        
+        // Função para remover um SKU
+        function removerSku(skuId) {
+            // Não permitir remover se for o último SKU
+            if (skusData.length <= 1) {
+                alert('Deve haver pelo menos um SKU configurado!');
+                return;
+            }
+            
+            // Remover do array
+            skusData = skusData.filter(sku => sku.id !== skuId);
+            
+            // Remover do DOM
+            document.getElementById(skuId).remove();
+            
+            // Renumerar os SKUs
+            renumerarSkus();
+            atualizarResumoCalculadora();
+        }
+        
+        // Função para renumerar os SKUs após remoção
+        function renumerarSkus() {
+            const skuItems = document.querySelectorAll('.sku-item');
+            skuItems.forEach((item, index) => {
+                const title = item.querySelector('.sku-title');
+                title.textContent = `📦 SKU ${index + 1}`;
+            });
+        }
+        
+        // Função para atualizar dados de um SKU
+        function atualizarSku(skuId, campo, valor) {
+            const sku = skusData.find(s => s.id === skuId);
+            if (!sku) return;
+            
+            sku[campo] = parseFloat(valor) || 0;
+            
+            // Calcular cubagem unitária e total
+            if (sku.largura > 0 && sku.altura > 0 && sku.comprimento > 0) {
+                sku.cubagem_unitaria = sku.largura * sku.altura * sku.comprimento;
+                sku.cubagem_total = sku.cubagem_unitaria * sku.quantidade;
+            } else {
+                sku.cubagem_unitaria = 0;
+                sku.cubagem_total = 0;
+            }
+            
+            // Atualizar display do SKU
+            const resultadoDiv = document.getElementById(`resultado-${skuId}`);
+            resultadoDiv.innerHTML = `
+                <strong>📏 Cubagem unitária:</strong> ${sku.cubagem_unitaria.toFixed(3)} m³ | 
+                <strong>📦 Cubagem total:</strong> ${sku.cubagem_total.toFixed(3)} m³
+            `;
+            
+            atualizarResumoCalculadora();
+        }
+        
+        // Função para atualizar o resumo da calculadora
+        function atualizarResumoCalculadora() {
+            const totalVolumes = skusData.reduce((sum, sku) => sum + sku.quantidade, 0);
+            const totalCubagem = skusData.reduce((sum, sku) => sum + sku.cubagem_total, 0);
+            const skusValidos = skusData.filter(sku => sku.cubagem_total > 0);
+            
+            const resumoDiv = document.getElementById('resumo-calculo');
+            
+            if (skusValidos.length === 0) {
+                resumoDiv.innerHTML = '<p>Configure pelo menos um SKU com medidas válidas para ver o resumo</p>';
+                return;
+            }
+            
+            let resumoHtml = `
+                <div class="resumo-item">
+                    <span>📊 Total de SKUs configurados:</span>
+                    <span><strong>${skusData.length}</strong></span>
+                </div>
+                <div class="resumo-item">
+                    <span>📦 Total de volumes:</span>
+                    <span><strong>${totalVolumes}</strong></span>
+                </div>
+            `;
+            
+            // Detalhar cada SKU
+            skusValidos.forEach((sku, index) => {
+                const skuIndex = skusData.indexOf(sku) + 1;
+                resumoHtml += `
+                    <div class="resumo-item">
+                        <span>🔸 SKU ${skuIndex}: ${sku.quantidade}x (${sku.largura}×${sku.altura}×${sku.comprimento}m)</span>
+                        <span><strong>${sku.cubagem_total.toFixed(3)} m³</strong></span>
+                    </div>
+                `;
+            });
+            
+            // Total final
+            resumoHtml += `
+                <div class="resumo-item">
+                    <span>🎯 <strong>CUBAGEM TOTAL FINAL:</strong></span>
+                    <span><strong>${totalCubagem.toFixed(3)} m³</strong></span>
+                </div>
+            `;
+            
+            resumoDiv.innerHTML = resumoHtml;
+        }
+        
+        // Função para aplicar a cubagem calculada
+        function aplicarCubagemCalculada() {
+            const totalCubagem = skusData.reduce((sum, sku) => sum + sku.cubagem_total, 0);
+            
+            if (totalCubagem <= 0) {
+                alert('Configure pelo menos um SKU com medidas válidas antes de aplicar!');
+                return;
+            }
+            
+            // Aplicar no campo principal
+            document.getElementById('cubagem_frac').value = totalCubagem.toFixed(3);
+            
+            // Marcar como manual para não ser sobrescrito
+            cubagemManual = true;
+            
+            // Atualizar o texto da fórmula
+            const formulaTexto = document.getElementById('formula-texto');
+            const skusValidos = skusData.filter(sku => sku.cubagem_total > 0);
+            const totalVolumes = skusData.reduce((sum, sku) => sum + sku.quantidade, 0);
+            
+            formulaTexto.innerHTML = `🧮 Calculado: ${skusValidos.length} SKUs, ${totalVolumes} volumes = ${totalCubagem.toFixed(3)}m³`;
+            formulaTexto.style.color = '#28a745';
+            formulaTexto.style.fontWeight = '600';
+            
+            // Feedback visual
+            const cubagemField = document.getElementById('cubagem_frac');
+            cubagemField.style.backgroundColor = '#e8f5e8';
+            cubagemField.style.borderColor = '#28a745';
+            
+            setTimeout(() => {
+                cubagemField.style.backgroundColor = '';
+                cubagemField.style.borderColor = '';
+            }, 1000);
+            
+            // Fechar modal
+            fecharCalculadoraAvancada();
+            
+            // Limpar campos da calculadora simples
+            document.getElementById('largura_frac').value = '';
+            document.getElementById('altura_frac').value = '';
+            document.getElementById('comprimento_frac').value = '';
+        }
+        
+        // Função para atualizar lista de volumes (caso necessário)
+        function atualizarListaVolumes() {
+            // Função placeholder para compatibilidade
+            console.log('Lista de volumes atualizada');
+        }
+
         // Abrir a primeira aba por padrão
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelector('.tab-btn').click();
