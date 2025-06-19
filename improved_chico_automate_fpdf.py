@@ -1883,9 +1883,9 @@ def formatar_resultado_fracionado(resultado):
     if ranking_completo:
         html += f"""
         <div class="analise-container">
-            <div class="analise-title">🏆 Ranking de Fornecedores (Dados Reais)</div>
+            <div class="analise-title">🏆 Ranking de Rotas com Agentes</div>
             <div style="font-size: 0.9rem; color: #666; margin-bottom: 10px;">
-                Opções de frete da planilha Base_Unificada.xlsx ordenadas por melhor custo-benefício.
+                Rotas Agent Collection + Transfer + Agent Delivery ordenadas por melhor custo-benefício.
             </div>
             <table class="results" style="font-size: 0.9rem;">
                 <thead>
@@ -1901,8 +1901,8 @@ def formatar_resultado_fracionado(resultado):
                 <tbody>
         """
         
-        # Mostrar opções diretas da planilha
-        for i, cotacao in enumerate(ranking_completo):
+        # Mostrar rotas com agentes
+        for i, rota in enumerate(ranking_completo):
             pos_class = ""
             if i == 0:
                 pos_class = "style='background-color: #e8f5e8; font-weight: bold;'"  # Verde para 1º
@@ -1918,41 +1918,48 @@ def formatar_resultado_fracionado(resultado):
                     <tr {pos_class}>
                         <td style="text-align: center; font-size: 1.1rem;"><strong>{posicao_texto}</strong></td>
                         <td style="text-align: center;">
-                            <span style="background: #2196F3; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">
-                                🚛 Direto
+                            <span style="background: #FF9800; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;">
+                                🚚 C + T + E
                             </span>
                         </td>
-                        <td><strong>{cotacao.get('modalidade', 'N/A')}</strong></td>
-                        <td style="font-weight: bold; color: #0a6ed1; font-size: 1.1rem;">R$ {cotacao.get('total', 0):,.2f}</td>
-                        <td style="text-align: center;">{cotacao.get('prazo', 0)} dias</td>
+                        <td><strong>{rota.get('resumo', 'N/A')}</strong></td>
+                        <td style="font-weight: bold; color: #0a6ed1; font-size: 1.1rem;">R$ {rota.get('total', 0):,.2f}</td>
+                        <td style="text-align: center;">{rota.get('prazo_total', 0)} dias</td>
                         <td style="text-align: center;">
-                            <button class="btn-secondary" onclick="toggleDetails('detalhe_direto_{i}')" style="font-size: 0.8rem; padding: 5px 10px;">
+                            <button class="btn-secondary" onclick="toggleDetails('detalhe_agente_{i}')" style="font-size: 0.8rem; padding: 5px 10px;">
                                 📋 Ver Detalhes
                             </button>
                         </td>
                     </tr>
-                    <tr id="detalhe_direto_{i}" style="display: none;">
+                    <tr id="detalhe_agente_{i}" style="display: none;">
                         <td colspan="6" style="background-color: #f8f9fa; padding: 15px;">
             """
             
-            # Detalhes da cotação direta
+            # Detalhes da rota com agentes
             html += f"""
-                            <div style="font-size: 0.9rem;">
-                                <strong>📊 Detalhes da Cotação - {cotacao.get('modalidade', 'N/A')}</strong><br><br>
-                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                                    <div>
-                                        <strong>💰 Composição do Custo:</strong><br>
-                                        • Valor Base: R$ {cotacao.get('valor_base', 0):,.2f}<br>
-                                        • Pedágio: R$ {cotacao.get('pedagio', 0):,.2f}<br>
-                                        • GRIS: R$ {cotacao.get('gris', 0):,.2f}<br>
-                                        • <strong>Total: R$ {cotacao.get('total', 0):,.2f}</strong>
+                            <div style="font-size: 0.85rem;">
+                                <strong>📍 Detalhamento da Rota com Agentes</strong><br><br>
+                                
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                                    <div style="background: #e3f2fd; padding: 10px; border-radius: 5px;">
+                                        <strong>1️⃣ Coleta</strong><br>
+                                        • {rota.get('agente_coleta', {}).get('fornecedor', 'N/A')}<br>
+                                        • {rota.get('agente_coleta', {}).get('origem', 'N/A')} → Base {rota.get('agente_coleta', {}).get('base_destino', 'N/A')}<br>
+                                        • <strong>R$ {rota.get('agente_coleta', {}).get('custo', 0):,.2f}</strong>
                                     </div>
-                                    <div>
-                                        <strong>📍 Informações:</strong><br>
-                                        • Origem: {cotacao.get('origem', 'N/A')}<br>
-                                        • Destino: {cotacao.get('destino', 'N/A')}<br>
-                                        • Prazo: {cotacao.get('prazo', 'N/A')} dias úteis<br>
-                                        • Fonte: Base_Unificada.xlsx
+                                    
+                                    <div style="background: #fff3e0; padding: 10px; border-radius: 5px;">
+                                        <strong>2️⃣ Transferência</strong><br>
+                                        • {rota.get('transferencia', {}).get('fornecedor', 'N/A')}<br>
+                                        • {rota.get('transferencia', {}).get('origem', 'N/A')} → {rota.get('transferencia', {}).get('destino', 'N/A')}<br>
+                                        • <strong>R$ {rota.get('transferencia', {}).get('custo', 0):,.2f}</strong>
+                                    </div>
+                                    
+                                    <div style="background: #e8f5e9; padding: 10px; border-radius: 5px;">
+                                        <strong>3️⃣ Entrega</strong><br>
+                                        • {rota.get('agente_entrega', {}).get('fornecedor', 'N/A')}<br>
+                                        • Base {rota.get('agente_entrega', {}).get('base_origem', 'N/A')} → {rota.get('agente_entrega', {}).get('destino', 'N/A')}<br>
+                                        • <strong>R$ {rota.get('agente_entrega', {}).get('custo', 0):,.2f}</strong>
                                     </div>
                                 </div>
                             </div>
@@ -1969,7 +1976,7 @@ def formatar_resultado_fracionado(resultado):
             <div style="margin-top: 10px; font-size: 0.85rem; color: #666; text-align: center;">
                 <strong>Legenda:</strong> 
                 🥇 Melhor preço | 🥈 2º melhor | 🥉 3º melhor | 
-                🚛 Dados reais da planilha Base_Unificada.xlsx
+                🚚 Collection + Transfer + Delivery
             </div>
         </div>
         """
@@ -1977,9 +1984,9 @@ def formatar_resultado_fracionado(resultado):
         # Caso não haja opções
         html += """
         <div class="analise-container">
-            <div class="analise-title">⚠️ Nenhuma Opção Disponível</div>
+            <div class="analise-title">⚠️ Nenhuma Rota Disponível</div>
             <div class="analise-item" style="color: #e74c3c;">
-                <strong>Problema:</strong> Não foram encontradas cotações válidas para esta rota.
+                <strong>Problema:</strong> Não foram encontradas rotas com agentes para esta origem/destino.
             </div>
         </div>
         """
@@ -2006,10 +2013,9 @@ def formatar_resultado_fracionado(resultado):
         html += f"""
         <div class="analise-container">
             <div class="analise-title">📈 Resumo da Consulta</div>
-            <div class="analise-item"><strong>📊 Total de Fornecedores:</strong> <span style="color: #27ae60; font-weight: bold;">{total_opcoes}</span></div>
-            <div class="analise-item"><strong>💰 Melhor Opção:</strong> {ranking_completo[0].get('modalidade', 'N/A')} - R$ {ranking_completo[0].get('total', 0):,.2f}</div>
-            <div class="analise-item"><strong>📊 Fonte dos Dados:</strong> <span style="color: #27ae60;">Base_Unificada.xlsx (dados reais)</span></div>
-            </div>
+            <div class="analise-item"><strong>📊 Total de Rotas:</strong> <span style="color: #27ae60; font-weight: bold;">{total_opcoes}</span></div>
+            <div class="analise-item"><strong>💰 Melhor Rota:</strong> {ranking_completo[0].get('resumo', 'N/A')} - R$ {ranking_completo[0].get('total', 0):,.2f}</div>
+            <div class="analise-item"><strong>📊 Fonte dos Dados:</strong> <span style="color: #27ae60;">Agent Collection + Transfer + Agent Delivery</span></div>
         </div>
         """
     
