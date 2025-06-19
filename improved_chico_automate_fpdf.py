@@ -3169,6 +3169,230 @@ def carregar_base_agentes():
     
     return _BASE_AGENTES_CACHE
 
+def formatar_resultado_fracionado(resultado):
+    """
+    Gera HTML formatado para exibir resultado do frete fracionado APENAS com ROTAS DE AGENTES REAIS
+    """
+    melhor_opcao = resultado.get('melhor_opcao', {})
+    dados_fonte = resultado.get('dados_fonte', 'Rotas com Agentes')
+    
+    # Definir variáveis necessárias para rotas com agentes
+    criterios_qualidade = resultado.get('criterios_qualidade', 'APENAS rotas com agentes reais')
+    cotacoes_rejeitadas = resultado.get('cotacoes_rejeitadas', 0)
+    
+    html = f"""
+    <div class="success">
+        <h3><i class="fa-solid fa-check-circle"></i> Cotação com Agentes Calculada - {resultado.get('id_historico', 'N/A')}</h3>
+        
+        <div class="analise-container">
+            <div class="analise-title">🏆 Melhor Rota com Agentes</div>
+            <div class="analise-item"><strong>Rota:</strong> {melhor_opcao.get('resumo', 'N/A')}</div>
+            <div class="analise-item"><strong>Fonte:</strong> {dados_fonte}</div>
+            <div class="analise-item" style="font-size: 1.3rem; font-weight: bold; color: #0a6ed1; background: #e8f4fd; padding: 12px; border-radius: 8px; text-align: center;">
+                💰 <strong>CUSTO TOTAL: R$ {melhor_opcao.get('total', 0):,.2f}</strong>
+            </div>
+            <div class="analise-item" style="font-size: 1.1rem; font-weight: bold; text-align: center;">
+                ⏱️ <strong>Prazo: {melhor_opcao.get('prazo_total', 'N/A')} dias úteis</strong>
+            </div>
+        </div>
+
+        <!-- Filtros de Qualidade Aplicados -->
+        <div class="analise-container">
+            <div class="analise-title">🔍 Filtros de Qualidade Aplicados</div>
+            <div class="analise-item"><strong>Critérios Obrigatórios:</strong> {criterios_qualidade}</div>
+            <div class="analise-item"><strong>Cotações Aceitas:</strong> 
+                <span style="color: #27ae60; font-weight: bold;">{resultado.get('total_opcoes', 0)}</span>
+            </div>
+            <div class="analise-item"><strong>Cotações Rejeitadas:</strong> 
+                <span style="color: #e74c3c; font-weight: bold;">{cotacoes_rejeitadas}</span>
+            </div>
+        </div>
+
+        <!-- Informações da Rota -->
+        <div class="analise-container">
+            <div class="analise-title">📍 Informações da Rota</div>
+            <div class="analise-item"><strong>Origem:</strong> {resultado.get('origem', 'N/A')} - {resultado.get('uf_origem', 'N/A')}</div>
+            <div class="analise-item"><strong>Destino:</strong> {resultado.get('destino', 'N/A')} - {resultado.get('uf_destino', 'N/A')}</div>
+            <div class="analise-item"><strong>Peso Real:</strong> {resultado.get('peso', 0)} kg</div>
+            <div class="analise-item"><strong>Peso Cubado:</strong> {resultado.get('peso_cubado', 0):.2f} kg</div>
+            <div class="analise-item"><strong>Cubagem:</strong> {resultado.get('cubagem', 0):.4f} m³</div>
+            {f'<div class="analise-item"><strong>Valor da NF:</strong> R$ {resultado.get("valor_nf", 0):,.2f}</div>' if resultado.get('valor_nf') else '<div class="analise-item"><strong>Valor da NF:</strong> <span style="color: #f39c12;">Não informado</span></div>'}
+        </div>
+    """
+    
+    # Tabela com ranking das opções disponíveis
+    ranking_completo = resultado.get('cotacoes_ranking', [])
+    
+    if ranking_completo:
+        html += """
+        <div class="analise-container">
+            <div class="analise-title">📊 Todas as Rotas com Agentes Encontradas</div>
+            <table class="result-table" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                <thead style="background: #f8f9fa;">
+                    <tr>
+                        <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Posição</th>
+                        <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Rota Completa</th>
+                        <th style="padding: 12px; text-align: right; border: 1px solid #dee2e6;">Custo Total</th>
+                        <th style="padding: 12px; text-align: center; border: 1px solid #dee2e6;">Prazo</th>
+                        <th style="padding: 12px; text-align: center; border: 1px solid #dee2e6;">Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """
+        
+        for i, opcao in enumerate(ranking_completo, 1):
+            # Determinar medalha/posição
+            if i == 1:
+                posicao_icon = "🥇"
+                row_style = "background: #fff3cd; border-left: 4px solid #ffc107;"
+            elif i == 2:
+                posicao_icon = "🥈"
+                row_style = "background: #f8f9fa; border-left: 4px solid #6c757d;"
+            elif i == 3:
+                posicao_icon = "🥉"
+                row_style = "background: #fff3cd; border-left: 4px solid #fd7e14;"
+            else:
+                posicao_icon = f"{i}º"
+                row_style = "background: #ffffff;"
+            
+            agente_coleta = opcao.get('agente_coleta', {})
+            transferencia = opcao.get('transferencia', {})
+            agente_entrega = opcao.get('agente_entrega', {})
+            
+            html += f"""
+                    <tr style="{row_style}">
+                        <td style="padding: 12px; border: 1px solid #dee2e6; font-weight: bold; font-size: 1.1em;">{posicao_icon}</td>
+                        <td style="padding: 12px; border: 1px solid #dee2e6;">
+                            <strong>{opcao.get('resumo', 'N/A')}</strong><br>
+                            <small style="color: #6c757d;">
+                                Coleta: {agente_coleta.get('fornecedor', 'N/A')} → 
+                                Transfer: {transferencia.get('fornecedor', 'N/A')} → 
+                                Entrega: {agente_entrega.get('fornecedor', 'N/A')}
+                            </small>
+                        </td>
+                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; color: #0a6ed1; font-size: 1.1em;">
+                            R$ {opcao.get('total', 0):,.2f}
+                        </td>
+                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
+                            {opcao.get('prazo_total', 'N/A')} dias
+                        </td>
+                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
+                            <button class="btn-secondary" onclick="toggleDetails('detalhes_coleta_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #007bff;">
+                                Ver Coleta
+                            </button><br>
+                            <button class="btn-secondary" onclick="toggleDetails('detalhes_transfer_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #fd7e14;">
+                                Ver Transfer
+                            </button><br>
+                            <button class="btn-secondary" onclick="toggleDetails('detalhes_entrega_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #28a745;">
+                                Ver Entrega
+                            </button>
+                        </td>
+                    </tr>
+                    
+                    <!-- Detalhes da Coleta -->
+                    <tr id="detalhes_coleta_{i}" style="display: none;">
+                        <td colspan="5" style="padding: 15px; background: #e3f2fd; border: 1px solid #dee2e6;">
+                            <strong style="color: #007bff;">🚚 Agente de Coleta:</strong><br>
+                            • <strong>Fornecedor:</strong> {agente_coleta.get('fornecedor', 'N/A')}<br>
+                            • <strong>Origem:</strong> {agente_coleta.get('origem', 'N/A')}<br>
+                            • <strong>Base Destino:</strong> {agente_coleta.get('base_destino', 'N/A')}<br>
+                            • <strong>Custo:</strong> R$ {agente_coleta.get('custo', 0):.2f}<br>
+                            • <strong>Prazo:</strong> {agente_coleta.get('prazo', 'N/A')} dias<br>
+                            • <strong>Peso Máximo:</strong> {agente_coleta.get('peso_maximo', 'N/A')} kg
+                        </td>
+                    </tr>
+                    
+                    <!-- Detalhes da Transferência -->
+                    <tr id="detalhes_transfer_{i}" style="display: none;">
+                        <td colspan="5" style="padding: 15px; background: #fff3e0; border: 1px solid #dee2e6;">
+                            <strong style="color: #fd7e14;">🚛 Transferência entre Bases:</strong><br>
+                            • <strong>Fornecedor:</strong> {transferencia.get('fornecedor', 'N/A')}<br>
+                            • <strong>Origem:</strong> {transferencia.get('origem', 'N/A')}<br>
+                            • <strong>Destino:</strong> {transferencia.get('destino', 'N/A')}<br>
+                            • <strong>Custo Base:</strong> R$ {transferencia.get('custo', 0):.2f}<br>
+                            • <strong>Pedágio:</strong> R$ {transferencia.get('pedagio', 0):.2f}<br>
+                            • <strong>GRIS:</strong> R$ {transferencia.get('gris', 0):.2f}<br>
+                            • <strong>Prazo:</strong> {transferencia.get('prazo', 'N/A')} dias
+                        </td>
+                    </tr>
+                    
+                    <!-- Detalhes da Entrega -->
+                    <tr id="detalhes_entrega_{i}" style="display: none;">
+                        <td colspan="5" style="padding: 15px; background: #e8f5e8; border: 1px solid #dee2e6;">
+                            <strong style="color: #28a745;">🏠 Agente de Entrega:</strong><br>
+                            • <strong>Fornecedor:</strong> {agente_entrega.get('fornecedor', 'N/A')}<br>
+                            • <strong>Base Origem:</strong> {agente_entrega.get('base_origem', 'N/A')}<br>
+                            • <strong>Destino:</strong> {agente_entrega.get('destino', 'N/A')}<br>
+                            • <strong>Custo:</strong> R$ {agente_entrega.get('custo', 0):.2f}<br>
+                            • <strong>Prazo:</strong> {agente_entrega.get('prazo', 'N/A')} dias<br>
+                            • <strong>Peso Máximo:</strong> {agente_entrega.get('peso_maximo', 'N/A')} kg
+                        </td>
+                    </tr>
+            """
+        
+        html += """
+                </tbody>
+            </table>
+            <div style="margin-top: 10px; font-size: 0.85rem; color: #666; text-align: center;">
+                <strong>Legenda:</strong> 
+                🥇 Melhor preço | 🥈 2º melhor | 🥉 3º melhor | 
+                🚚 Frete Fracionado
+            </div>
+        </div>
+        """
+    else:
+        # Caso não haja opções
+        html += """
+        <div class="analise-container">
+            <div class="analise-title">⚠️ Nenhuma Rota Disponível</div>
+            <div class="analise-item" style="color: #e74c3c;">
+                <strong>Problema:</strong> Não foram encontradas rotas com agentes para esta origem/destino.
+            </div>
+        </div>
+        """
+    
+    html += """
+    </div>
+    
+    <script>
+    function toggleDetails(elementId) {
+        var element = document.getElementById(elementId);
+        if (element.style.display === "none") {
+            element.style.display = "block";
+        } else {
+            element.style.display = "none";
+        }
+    }
+    </script>
+    """
+    
+    # Resumo final apenas com dados reais
+    total_opcoes = len(ranking_completo)
+    
+    if total_opcoes > 0:        
+        html += f"""
+        <div class="analise-container">
+            <div class="analise-title">📈 Resumo da Consulta</div>
+            <div class="analise-item"><strong>📊 Total de Rotas:</strong> <span style="color: #27ae60; font-weight: bold;">{total_opcoes}</span></div>
+            <div class="analise-item"><strong>💰 Melhor Rota:</strong> {ranking_completo[0].get('resumo', 'N/A')} - R$ {ranking_completo[0].get('total', 0):,.2f}</div>
+            <div class="analise-item"><strong>📊 Fonte dos Dados:</strong> <span style="color: #27ae60;">Frete Fracionado</span></div>
+        </div>
+        """
+    
+    # Botões de exportação
+    html += f"""
+        <div style="margin-top: 20px; text-align: center;">
+            <button class="btn-primary" onclick="exportarPDF('Fracionado')" style="margin-right: 10px;">
+                <i class="fa-solid fa-file-pdf"></i> Exportar PDF
+            </button>
+            <button class="btn-primary" onclick="exportarExcel('Fracionado')">
+                <i class="fa-solid fa-file-excel"></i> Exportar Excel
+            </button>
+        </div>
+    """
+    
+    return html
+
 if __name__ == "__main__":
     # Usar configurações de ambiente para produção
     debug_mode = os.getenv("DEBUG", "False").lower() == "true"
