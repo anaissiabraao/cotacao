@@ -839,6 +839,122 @@ def ler_gollog_aereo():
         print(f"Erro ao ler base GOLLOG: {e}")
         return None
 
+def calcular_frete_aereo_base_unificada(origem, uf_origem, destino, uf_destino, peso, valor_nf=None):
+    """
+    Calcular frete aéreo usando a Base Unificada (tipo 'Aéreo')
+    """
+    try:
+        print(f"[AÉREO] Calculando frete aéreo: {origem}/{uf_origem} → {destino}/{uf_destino}")
+        print(f"[AÉREO] Peso: {peso}kg, Valor NF: R$ {valor_nf:,}" if valor_nf else f"[AÉREO] Peso: {peso}kg")
+        
+        # Carregar base unificada
+        df = carregar_base_unificada()
+        if df is None or df.empty:
+            print("[AÉREO] ❌ Erro ao carregar base unificada")
+            return None
+            
+        # Filtrar apenas registros do tipo 'Aéreo'
+        df_aereo = df[df['Tipo'] == 'Aéreo'].copy()
+        print(f"[AÉREO] Registros aéreos na base: {len(df_aereo)}")
+        
+        if df_aereo.empty:
+            print("[AÉREO] ❌ Nenhum registro aéreo encontrado na base")
+            return None
+        
+        # Normalizar origem e destino
+        origem_norm = normalizar_cidade_nome(origem)
+        destino_norm = normalizar_cidade_nome(destino)
+        uf_origem_norm = normalizar_uf(uf_origem)
+        uf_destino_norm = normalizar_uf(uf_destino)
+        
+        print(f"[AÉREO] Buscando: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
+        
+        # Buscar rotas aéreas correspondentes
+        opcoes_aereas = []
+        
+        for _, linha in df_aereo.iterrows():
+            origem_base = normalizar_cidade_nome(str(linha.get('Origem', '')))
+            destino_base = normalizar_cidade_nome(str(linha.get('Destino', '')))
+            
+            # Verificar se a rota corresponde
+            if origem_base == origem_norm and destino_base == destino_norm:
+                try:
+                    # Processar dados da linha
+                    fornecedor = linha.get('Fornecedor', 'N/A')
+                    prazo = int(linha.get('Prazo', 1))
+                    
+                    # Calcular custo baseado no peso
+                    peso_float = float(peso)
+                    
+                    # Valores da planilha
+                    valor_minimo = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
+                    excedente = float(linha.get('EXCEDENTE', 0))
+                    
+                    # Calcular custo total
+                    if peso_float <= 10:
+                        custo_base = valor_minimo
+                    else:
+                        peso_excedente = peso_float - 10
+                        custo_base = valor_minimo + (peso_excedente * excedente)
+                    
+                    # GRIS para aéreo (se informado)
+                    gris_valor = 0
+                    if valor_nf and valor_nf > 0:
+                        gris_perc = float(linha.get('Gris Exc', 0)) / 100
+                        gris_valor = valor_nf * gris_perc
+                    
+                    # Pedágio (normalmente zero para aéreo)
+                    pedagio = float(linha.get('Pedagio (100 Kg)', 0)) * (peso_float / 100)
+                    
+                    # Total
+                    total = custo_base + gris_valor + pedagio
+                    
+                    opcao = {
+                        'fornecedor': fornecedor,
+                        'origem': linha.get('Origem', ''),
+                        'destino': linha.get('Destino', ''),
+                        'custo_base': round(custo_base, 2),
+                        'gris': round(gris_valor, 2),
+                        'pedagio': round(pedagio, 2),
+                        'total': round(total, 2),
+                        'prazo': prazo,
+                        'peso_usado': peso_float,
+                        'modalidade': 'AÉREO'
+                    }
+                    
+                    opcoes_aereas.append(opcao)
+                    print(f"[AÉREO] ✅ {fornecedor}: R$ {total:,.2f} (prazo: {prazo} dias)")
+                    
+                except Exception as e:
+                    print(f"[AÉREO] ⚠️ Erro ao processar linha: {e}")
+                    continue
+        
+        if not opcoes_aereas:
+            print(f"[AÉREO] ❌ Nenhuma rota aérea encontrada para {origem_norm} → {destino_norm}")
+            return None
+        
+        # Ordenar por menor custo
+        opcoes_aereas.sort(key=lambda x: x['total'])
+        
+        resultado = {
+            'opcoes': opcoes_aereas,
+            'total_opcoes': len(opcoes_aereas),
+            'melhor_opcao': opcoes_aereas[0] if opcoes_aereas else None,
+            'origem': origem,
+            'uf_origem': uf_origem,
+            'destino': destino,
+            'uf_destino': uf_destino,
+            'peso': peso,
+            'valor_nf': valor_nf
+        }
+        
+        print(f"[AÉREO] ✅ {len(opcoes_aereas)} opções aéreas encontradas")
+        return resultado
+        
+    except Exception as e:
+        print(f"[AÉREO] ❌ Erro no cálculo aéreo: {e}")
+        return None
+
 # Rotas da aplicação
 @app.route("/")
 @middleware_auth
@@ -1010,55 +1126,26 @@ def calcular_aereo():
         if not rota_info:
             return jsonify({"error": "Não foi possível calcular a rota"})
 
-        # Buscar dados aéreos da base GOLLOG
-        df_aereo = ler_gollog_aereo()
+        # Buscar dados aéreos da Base Unificada
+        valor_nf = data.get("valor_nf")  # Capturar valor da NF se informado
+        resultado_aereo = calcular_frete_aereo_base_unificada(
+            municipio_origem, uf_origem,
+            municipio_destino, uf_destino,
+            peso, valor_nf
+        )
+        
         custos_aereo = {}
         
-        if df_aereo is not None:
-            # Filtrar por origem e destino
-            uf_origem_norm = normalizar_uf(uf_origem)
-            uf_destino_norm = normalizar_uf(uf_destino)
-            cidade_origem_norm = normalizar_cidade(municipio_origem)
-            cidade_destino_norm = normalizar_cidade(municipio_destino)
+        if resultado_aereo and resultado_aereo.get('opcoes'):
+            # Usar dados da base unificada
+            opcoes = resultado_aereo['opcoes']
             
-            opcoes_aereas = []
-            for _, row in df_aereo.iterrows():
-                if (normalizar_uf(row.get("uf_origem")) == uf_origem_norm and 
-                    normalizar_cidade(row.get("cidade_origem")) == cidade_origem_norm and
-                    normalizar_uf(row.get("uf_destino")) == uf_destino_norm and
-                    normalizar_cidade(row.get("cidade_destino")) == cidade_destino_norm):
-                    
-                    # Calcular custo baseado no peso
-                    peso_cubado = max(float(peso), float(cubagem) * 300)
-                    custo_base = float(row.get("custo_base", 0))
-                    
-                    # Para modal aéreo, usar fórmula específica
-                    if peso_cubado <= 5:
-                        custo = custo_base
-                    else:
-                        # Taxa adicional por kg para modal aéreo
-                        taxa_adicional = custo_base * 0.1  # 10% do valor base por kg adicional
-                        custo = custo_base + (peso_cubado - 5) * taxa_adicional
-                    
-                    opcoes_aereas.append({
-                        "modalidade": row.get("modalidade", "STANDARD"),
-                        "tipo_servico": row.get("tipo_servico", "AEREO"),
-                        "custo": round(custo, 2),
-                        "prazo": int(row.get("prazo", 1))
-                    })
-            
-            # Agrupar por modalidade
-            for opcao in opcoes_aereas:
-                modalidade = opcao["modalidade"]
-                if modalidade not in custos_aereo:
-                    custos_aereo[modalidade] = opcao["custo"]
-                else:
-                    # Manter o menor custo
-                    custos_aereo[modalidade] = min(custos_aereo[modalidade], opcao["custo"])
-
-        # Se não encontrou dados específicos, usar valores padrão
-        if not custos_aereo:
-            # Valores base para modal aéreo (por kg)
+            # Agrupar por fornecedor/modalidade
+            for opcao in opcoes:
+                fornecedor = opcao['fornecedor']
+                custos_aereo[fornecedor] = opcao['total']
+        else:
+            # Se não encontrou dados específicos, usar valores padrão
             peso_cubado = max(float(peso), float(cubagem) * 300)
             custos_aereo = {
                 "ECONOMICO": round(peso_cubado * 8.5, 2),
