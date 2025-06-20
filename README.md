@@ -43,7 +43,7 @@ Sistema abrangente de gestão e cotação de fretes para empresas de logística,
 
 1. **Clone o repositório**
    ```bash
-   git clone https://github.com/seu-usuario/portoex.git
+   git clone https://github.com/anaissiabraao/cotacao/blob/master/app.py
    cd portoex
    ```
 
@@ -128,7 +128,7 @@ Estrutura esperada da planilha:
 
 ### Variáveis de Ambiente (.env)
 ```env
-SECRET_KEY=sua_chave_secreta_muito_segura
+SECRET_KEY= ***
 DEBUG=False
 PORT=5000
 FLASK_ENV=production
