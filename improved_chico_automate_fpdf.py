@@ -881,7 +881,9 @@ def calcular_frete_aereo_base_unificada(origem, uf_origem, destino, uf_destino, 
                 try:
                     # Processar dados da linha
                     fornecedor = linha.get('Fornecedor', 'N/A')
-                    prazo = int(linha.get('Prazo', 1))
+                    prazo_raw = int(linha.get('Prazo', 1))
+                    # Para modal aéreo: prazo 0 = 1 dia
+                    prazo = 1 if prazo_raw == 0 else prazo_raw
                     
                     # Calcular custo baseado no peso
                     peso_float = float(peso)
