@@ -161,7 +161,7 @@ docker run -p 5000:5000 portoex
 
 ### Heroku
 ```bash
-heroku create seu-app-portoex
+heroku create cotacao
 git push heroku main
 ```
 
@@ -228,4 +228,4 @@ Para suporte técnico, entre em contato:
 
 ---
 
-**PortoEx** - Transformando a logística brasileira 🚛📦 
+**PortoEx** - Transportando Soluções 🚛📦 
