@@ -1212,8 +1212,8 @@ def calcular_frete_fracionado():
 
         # USAR APENAS ROTAS COM AGENTES - SEM FRETES DIRETOS
         rotas_agentes = calcular_frete_com_agentes(
-            cidade_origem, uf_origem,
-            cidade_destino, uf_destino,
+            cidade_origem, uf_origem, 
+            cidade_destino, uf_destino, 
             peso, valor_nf, cubagem
         )
 
@@ -1895,7 +1895,7 @@ def exportar_excel():
                 worksheet.set_column('G:G', 10)  # Peso
                 worksheet.set_column('L:L', 20)  # Rota Resumo
                 worksheet.set_column('AA:AA', 20) # Data/Hora
-        
+    
         output.seek(0)
         
         return send_file(
@@ -2538,7 +2538,7 @@ def carregar_base_agentes():
 # Cache para mapeamento de cidades para bases
 MAPA_BASES_CACHE = {
     'SAO PAULO': 'SAO',
-    'ARACAJU': 'AJU', 
+    'ARACAJU': 'AJU',
     'CAMPINAS': 'CPQ',
     'BRASILIA': 'BSB',
     'BELO HORIZONTE': 'BHZ',
@@ -2661,7 +2661,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         else:
             mapa_uf_base = {
                 'RJ': 'RIO',
-                'MG': 'BHZ',     # Minas Gerais usa BHZ (Belo Horizonte) - CORRIGIDO
+            'MG': 'BHZ',     # Minas Gerais usa BHZ (Belo Horizonte) - CORRIGIDO
                 'RS': 'POA',
                 'PR': 'CWB',
                 'SC': 'ITJ',     # Santa Catarina usa ITJ (Itajaí) - NOVO
@@ -2835,6 +2835,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'fornecedor': transferencia['fornecedor'],
                                 'origem': f"Base {base_origem}",
                                 'destino': f"Base {base_destino}",
+                                'prazo': transferencia['prazo'],
                                 'frete': float(transferencia['custo']) - float(transferencia['pedagio']) - float(transferencia['gris'])
                             },
                             'agente_entrega_detalhes': {
@@ -2937,7 +2938,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'gris': float(transferencia['gris']),
                                 'fornecedor': transferencia['fornecedor'],
                                 'origem': f"Base {base_origem}",
-                                'destino': f"Base {base_destino}"
+                                'destino': f"Base {base_destino}",
+                                'prazo': transferencia['prazo'],
+                                'frete': float(transferencia['custo']) - float(transferencia['pedagio']) - float(transferencia['gris'])
                             },
                             'agente_entrega': {
                                 'fornecedor': agente_ent.get('Fornecedor', 'N/A'),
@@ -3001,7 +3004,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'gris': float(transferencia['gris']),
                                 'fornecedor': transferencia['fornecedor'],
                                 'origem': f"Base {base_origem}",
-                                'destino': f"Base {base_destino}"
+                                'destino': f"Base {base_destino}",
+                                'prazo': transferencia['prazo'],
+                                'frete': float(transferencia['custo']) - float(transferencia['pedagio']) - float(transferencia['gris'])
                             },
                             'agente_entrega': {
                                 'fornecedor': 'N/A - Sem agente entrega',
