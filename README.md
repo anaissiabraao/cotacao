@@ -43,7 +43,7 @@ Sistema abrangente de gestão e cotação de fretes para empresas de logística,
 
 1. **Clone o repositório**
    ```bash
-   git clone https://github.com/seu-usuario/portoex.git
+   git clone https://github.com/anaissiabraao/cotacao/blob/master/app.py
    cd portoex
    ```
 
@@ -128,7 +128,7 @@ Estrutura esperada da planilha:
 
 ### Variáveis de Ambiente (.env)
 ```env
-SECRET_KEY=sua_chave_secreta_muito_segura
+SECRET_KEY= ***
 DEBUG=False
 PORT=5000
 FLASK_ENV=production
@@ -161,7 +161,7 @@ docker run -p 5000:5000 portoex
 
 ### Heroku
 ```bash
-heroku create seu-app-portoex
+heroku create cotacao
 git push heroku main
 ```
 
@@ -228,4 +228,4 @@ Para suporte técnico, entre em contato:
 
 ---
 
-**PortoEx** - Transformando a logística brasileira 🚛📦 
+**PortoEx** - Transportando Soluções 🚛📦 
