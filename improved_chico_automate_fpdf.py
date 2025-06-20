@@ -2497,6 +2497,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             'RIO': 'Rio de Janeiro',      # Base real na planilha
             'POA': 'Porto Alegre',       # Para cidades do RS
             'CWB': 'Curitiba',           # Para cidades do PR
+            'ITJ': 'Itajaí',             # Para cidades de SC - NOVA BASE
             'BHZ': 'Belo Horizonte',     # Para cidades de MG
             'BSB': 'Brasília',           # Para cidades do DF
             'GYN': 'Goiânia',            # Para cidades de GO - NOVA BASE
@@ -2537,6 +2538,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     'MG': 'BHZ',     # Minas Gerais usa BHZ (Belo Horizonte) - CORRIGIDO  
                     'RS': 'POA',
                     'PR': 'CWB',
+                    'SC': 'ITJ',     # Santa Catarina usa ITJ (Itajaí) - NOVO
                     'DF': 'BSB',
                     'GO': 'GYN',     # Goiás usa GYN (Goiânia) - CORRIGIDO
                     'BA': 'SSA',
@@ -2573,6 +2575,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 'MG': 'BHZ',     # Minas Gerais usa BHZ (Belo Horizonte) - CORRIGIDO
                 'RS': 'POA',
                 'PR': 'CWB',
+                'SC': 'ITJ',     # Santa Catarina usa ITJ (Itajaí) - NOVO
                 'DF': 'BSB',
                 'GO': 'GYN',     # Goiás usa GYN (Goiânia) - CORRIGIDO
                 'BA': 'SSA',
@@ -2690,6 +2693,80 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         print(f"[AGENTES] Agentes de entrega encontrados: {len(agentes_entrega)}")
         
         # 3. COMBINAR COLETA + TRANSFERÊNCIA + ENTREGA COM DADOS REAIS
+        # Se não há agentes de coleta ou entrega, considerar transferências diretas
+        if agentes_coleta.empty or agentes_entrega.empty:
+            print(f"[AGENTES] ⚠️ Agentes insuficientes (Coleta: {len(agentes_coleta)}, Entrega: {len(agentes_entrega)})")
+            print(f"[AGENTES] 🔄 Considerando transferências diretas como alternativa")
+            
+            # Buscar transferências diretas da cidade origem para cidade destino
+            origem_normalizada = normalizar_cidade(origem)
+            destino_normalizado = normalizar_cidade(destino)
+            
+            transferencias_base['Origem_Normalizada'] = transferencias_base['Origem'].apply(normalizar_cidade)
+            transferencias_base['Destino_Normalizado'] = transferencias_base['Destino'].apply(normalizar_cidade)
+            
+            transferencias_diretas = transferencias_base[
+                (transferencias_base['Origem_Normalizada'] == origem_normalizada) &
+                (transferencias_base['Destino_Normalizado'] == destino_normalizado)
+            ]
+            
+            print(f"[AGENTES] 🚛 Transferências diretas {origem} → {destino}: {len(transferencias_diretas)}")
+            
+            # Se não há transferências diretas, buscar para cidades próximas
+            if transferencias_diretas.empty:
+                print(f"[AGENTES] 🔍 Buscando transferências para região próxima...")
+                
+                # Mapeamento de cidades para regiões próximas
+                cidades_proximas = {
+                    'CARLOS BARBOSA': ['CAXIAS DO SUL', 'PORTO ALEGRE', 'GRAMADO', 'CANELA'],
+                    'CAXIAS DO SUL': ['CARLOS BARBOSA', 'PORTO ALEGRE', 'BENTO GONCALVES'],
+                    'GRAMADO': ['CANELA', 'CAXIAS DO SUL', 'PORTO ALEGRE'],
+                    'CANELA': ['GRAMADO', 'CAXIAS DO SUL', 'PORTO ALEGRE']
+                }
+                
+                destino_norm = normalizar_cidade(destino)
+                proximas = cidades_proximas.get(destino_norm, [])
+                
+                for cidade_proxima in proximas:
+                    transferencias_proximas = transferencias_base[
+                        (transferencias_base['Origem_Normalizada'] == origem_normalizada) &
+                        (transferencias_base['Destino_Normalizado'] == cidade_proxima)
+                    ]
+                    
+                    if not transferencias_proximas.empty:
+                        print(f"[AGENTES] 🎯 Encontradas {len(transferencias_proximas)} transferências para {cidade_proxima}")
+                        transferencias_diretas = transferencias_proximas
+                        break
+            
+            for _, linha_direta in transferencias_diretas.iterrows():
+                try:
+                    linha_processada = processar_linha_transferencia(linha_direta, maior_peso, valor_nf)
+                    if linha_processada:
+                        rota_direta = {
+                            'tipo': 'Transferência Direta',
+                            'fornecedor_transferencia': linha_processada['fornecedor'],
+                            'transferencia': {
+                                'origem': linha_direta.get('Origem', origem),
+                                'destino': linha_direta.get('Destino', destino),
+                                'custo': float(linha_processada['custo']),
+                                'pedagio': float(linha_processada['pedagio']),
+                                'gris': float(linha_processada['gris']),
+                                'fornecedor': linha_processada['fornecedor'],
+                                'prazo': linha_processada['prazo']
+                            },
+                            'total': float(linha_processada['custo']) + float(linha_processada['pedagio']) + float(linha_processada['gris']),
+                            'prazo_total': linha_processada['prazo'],
+                            'resumo': f"Direto {linha_processada['fornecedor']}",
+                            'observacoes': f"Transferência direta {origem} → {destino}",
+                            'maior_peso': maior_peso
+                        }
+                        rotas_encontradas.append(rota_direta)
+                        print(f"[AGENTES] ✅ Rota direta: {linha_processada['fornecedor']} - R$ {rota_direta['total']:.2f}")
+                except Exception as e:
+                    print(f"[AGENTES] Erro ao processar transferência direta: {e}")
+                    continue
+        
+        # Continuar com lógica normal de agentes se disponíveis
         for _, agente_col in agentes_coleta.iterrows():
             for transferencia in transferencias_encontradas:
                 for _, agente_ent in agentes_entrega.iterrows():
