@@ -2729,6 +2729,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'base_origem': origem,
                                 'base_destino': base_origem,
                                 'custo': float(linha_coleta_processada['custo']),
+                                'pedagio': float(linha_coleta_processada['pedagio']),
+                                'gris': float(linha_coleta_processada['gris']),
                                 'origem': agente_col.get('Origem', ''),
                                 'destino': agente_col.get('Destino', ''),
                                 'fornecedor': agente_col.get('Fornecedor', 'N/A'),
@@ -2759,6 +2761,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'base_origem': base_destino,
                                 'destino': destino,
                                 'custo': float(linha_entrega_processada['custo']),
+                                'pedagio': float(linha_entrega_processada['pedagio']),
+                                'gris': float(linha_entrega_processada['gris']),
                                 'valor_minimo': 0.0,  # Será implementado na nova lógica
                                 'excedente': 0.0,     # Será implementado na nova lógica
                                 'prazo': linha_entrega_processada['prazo'],
@@ -2851,6 +2855,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'base_origem': base_destino,
                                 'destino': destino,
                                 'custo': float(linha_entrega_processada['custo']),
+                                'pedagio': float(linha_entrega_processada['pedagio']),
+                                'gris': float(linha_entrega_processada['gris']),
                                 'prazo': linha_entrega_processada['prazo'],
                                 'peso_maximo': agente_ent.get('PESO MÁXIMO TRANSPORTADO', 'N/A')
                             },
@@ -2893,6 +2899,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'base_origem': origem,
                                 'base_destino': base_origem,
                                 'custo': float(linha_coleta_processada['custo']),
+                                'pedagio': float(linha_coleta_processada['pedagio']),
+                                'gris': float(linha_coleta_processada['gris']),
                                 'prazo': linha_coleta_processada['prazo'],
                                 'peso_maximo': agente_col.get('PESO MÁXIMO TRANSPORTADO', 'N/A')
                             },
@@ -3525,6 +3533,8 @@ def formatar_resultado_fracionado(resultado):
                             • <strong>Origem:</strong> {agente_coleta.get('origem', 'N/A')}<br>
                             • <strong>Base Destino:</strong> {agente_coleta.get('base_destino', 'N/A')}<br>
                             • <strong>Custo:</strong> R$ {agente_coleta.get('custo', 0):.2f}<br>
+                            • <strong>Pedágio:</strong> R$ {agente_coleta.get('pedagio', 0):.2f}<br>
+                            • <strong>GRIS:</strong> R$ {agente_coleta.get('gris', 0):.2f}<br>
                             • <strong>Prazo:</strong> {agente_coleta.get('prazo', opcao.get('agente_coleta', {}).get('prazo', 'N/A'))} dias<br>
                             • <strong>Peso Máximo:</strong> {agente_coleta.get('peso_maximo', opcao.get('agente_coleta', {}).get('peso_maximo', 'N/A'))} kg
                         </td>
@@ -3552,6 +3562,8 @@ def formatar_resultado_fracionado(resultado):
                             • <strong>Base Origem:</strong> {agente_entrega.get('base_origem', 'N/A')}<br>
                             • <strong>Destino:</strong> {agente_entrega.get('destino', 'N/A')}<br>
                             • <strong>Custo:</strong> R$ {agente_entrega.get('custo', 0):.2f}<br>
+                            • <strong>Pedágio:</strong> R$ {agente_entrega.get('pedagio', 0):.2f}<br>
+                            • <strong>GRIS:</strong> R$ {agente_entrega.get('gris', 0):.2f}<br>
                             • <strong>Prazo:</strong> {agente_entrega.get('prazo', opcao.get('agente_entrega', {}).get('prazo', 'N/A'))} dias<br>
                             • <strong>Peso Máximo:</strong> {agente_entrega.get('peso_maximo', opcao.get('agente_entrega', {}).get('peso_maximo', 'N/A'))} kg
                         </td>
