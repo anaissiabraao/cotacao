@@ -3155,8 +3155,9 @@ def processar_linha_transferencia(linha, peso, valor_nf):
                 
                 if gris_exc is not None and not pd.isna(gris_exc):
                     gris_exc = float(gris_exc)
-                    # Se maior que 1, assumir que é percentual (ex: 3.5 = 3.5%)
-                    gris_percentual = gris_exc / 100 if gris_exc > 1 else gris_exc
+                    # CORREÇÃO: Gris Exc na planilha sempre está em formato percentual
+                    # Exemplo: 0.1 = 0.1%, 0.17 = 0.17%, 3.5 = 3.5%
+                    gris_percentual = gris_exc / 100
                     gris_calculado = valor_nf * gris_percentual
                     
                     if gris_min is not None and not pd.isna(gris_min):
