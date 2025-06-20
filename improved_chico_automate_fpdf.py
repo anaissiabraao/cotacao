@@ -3066,61 +3066,76 @@ def processar_linha_transferencia(linha, peso, valor_nf):
         is_agente = linha_dict.get('Tipo') == 'Agente'
         
         if is_agente:
-            # LÓGICA PARA AGENTES
+            # LÓGICA PARA AGENTES (CORRIGIDA)
+            valor_minimo = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
+            valor_excedente = float(linha_dict.get('EXCEDENTE', 0) or 0)
+            
             if peso <= 10:
-                # Peso ≤ 10kg: usar VALOR MÍNIMO ATÉ 10 (Coluna G)
-                valor_minimo = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
-                valor_base = valor_minimo  # Valor fixo independente do peso
+                # Peso ≤ 10kg: usar apenas VALOR MÍNIMO ATÉ 10
+                valor_base = valor_minimo
                 faixa_peso_usada = "Valor Mínimo (≤10kg)"
                 valor_kg_usado = valor_minimo / 10 if valor_minimo > 0 else 0  # Para referência
             else:
-                # Peso > 10kg: calcular com EXCEDENTE (Coluna Q)
-                valor_excedente = float(linha_dict.get('EXCEDENTE', 0) or 0)
-                valor_base = peso * valor_excedente
-                faixa_peso_usada = "Excedente (>10kg)"
+                # Peso > 10kg: VALOR MÍNIMO + (peso - 10) × EXCEDENTE
+                peso_excedente = peso - 10
+                valor_base = valor_minimo + (peso_excedente * valor_excedente)
+                faixa_peso_usada = f"Valor Mínimo + Excedente (>{peso:.1f}kg)"
                 valor_kg_usado = valor_excedente
         else:
-            # LÓGICA PARA TRANSFERÊNCIAS (mantém a lógica original)
+            # LÓGICA PARA TRANSFERÊNCIAS (corrigida)
             if peso <= 10:
+                # Para peso ≤ 10kg: usar VALOR MÍNIMO ATÉ 10 (valor fixo)
+                valor_base = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
                 faixa_peso_usada = 'VALOR MÍNIMO ATÉ 10'
-                valor_kg_coluna = 'VALOR MÍNIMO ATÉ 10'
-            elif peso <= 20:
-                faixa_peso_usada = 20
-                valor_kg_coluna = 20
-            elif peso <= 30:
-                faixa_peso_usada = 30
-                valor_kg_coluna = 30
-            elif peso <= 50:
-                faixa_peso_usada = 50
-                valor_kg_coluna = 50
-            elif peso <= 70:
-                faixa_peso_usada = 70
-                valor_kg_coluna = 70
-            elif peso <= 100:
-                faixa_peso_usada = 100
-                valor_kg_coluna = 100
-            elif peso <= 300:
-                faixa_peso_usada = 300
-                valor_kg_coluna = 300
-            elif peso <= 500:
-                faixa_peso_usada = 500
-                valor_kg_coluna = 500
+                valor_kg_usado = valor_base / 10 if valor_base > 0 else 0  # Para referência
             else:
-                faixa_peso_usada = 'Acima 500'
-                valor_kg_coluna = 'Acima 500'
-            
-            # Obter valor por kg para a faixa
-            try:
-                if valor_kg_coluna in linha_dict:
-                    valor_kg_usado = float(linha_dict[valor_kg_coluna] or 0)
+                # Para peso > 10kg: usar faixa correspondente multiplicada pelo peso
+                # MAS SEMPRE GARANTIR QUE SEJA NO MÍNIMO O VALOR MÍNIMO ATÉ 10
+                valor_minimo = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
+                
+                if peso <= 20:
+                    faixa_peso_usada = 20
+                    valor_kg_coluna = 20
+                elif peso <= 30:
+                    faixa_peso_usada = 30
+                    valor_kg_coluna = 30
+                elif peso <= 50:
+                    faixa_peso_usada = 50
+                    valor_kg_coluna = 50
+                elif peso <= 70:
+                    faixa_peso_usada = 70
+                    valor_kg_coluna = 70
+                elif peso <= 100:
+                    faixa_peso_usada = 100
+                    valor_kg_coluna = 100
+                elif peso <= 300:
+                    faixa_peso_usada = 300
+                    valor_kg_coluna = 300
+                elif peso <= 500:
+                    faixa_peso_usada = 500
+                    valor_kg_coluna = 500
                 else:
-                    # Se não encontrar a coluna, tentar usar o valor mínimo
-                    valor_kg_usado = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
-            except (ValueError, TypeError):
-                valor_kg_usado = 0
-            
-            # Calcular valor base para transferências
-            valor_base = peso * valor_kg_usado
+                    faixa_peso_usada = 'Acima 500'
+                    valor_kg_coluna = 'Acima 500'
+                
+                # Obter valor por kg para a faixa
+                try:
+                    if valor_kg_coluna in linha_dict:
+                        valor_kg_usado = float(linha_dict[valor_kg_coluna] or 0)
+                    else:
+                        # Se não encontrar a coluna, tentar usar o valor mínimo
+                        valor_kg_usado = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0) / 10
+                except (ValueError, TypeError):
+                    valor_kg_usado = 0
+                
+                # Calcular valor base para transferências
+                valor_calculado = peso * valor_kg_usado
+                # GARANTIR que nunca seja menor que o valor mínimo
+                valor_base = max(valor_minimo, valor_calculado)
+                
+                # Atualizar faixa usada se valor mínimo foi aplicado
+                if valor_base == valor_minimo:
+                    faixa_peso_usada = f"Valor Mínimo (>{peso:.1f}kg)"
         
         # Calcular pedágio
         pedagio = 0.0
