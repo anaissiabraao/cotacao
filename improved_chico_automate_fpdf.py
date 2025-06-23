@@ -4053,24 +4053,7 @@ def formatar_resultado_fracionado(resultado):
 
         <!-- Alerta de Valor Alto -->
         {_gerar_alerta_valor_alto_html(resultado.get('validacao_valor', {}))}
-        
-        <!-- JavaScript para Toggle das Seções Técnicas -->
-        <script>
-        function toggleTechnicalSections() {{
-            const sections = document.getElementById('technicalSections');
-            const button = document.getElementById('toggleTechnicalSections');
-            
-            if (sections.style.display === 'none') {{
-                sections.style.display = 'block';
-                button.innerHTML = '📊 Ocultar Informações Técnicas';
-                button.style.background = '#6c757d';
-            }} else {{
-                sections.style.display = 'none';
-                button.innerHTML = '📊 Mostrar Informações Técnicas';
-                button.style.background = '#17a2b8';
-            }}
-        }}
-        </script>
+
     """
     
     # Tabela com ranking das opções disponíveis
@@ -4481,6 +4464,21 @@ def formatar_resultado_fracionado(resultado):
             element.style.display = "block";
         } else {
             element.style.display = "none";
+        }
+    }
+    
+    function toggleTechnicalSections() {
+        const sections = document.getElementById('technicalSections');
+        const button = document.getElementById('toggleTechnicalSections');
+        
+        if (sections.style.display === 'none') {
+            sections.style.display = 'block';
+            button.innerHTML = '📊 Ocultar Informações Técnicas';
+            button.style.background = '#6c757d';
+        } else {
+            sections.style.display = 'none';
+            button.innerHTML = '📊 Mostrar Informações Técnicas';
+            button.style.background = '#17a2b8';
         }
     }
     
