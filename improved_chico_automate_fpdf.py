@@ -1208,7 +1208,31 @@ def calcular_frete_fracionado():
 
         # Definir peso real e peso cubado
         peso_real = float(peso)
-        peso_cubado = float(cubagem) * 166  # Usando 166kg/m³ conforme regra da ANTT
+        
+        # Função para calcular peso cubado baseado no tipo de serviço
+        def calcular_peso_cubado_por_tipo(cubagem_m3, tipo_servico='fracionado'):
+            if not cubagem_m3 or cubagem_m3 <= 0:
+                return peso_real * 0.17  # Fallback padrão
+            
+            if tipo_servico == 'direto':
+                return float(cubagem_m3) * 250  # 250 kg/m³ para diretos
+            else:
+                return float(cubagem_m3) * 166  # 166 kg/m³ para fracionado
+        
+        # Para esta função, usar peso cubado fracionado como base (será recalculado para diretos)
+        peso_cubado_fracionado = calcular_peso_cubado_por_tipo(cubagem, 'fracionado')
+        peso_cubado_direto = calcular_peso_cubado_por_tipo(cubagem, 'direto')
+        
+        # Usar peso cubado fracionado para transferências e agentes tradicionais
+        maior_peso_fracionado = max(peso_real, peso_cubado_fracionado)
+        # Usar peso cubado direto para agentes diretos
+        maior_peso_direto = max(peso_real, peso_cubado_direto)
+        
+        print(f"[AGENTES] Peso real: {peso_real}kg")
+        print(f"[AGENTES] Peso cubado fracionado (166): {peso_cubado_fracionado:.2f}kg")
+        print(f"[AGENTES] Peso cubado direto (250): {peso_cubado_direto:.2f}kg")
+        print(f"[AGENTES] Maior peso fracionado: {maior_peso_fracionado:.2f}kg")
+        print(f"[AGENTES] Maior peso direto: {maior_peso_direto:.2f}kg")
 
         # VALIDAR SE VALOR DA NF É ALTO E SUGERIR FRETE DEDICADO
         validacao_valor = validar_valor_nf_alto(valor_nf)
@@ -1243,7 +1267,7 @@ def calcular_frete_fracionado():
         id_historico = f"Fra{CONTADOR_FRACIONADO:03d}"
 
         # Identificar qual peso foi usado na melhor opção (rotas com agentes)
-        maior_peso_usado = melhor_opcao.get('maior_peso', max(peso_real, peso_cubado))
+        maior_peso_usado = melhor_opcao.get('maior_peso', max(peso_real, peso_cubado_fracionado))
         peso_usado_tipo = melhor_opcao.get('peso_usado', 'Real' if maior_peso_usado == peso_real else 'Cubado')
 
         # Criar resultado final apenas com dados REAIS
@@ -1255,7 +1279,7 @@ def calcular_frete_fracionado():
             "destino": cidade_destino,
             "uf_destino": uf_destino,
             "peso": peso_real,
-            "peso_cubado": peso_cubado,
+            "peso_cubado": peso_cubado_fracionado,
             "maior_peso": maior_peso_usado,
             "peso_usado": peso_usado_tipo,
             "cubagem": cubagem,
@@ -1320,7 +1344,7 @@ def calcular_frete_fracionado():
             'destino': cidade_destino,
             'uf_destino': uf_destino,
             'peso': peso_real,
-            'peso_cubado': peso_cubado,
+            'peso_cubado': peso_cubado_fracionado,
             'cubagem': cubagem,
             'valor_nf': valor_nf,
             'estrategia_busca': "AGENTES_REAL_APENAS",
@@ -2580,10 +2604,36 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # Desempacotar os dados retornados pela função
         df_agentes, df_transferencias = dados_agentes
         
-        # Calcular peso cubado
+        # Calcular peso cubado diferenciado: 166 para fracionado, 250 para diretos
         peso_real = float(peso)
-        peso_cubado = float(cubagem) * 166 if cubagem and cubagem > 0 else peso_real * 0.17
-        maior_peso = max(peso_real, peso_cubado)
+        
+        # Função para calcular peso cubado baseado no tipo de serviço
+        def calcular_peso_cubado_por_tipo(cubagem_m3, tipo_servico='fracionado'):
+            if not cubagem_m3 or cubagem_m3 <= 0:
+                return peso_real * 0.17  # Fallback padrão
+            
+            if tipo_servico == 'direto':
+                return float(cubagem_m3) * 250  # 250 kg/m³ para diretos
+            else:
+                return float(cubagem_m3) * 166  # 166 kg/m³ para fracionado
+        
+        # Para esta função, usar peso cubado fracionado como base (será recalculado para diretos)
+        peso_cubado_fracionado = calcular_peso_cubado_por_tipo(cubagem, 'fracionado')
+        peso_cubado_direto = calcular_peso_cubado_por_tipo(cubagem, 'direto')
+        
+        # Usar peso cubado fracionado para transferências e agentes tradicionais
+        maior_peso_fracionado = max(peso_real, peso_cubado_fracionado)
+        # Usar peso cubado direto para agentes diretos
+        maior_peso_direto = max(peso_real, peso_cubado_direto)
+        
+        print(f"[AGENTES] Peso real: {peso_real}kg")
+        print(f"[AGENTES] Peso cubado fracionado (166): {peso_cubado_fracionado:.2f}kg")
+        print(f"[AGENTES] Peso cubado direto (250): {peso_cubado_direto:.2f}kg")
+        print(f"[AGENTES] Maior peso fracionado: {maior_peso_fracionado:.2f}kg")
+        print(f"[AGENTES] Maior peso direto: {maior_peso_direto:.2f}kg")
+        
+        # Para compatibilidade com código existente
+        maior_peso = maior_peso_fracionado
         
         # NORMALIZAR CIDADES NO INÍCIO (para uso geral)
         origem_normalizada = normalizar_cidade(origem)
@@ -2882,18 +2932,19 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     print(f"[AGENTES] ❌ Agente direto {agente_direto.get('Fornecedor')} pulado - valores zerados")
                     continue
                 
-                # Validar peso máximo do agente direto
-                validacao_peso_direto = validar_peso_maximo_agente(agente_direto, maior_peso, "Agente Direto")
+                # Validar peso máximo do agente direto (USAR PESO DIRETO)
+                validacao_peso_direto = validar_peso_maximo_agente(agente_direto, maior_peso_direto, "Agente Direto")
                 
-                # Processar linha do agente direto
-                linha_direto_processada = processar_linha_transferencia(agente_direto, maior_peso, valor_nf)
+                # Processar linha do agente direto (USAR PESO DIRETO)
+                linha_direto_processada = processar_linha_transferencia(agente_direto, maior_peso_direto, valor_nf)
                 if not linha_direto_processada:
                     continue
                 
-                # ROTA DIRETA (SEM TRANSFERÊNCIA)
+                # ROTA DIRETA (SEM TRANSFERÊNCIA) - INCLUIR TDA
                 total_rota_direta = (linha_direto_processada['custo'] + 
                                    linha_direto_processada['pedagio'] + 
-                                   linha_direto_processada['gris'])
+                                   linha_direto_processada['gris'] +
+                                   linha_direto_processada.get('tda', 0))  # INCLUIR TDA
                 
                 rota_direta = {
                     'tipo_rota': 'direta',
@@ -2906,6 +2957,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                         'custo': float(linha_direto_processada['custo']),
                         'pedagio': float(linha_direto_processada['pedagio']),
                         'gris': float(linha_direto_processada['gris']),
+                        'tda': float(linha_direto_processada.get('tda', 0)),  # INCLUIR TDA
                         'prazo': linha_direto_processada['prazo'],
                         'peso_maximo': agente_direto.get('PESO MÁXIMO TRANSPORTADO', 'N/A'),
                         'validacao_peso': validacao_peso_direto
@@ -2913,15 +2965,16 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     'total': float(total_rota_direta),
                     'prazo_total': int(linha_direto_processada['prazo']),
                     'peso_real': float(peso_real),
-                    'peso_cubado': float(peso_cubado),
-                    'maior_peso': float(maior_peso),
-                    'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real',
+                    'peso_cubado': float(peso_cubado_direto),
+                    'maior_peso': float(maior_peso_direto),
+                    'peso_usado': 'Cubado' if maior_peso_direto == peso_cubado_direto else 'Real',
                     'resumo': f"DIRETO: {agente_direto.get('Fornecedor', 'N/A')} (Porta-a-Porta)",
                     'observacoes': "🚀 Serviço DIRETO porta-a-porta - sem transferência",
                     'detalhamento_custos': {
                         'servico_direto': float(linha_direto_processada['custo']),
                         'pedagio': float(linha_direto_processada['pedagio']),
-                        'gris_total': float(linha_direto_processada['gris'])
+                        'gris_total': float(linha_direto_processada['gris']),
+                        'tda': float(linha_direto_processada.get('tda', 0))  # INCLUIR TDA NO DETALHAMENTO
                     },
                     'alertas_peso': {
                         'tem_alerta': not validacao_peso_direto['valido'],
@@ -3071,9 +3124,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             'total': float(total_rota),
                             'prazo_total': int(prazo_total),
                             'peso_real': float(peso_real),
-                            'peso_cubado': float(peso_cubado),
-                            'maior_peso': float(maior_peso),
-                            'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real',
+                            'peso_cubado': float(peso_cubado_fracionado),
+                            'maior_peso': float(maior_peso_fracionado),
+                            'peso_usado': 'Cubado' if maior_peso_fracionado == peso_cubado_fracionado else 'Real',
                             'base_origem': base_origem_transferencia,
                             'base_destino_transferencia': base_destino_transferencia,
                             'resumo': f"{agente_col.get('Fornecedor', 'N/A')} + {transferencia['fornecedor']} + {agente_ent.get('Fornecedor', 'N/A')}",
@@ -3284,6 +3337,18 @@ def processar_linha_transferencia(linha, peso, valor_nf):
         except (ValueError, TypeError):
             prazo = 3
         
+        # Calcular TDA (Taxa de Despacho Aduaneiro) - NOVO PARA DIRETOS
+        tda = 0.0
+        try:
+            if is_agente and tipo == 'Direto':  # Apenas para agentes diretos
+                valor_tda = linha_dict.get('Tda', 0)
+                if valor_tda is not None and not pd.isna(valor_tda):
+                    tda = float(valor_tda)
+                    if tda < 0:  # Garantir que não seja negativo
+                        tda = 0.0
+        except (ValueError, TypeError):
+            tda = 0.0
+        
         # Obter informações do fornecedor
         fornecedor = linha_dict.get('Fornecedor', 'N/A')
         
@@ -3291,9 +3356,11 @@ def processar_linha_transferencia(linha, peso, valor_nf):
         valor_base = 0.0 if pd.isna(valor_base) or math.isnan(valor_base) else valor_base
         pedagio = 0.0 if pd.isna(pedagio) or math.isnan(pedagio) else pedagio
         gris = 0.0 if pd.isna(gris) or math.isnan(gris) else gris
+        tda = 0.0 if pd.isna(tda) or math.isnan(tda) else tda
         valor_kg_usado = 0.0 if pd.isna(valor_kg_usado) or math.isnan(valor_kg_usado) else valor_kg_usado
         
-        total = valor_base + pedagio + gris
+        # TOTAL INCLUI TDA PARA DIRETOS
+        total = valor_base + pedagio + gris + tda
         total = 0.0 if pd.isna(total) or math.isnan(total) else total
         
         # Retornar resultado formatado
@@ -3301,12 +3368,14 @@ def processar_linha_transferencia(linha, peso, valor_nf):
             'custo': round(valor_base, 2),
             'pedagio': round(pedagio, 2),
             'gris': round(gris, 2),
+            'tda': round(tda, 2),  # NOVO CAMPO TDA
             'total': round(total, 2),
             'prazo': prazo,
             'faixa_peso': faixa_peso_usada,
             'valor_kg': round(valor_kg_usado, 4),
             'fornecedor': fornecedor,
-            'is_agente': is_agente
+            'is_agente': is_agente,
+            'tipo': tipo  # NOVO CAMPO TIPO
         }
         
     except Exception as e:
