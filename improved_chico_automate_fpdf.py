@@ -2585,6 +2585,10 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         peso_cubado = float(cubagem) * 166 if cubagem and cubagem > 0 else peso_real * 0.17
         maior_peso = max(peso_real, peso_cubado)
         
+        # NORMALIZAR CIDADES NO INÍCIO (para uso geral)
+        origem_normalizada = normalizar_cidade(origem)
+        destino_normalizado = normalizar_cidade(destino)
+        
         # Definir bases disponíveis (conforme especificado pelo usuário)
         bases_disponiveis = {
             'FILIAL': 'São Paulo',        # Base real na planilha - SOMENTE São Paulo Capital
