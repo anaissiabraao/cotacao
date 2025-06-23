@@ -1210,6 +1210,9 @@ def calcular_frete_fracionado():
         peso_real = float(peso)
         peso_cubado = float(cubagem) * 166  # Usando 166kg/m³ conforme regra da ANTT
 
+        # VALIDAR SE VALOR DA NF É ALTO E SUGERIR FRETE DEDICADO
+        validacao_valor = validar_valor_nf_alto(valor_nf)
+
         # USAR APENAS ROTAS COM AGENTES - SEM FRETES DIRETOS
         rotas_agentes = calcular_frete_com_agentes(
             cidade_origem, uf_origem, 
@@ -1294,6 +1297,9 @@ def calcular_frete_fracionado():
             "detalhamento": f"Busca APENAS rotas com agentes reais - {len(cotacoes_ranking)} opções encontradas"
         }
 
+        # Adicionar validação de valor alto ao resultado
+        resultado_final["validacao_valor"] = validacao_valor
+
         # Sem mapa na aba fracionado - dados vêm da planilha
         resultado_final["rota_pontos"] = []
         resultado_final["distancia"] = 0
@@ -1319,7 +1325,9 @@ def calcular_frete_fracionado():
             'valor_nf': valor_nf,
             'estrategia_busca': "AGENTES_REAL_APENAS",
             # Dados de rotas com agentes
-            'rotas_agentes': rotas_agentes
+            'rotas_agentes': rotas_agentes,
+            # Validação de valor alto
+            'validacao_valor': validacao_valor
         })
 
         # Salvar no histórico
@@ -2762,19 +2770,40 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         print(f"[AGENTES] Colunas disponíveis na base de agentes: {list(df_agentes.columns)}")
         
         # NOVA LÓGICA: Agentes fazem coleta/entrega entre cidade do cliente e base
-        # Agentes de COLETA: buscam na cidade de origem e levam para a base de origem
+        # Busca flexível considerando múltiplas bases possíveis para uma UF
+        
+        # Mapear bases alternativas para UFs
+        bases_alternativas = {
+            'GO': ['APS', 'BSB', 'GYN', 'UDI'],  # Goiás pode usar APS, BSB, GYN ou UDI
+            'PR': ['CWB', 'LDB'],  # Paraná pode usar CWB ou LDB
+            'SC': ['ITJ', 'CCM'],  # Santa Catarina pode usar ITJ ou CCM 
+            'RS': ['POA', 'CXJ'],  # Rio Grande do Sul pode usar POA ou CXJ
+            'SP': ['FILIAL', 'RAO', 'SJK', 'CPQ', 'MII', 'PPB', 'SSZ'],  # São Paulo múltiplas bases
+            'MG': ['BHZ', 'CPQ', 'FILIAL', 'JDF', 'VAG', 'POO', 'PPY', 'UDI'],  # Minas Gerais múltiplas bases
+            'RJ': ['RIO', 'QVR', 'CAW', 'JDF']  # Rio de Janeiro múltiplas bases
+        }
+        
+        # Agentes de COLETA: buscam na cidade de origem
         origem_normalizada = normalizar_cidade(origem)
+        bases_possiveis_origem = bases_alternativas.get(uf_origem, [base_origem])
+        if base_origem not in bases_possiveis_origem:
+            bases_possiveis_origem.append(base_origem)
+        
         agentes_coleta = df_agentes[
             (df_agentes['Tipo'] == 'Agente') &
-            (df_agentes['Base Origem'] == base_origem) &
+            (df_agentes['Base Origem'].isin(bases_possiveis_origem)) &
             (df_agentes['Origem_Normalizada'] == origem_normalizada)
         ]
         
         # Agentes de ENTREGA: saem da base de destino e entregam na cidade de destino
         destino_normalizado = normalizar_cidade(destino)
+        bases_possiveis_destino = bases_alternativas.get(uf_destino, [base_destino])
+        if base_destino not in bases_possiveis_destino:
+            bases_possiveis_destino.append(base_destino)
+        
         agentes_entrega = df_agentes[
             (df_agentes['Tipo'] == 'Agente') &
-            (df_agentes['Base Origem'] == base_destino) &
+            (df_agentes['Base Origem'].isin(bases_possiveis_destino)) &
             (df_agentes['Origem_Normalizada'] == destino_normalizado)
         ]
         
@@ -3612,6 +3641,9 @@ def formatar_resultado_fracionado(resultado):
             <div class="analise-item"><strong>Cubagem:</strong> {resultado.get('cubagem', 0):.4f} m³</div>
             {f'<div class="analise-item"><strong>Valor da NF:</strong> R$ {resultado.get("valor_nf", 0):,.2f}</div>' if resultado.get('valor_nf') else '<div class="analise-item"><strong>Valor da NF:</strong> <span style="color: #f39c12;">Não informado</span></div>'}
         </div>
+
+        <!-- Alerta de Valor Alto -->
+        {_gerar_alerta_valor_alto_html(resultado.get('validacao_valor', {}))}
     """
     
     # Tabela com ranking das opções disponíveis
@@ -3790,6 +3822,26 @@ def formatar_resultado_fracionado(resultado):
         0% { left: -100%; }
         100% { left: 100%; }
     }
+    
+    @keyframes pulseGold {
+        0% { 
+            transform: scale(1); 
+            box-shadow: 0 6px 20px rgba(255, 167, 38, 0.4); 
+        }
+        50% { 
+            transform: scale(1.02); 
+            box-shadow: 0 8px 25px rgba(255, 167, 38, 0.6); 
+        }
+        100% { 
+            transform: scale(1); 
+            box-shadow: 0 6px 20px rgba(255, 167, 38, 0.4); 
+        }
+    }
+    
+    @keyframes shine {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
     </style>
     
     <script>
@@ -3935,6 +3987,115 @@ def validar_peso_maximo_agente(agente, peso_usado, tipo_agente=""):
             'alerta': None,
             'status': 'erro_validacao'
         }
+
+def validar_valor_nf_alto(valor_nf, limite=400000):
+    """
+    Valida se o valor da NF é alto e sugere frete dedicado
+    """
+    if not valor_nf:
+        return {
+            'valor_alto': False,
+            'alerta': None
+        }
+    
+    try:
+        valor_num = float(valor_nf)
+        if valor_num >= limite:
+            return {
+                'valor_alto': True,
+                'valor_nf': valor_num,
+                'limite': limite,
+                'alerta': {
+                    'tipo': 'valor_nf_alto',
+                    'titulo': '💰 Carga de Alto Valor Detectada',
+                    'mensagem': f'Valor da NF (R$ {valor_num:,.2f}) ≥ R$ {limite:,.2f}',
+                    'recomendacao': 'Considere usar Frete Dedicado para maior segurança',
+                    'botao_acao': 'Calcular Frete Dedicado'
+                }
+            }
+        else:
+            return {
+                'valor_alto': False,
+                'valor_nf': valor_num,
+                'limite': limite,
+                'alerta': None
+            }
+    except (ValueError, TypeError):
+        return {
+            'valor_alto': False,
+            'alerta': None
+        }
+
+def _gerar_alerta_valor_alto_html(validacao_valor):
+    """
+    Gera HTML para alerta de valor da NF alto sugerindo frete dedicado
+    """
+    if not validacao_valor or not validacao_valor.get('valor_alto', False):
+        return ""
+    
+    alerta = validacao_valor.get('alerta', {})
+    if not alerta:
+        return ""
+    
+    return f"""
+    <div class="alerta-valor-alto" style="
+        background: linear-gradient(135deg, #ffa726, #ff8a50);
+        color: white;
+        padding: 16px;
+        border-radius: 12px;
+        margin: 16px 0;
+        border-left: 5px solid #f57c00;
+        animation: pulseGold 3s infinite;
+        box-shadow: 0 6px 20px rgba(255, 167, 38, 0.4);
+        position: relative;
+        overflow: hidden;
+    ">
+        <div style="display: flex; align-items: center; gap: 12px; position: relative; z-index: 2;">
+            <span style="font-size: 1.8em;">💰</span>
+            <div style="flex: 1;">
+                <strong style="font-size: 1.1em; display: block; margin-bottom: 8px;">
+                    {alerta.get('titulo', 'Carga de Alto Valor')}
+                </strong>
+                <div style="font-size: 0.95em; margin-bottom: 12px; opacity: 0.95;">
+                    {alerta.get('mensagem', '')}
+                </div>
+                <div style="background: rgba(255,255,255,0.2); padding: 10px; border-radius: 8px; margin-bottom: 12px;">
+                    <strong>💡 {alerta.get('recomendacao', 'Recomendação')}</strong>
+                </div>
+                <div style="text-align: center;">
+                    <button 
+                        onclick="window.open('/?tab=dedicado', '_blank')" 
+                        style="
+                            background: linear-gradient(135deg, #4caf50, #45a049);
+                            color: white;
+                            border: none;
+                            padding: 12px 24px;
+                            border-radius: 8px;
+                            font-weight: bold;
+                            font-size: 1em;
+                            cursor: pointer;
+                            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+                            transition: all 0.3s ease;
+                        "
+                        onmouseover="this.style.transform='scale(1.05)'"
+                        onmouseout="this.style.transform='scale(1)'"
+                    >
+                        🚛 {alerta.get('botao_acao', 'Calcular Frete Dedicado')}
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="shine-effect" style="
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shine 4s infinite;
+        "></div>
+    </div>
+    """
 
 if __name__ == "__main__":
     # Usar configurações de ambiente para produção
