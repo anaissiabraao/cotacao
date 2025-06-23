@@ -3945,8 +3945,26 @@ def formatar_resultado_fracionado(resultado):
             <div class="analise-item" style="font-size: 1.1rem; font-weight: bold; text-align: center;">
                 ⏱️ <strong>Prazo: {melhor_opcao.get('prazo_total', 'N/A')} dias úteis</strong>
             </div>
+            
+            <!-- Botão para Ocultar/Mostrar Seções Técnicas -->
+            <div class="analise-item" style="text-align: center; margin-top: 15px;">
+                <button id="toggleTechnicalSections" onclick="toggleTechnicalSections()" style="
+                    background: #6c757d; 
+                    color: white; 
+                    border: none; 
+                    padding: 8px 16px; 
+                    border-radius: 5px; 
+                    font-size: 0.9rem; 
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                " onmouseover="this.style.background='#5a6268'" onmouseout="this.style.background='#6c757d'">
+                    📊 Ocultar Informações Técnicas
+                </button>
+            </div>
         </div>
 
+        <!-- Container das Seções Técnicas -->
+        <div id="technicalSections">
         <!-- Filtros de Qualidade Aplicados -->
         <div class="analise-container">
             <div class="analise-title">
@@ -4031,9 +4049,28 @@ def formatar_resultado_fracionado(resultado):
                 </div>
             </div>
         </div>
+        </div>
 
         <!-- Alerta de Valor Alto -->
         {_gerar_alerta_valor_alto_html(resultado.get('validacao_valor', {}))}
+        
+        <!-- JavaScript para Toggle das Seções Técnicas -->
+        <script>
+        function toggleTechnicalSections() {{
+            const sections = document.getElementById('technicalSections');
+            const button = document.getElementById('toggleTechnicalSections');
+            
+            if (sections.style.display === 'none') {{
+                sections.style.display = 'block';
+                button.innerHTML = '📊 Ocultar Informações Técnicas';
+                button.style.background = '#6c757d';
+            }} else {{
+                sections.style.display = 'none';
+                button.innerHTML = '📊 Mostrar Informações Técnicas';
+                button.style.background = '#17a2b8';
+            }}
+        }}
+        </script>
     """
     
     # Tabela com ranking das opções disponíveis
