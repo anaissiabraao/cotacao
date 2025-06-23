@@ -2791,6 +2791,12 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             for transferencia in transferencias_encontradas:
                 for _, agente_ent in agentes_entrega.iterrows():
                     try:
+                        # Validar peso máximo do agente de coleta
+                        validacao_coleta = validar_peso_maximo_agente(agente_col, maior_peso, "Agente de Coleta")
+                        
+                        # Validar peso máximo do agente de entrega
+                        validacao_entrega = validar_peso_maximo_agente(agente_ent, maior_peso, "Agente de Entrega")
+                        
                         # Calcular custos da coleta usando dados reais
                         linha_coleta_processada = processar_linha_transferencia(agente_col, maior_peso, valor_nf)
                         if not linha_coleta_processada:
@@ -2824,7 +2830,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'destino': agente_col.get('Destino', ''),
                                 'fornecedor': agente_col.get('Fornecedor', 'N/A'),
                                 'prazo': linha_coleta_processada['prazo'],
-                                'peso_maximo': agente_col.get('PESO MÁXIMO TRANSPORTADO', 'N/A')
+                                'peso_maximo': agente_col.get('PESO MÁXIMO TRANSPORTADO', 'N/A'),
+                                'validacao_peso': validacao_coleta
                             },
                             'transferencia': {
                                 'base_origem': base_origem,
@@ -2856,7 +2863,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'valor_minimo': 0.0,  # Será implementado na nova lógica
                                 'excedente': 0.0,     # Será implementado na nova lógica
                                 'prazo': linha_entrega_processada['prazo'],
-                                'peso_maximo': agente_ent.get('PESO MÁXIMO TRANSPORTADO', 'N/A')
+                                'peso_maximo': agente_ent.get('PESO MÁXIMO TRANSPORTADO', 'N/A'),
+                                'validacao_peso': validacao_entrega
                             },
                             'total': float(total_rota),
                             'prazo_total': int(prazo_total),
@@ -2873,6 +2881,10 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'entrega': float(linha_entrega_processada['custo']),
                                 'pedagio': float(linha_coleta_processada['pedagio'] + transferencia['pedagio'] + linha_entrega_processada['pedagio']),
                                 'gris_total': float(linha_coleta_processada['gris'] + transferencia['gris'] + linha_entrega_processada['gris'])
+                            },
+                            'alertas_peso': {
+                                'tem_alerta': not validacao_coleta['valido'] or not validacao_entrega['valido'],
+                                'alertas': [alerta for alerta in [validacao_coleta.get('alerta'), validacao_entrega.get('alerta')] if alerta]
                             }
                         }
                         
@@ -2913,6 +2925,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             for transferencia in transferencias_encontradas:
                 for _, agente_ent in agentes_entrega.iterrows():
                     try:
+                        # Validar peso máximo do agente de entrega
+                        validacao_entrega = validar_peso_maximo_agente(agente_ent, maior_peso, "Agente de Entrega")
+                        
                         linha_entrega_processada = processar_linha_transferencia(agente_ent, maior_peso, valor_nf)
                         if not linha_entrega_processada:
                             continue
@@ -2950,13 +2965,18 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'pedagio': float(linha_entrega_processada['pedagio']),
                                 'gris': float(linha_entrega_processada['gris']),
                                 'prazo': linha_entrega_processada['prazo'],
-                                'peso_maximo': agente_ent.get('PESO MÁXIMO TRANSPORTADO', 'N/A')
+                                'peso_maximo': agente_ent.get('PESO MÁXIMO TRANSPORTADO', 'N/A'),
+                                'validacao_peso': validacao_entrega
                             },
                             'total': float(total_rota),
                             'prazo_total': int(prazo_total),
                             'resumo': f"Transfer {transferencia['fornecedor']} + Entrega {agente_ent.get('Fornecedor')}",
                             'observacoes': f"⚠️ Cliente deve levar carga até base {base_origem}",
-                            'maior_peso': maior_peso
+                            'maior_peso': maior_peso,
+                            'alertas_peso': {
+                                'tem_alerta': not validacao_entrega['valido'],
+                                'alertas': [validacao_entrega.get('alerta')] if validacao_entrega.get('alerta') else []
+                            }
                         }
                         
                         rotas_encontradas.append(rota_parcial)
@@ -2974,6 +2994,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             for _, agente_col in agentes_coleta.iterrows():
                 for transferencia in transferencias_encontradas:
                     try:
+                        # Validar peso máximo do agente de coleta
+                        validacao_coleta = validar_peso_maximo_agente(agente_col, maior_peso, "Agente de Coleta")
+                        
                         linha_coleta_processada = processar_linha_transferencia(agente_col, maior_peso, valor_nf)
                         if not linha_coleta_processada:
                             continue
@@ -2994,7 +3017,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'pedagio': float(linha_coleta_processada['pedagio']),
                                 'gris': float(linha_coleta_processada['gris']),
                                 'prazo': linha_coleta_processada['prazo'],
-                                'peso_maximo': agente_col.get('PESO MÁXIMO TRANSPORTADO', 'N/A')
+                                'peso_maximo': agente_col.get('PESO MÁXIMO TRANSPORTADO', 'N/A'),
+                                'validacao_peso': validacao_coleta
                             },
                             'transferencia': {
                                 'base_origem': base_origem,
@@ -3017,7 +3041,11 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             'prazo_total': int(prazo_total),
                             'resumo': f"Coleta {agente_col.get('Fornecedor')} + Transfer {transferencia['fornecedor']}",
                             'observacoes': f"⚠️ Cliente deve retirar carga na base {base_destino}",
-                            'maior_peso': maior_peso
+                            'maior_peso': maior_peso,
+                            'alertas_peso': {
+                                'tem_alerta': not validacao_coleta['valido'],
+                                'alertas': [validacao_coleta.get('alerta')] if validacao_coleta.get('alerta') else []
+                            }
                         }
                         
                         rotas_encontradas.append(rota_parcial)
@@ -3499,6 +3527,42 @@ def carregar_base_agentes():
     
     return _BASE_AGENTES_CACHE
 
+def _gerar_alerta_peso_html(validacao_peso):
+    """
+    Gera HTML para alertas de peso máximo excedido
+    """
+    if not validacao_peso or validacao_peso.get('valido', True):
+        return ""
+    
+    alerta = validacao_peso.get('alerta', {})
+    if not alerta:
+        return ""
+    
+    return f"""
+    <div class="alerta-peso-excedido" style="
+        background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+        color: white;
+        padding: 12px;
+        border-radius: 8px;
+        margin: 8px 0;
+        border-left: 5px solid #c92a2a;
+        animation: pulseAlert 2s infinite;
+        box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+    ">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.2em;">⚠️</span>
+            <div>
+                <strong>{alerta.get('titulo', 'Peso Excedido')}</strong><br>
+                <small>{alerta.get('mensagem', '')}</small><br>
+                <div style="margin-top: 8px; font-weight: bold; background: rgba(255,255,255,0.2); padding: 6px; border-radius: 4px;">
+                    📞 {alerta.get('acao_requerida', 'Cotar com o agente')}<br>
+                    ✅ {alerta.get('validacao_cliente', 'Valide com o cliente')}
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+
 def formatar_resultado_fracionado(resultado):
     """
     Gera HTML formatado para exibir resultado do frete fracionado APENAS com ROTAS DE AGENTES REAIS
@@ -3630,7 +3694,8 @@ def formatar_resultado_fracionado(resultado):
                             • <strong>Pedágio:</strong> R$ {agente_coleta.get('pedagio', 0):.2f}<br>
                             • <strong>GRIS:</strong> R$ {agente_coleta.get('gris', 0):.2f}<br>
                             • <strong>Prazo:</strong> {agente_coleta.get('prazo', opcao.get('agente_coleta', {}).get('prazo', 'N/A'))} dias<br>
-                            • <strong>Peso Máximo:</strong> {agente_coleta.get('peso_maximo', opcao.get('agente_coleta', {}).get('peso_maximo', 'N/A'))} kg
+                            • <strong>Peso Máximo:</strong> {agente_coleta.get('peso_maximo', opcao.get('agente_coleta', {}).get('peso_maximo', 'N/A'))} kg<br>
+                            {_gerar_alerta_peso_html(agente_coleta.get('validacao_peso', {}))}
                         </td>
                     </tr>
                     
@@ -3659,7 +3724,8 @@ def formatar_resultado_fracionado(resultado):
                             • <strong>Pedágio:</strong> R$ {agente_entrega.get('pedagio', 0):.2f}<br>
                             • <strong>GRIS:</strong> R$ {agente_entrega.get('gris', 0):.2f}<br>
                             • <strong>Prazo:</strong> {agente_entrega.get('prazo', opcao.get('agente_entrega', {}).get('prazo', 'N/A'))} dias<br>
-                            • <strong>Peso Máximo:</strong> {agente_entrega.get('peso_maximo', opcao.get('agente_entrega', {}).get('peso_maximo', 'N/A'))} kg
+                            • <strong>Peso Máximo:</strong> {agente_entrega.get('peso_maximo', opcao.get('agente_entrega', {}).get('peso_maximo', 'N/A'))} kg<br>
+                            {_gerar_alerta_peso_html(agente_entrega.get('validacao_peso', {}))}
                         </td>
                     </tr>
             """
@@ -3688,6 +3754,44 @@ def formatar_resultado_fracionado(resultado):
     html += """
     </div>
     
+    <style>
+    @keyframes pulseAlert {
+        0% { 
+            transform: scale(1); 
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3); 
+        }
+        50% { 
+            transform: scale(1.02); 
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5); 
+        }
+        100% { 
+            transform: scale(1); 
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3); 
+        }
+    }
+    
+    .alerta-peso-excedido {
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .alerta-peso-excedido::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+        animation: shimmer 3s infinite;
+    }
+    
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
+    </style>
+    
     <script>
     function toggleDetails(elementId) {
         var element = document.getElementById(elementId);
@@ -3697,7 +3801,59 @@ def formatar_resultado_fracionado(resultado):
             element.style.display = "none";
         }
     }
+    
+    // Adicionar notificação toast quando há alertas de peso
+    document.addEventListener('DOMContentLoaded', function() {
+        const alertas = document.querySelectorAll('.alerta-peso-excedido');
+        if (alertas.length > 0) {
+            // Criar notificação toast
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                z-index: 10000;
+                animation: slideInRight 0.5s ease-out;
+                max-width: 350px;
+                font-family: Arial, sans-serif;
+            `;
+            toast.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.5em;">⚠️</span>
+                    <div>
+                        <strong>Atenção: Peso Máximo Excedido!</strong><br>
+                        <small>Encontrados ${alertas.length} agente(s) com peso excedido. Verifique os detalhes.</small>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(toast);
+            
+            // Remover toast após 8 segundos
+            setTimeout(() => {
+                toast.style.animation = 'slideOutRight 0.5s ease-out';
+                setTimeout(() => document.body.removeChild(toast), 500);
+            }, 8000);
+        }
+    });
     </script>
+    
+    <style>
+    @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    
+    @keyframes slideOutRight {
+        from { transform: translateX(0); opacity: 1; }
+        to { transform: translateX(100%); opacity: 0; }
+    }
+    </style>
     """
     
     # Resumo final apenas com dados reais
@@ -3726,6 +3882,59 @@ def formatar_resultado_fracionado(resultado):
     """
     
     return html
+
+def validar_peso_maximo_agente(agente, peso_usado, tipo_agente=""):
+    """
+    Valida se o peso usado ultrapassa o peso máximo do agente
+    Retorna dict com status da validação e mensagem de alerta se necessário
+    """
+    try:
+        peso_maximo_str = agente.get('PESO MÁXIMO TRANSPORTADO', '')
+        if not peso_maximo_str or peso_maximo_str in ['N/A', '', 'nan']:
+            return {
+                'valido': True,
+                'peso_maximo': 'N/A',
+                'alerta': None,
+                'status': 'sem_limite'
+            }
+        
+        # Converter peso máximo para número
+        peso_maximo = float(str(peso_maximo_str).replace(',', '.'))
+        peso_usado_num = float(peso_usado)
+        
+        if peso_usado_num > peso_maximo:
+            return {
+                'valido': False,
+                'peso_maximo': peso_maximo,
+                'peso_usado': peso_usado_num,
+                'excesso': peso_usado_num - peso_maximo,
+                'alerta': {
+                    'tipo': 'peso_excedido',
+                    'titulo': f'⚠️ Peso Excedido - {tipo_agente}',
+                    'mensagem': f'Peso usado ({peso_usado_num:.0f}kg) excede o limite do agente ({peso_maximo:.0f}kg)',
+                    'acao_requerida': 'Cotar com o agente',
+                    'validacao_cliente': 'Valide com o cliente, ultrapassou o peso máximo'
+                },
+                'status': 'excedido'
+            }
+        else:
+            return {
+                'valido': True,
+                'peso_maximo': peso_maximo,
+                'peso_usado': peso_usado_num,
+                'margem': peso_maximo - peso_usado_num,
+                'alerta': None,
+                'status': 'dentro_limite'
+            }
+            
+    except (ValueError, TypeError) as e:
+        print(f"[PESO_VALIDACAO] Erro ao validar peso do agente: {e}")
+        return {
+            'valido': True,
+            'peso_maximo': 'N/A',
+            'alerta': None,
+            'status': 'erro_validacao'
+        }
 
 if __name__ == "__main__":
     # Usar configurações de ambiente para produção
