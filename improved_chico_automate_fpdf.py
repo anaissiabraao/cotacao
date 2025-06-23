@@ -3726,6 +3726,7 @@ def formatar_resultado_fracionado(resultado):
                                 • <strong>Custo do Serviço:</strong> R$ {agente_direto.get('custo', 0):.2f}<br>
                                 • <strong>Pedágio:</strong> R$ {agente_direto.get('pedagio', 0):.2f}<br>
                                 • <strong>GRIS:</strong> R$ {agente_direto.get('gris', 0):.2f}<br>
+                                • <strong>TDA:</strong> R$ {agente_direto.get('tda', 0):.2f}<br>
                                 • <strong>Prazo:</strong> {agente_direto.get('prazo', 'N/A')} dias<br>
                                 • <strong>Peso Máximo:</strong> {agente_direto.get('peso_maximo', 'N/A')} kg<br>
                                 • <strong>Vantagem:</strong> <span style="color: #28a745;">✅ SEM transferência - porta-a-porta</span><br>
