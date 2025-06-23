@@ -2709,65 +2709,86 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         rotas_encontradas = []
         
-        # Se origem e destino são da mesma base, não usar agente (usar direto)
+        # Se origem e destino são da mesma base, buscar agentes locais sem transferência
         if base_origem == base_destino:
-            print(f"[AGENTES] Origem e destino na mesma base ({base_origem}), usando transferência direta")
-            return None
-        
-        # 1. BUSCAR TRANSFERÊNCIA ENTRE BASES NA PLANILHA REAL
-        transferencias_encontradas = []
-        
-        # Usar dados de transferência do cache
-        transferencias_base = df_transferencias.copy()
-        
-        # Filtrar transferências diretas entre as bases na planilha
-        origem_base = bases_disponiveis.get(base_origem, '')
-        destino_base = bases_disponiveis.get(base_destino, '')
-        
-        # Normalizar nomes das bases para busca
-        origem_base_norm = normalizar_cidade(origem_base)
-        destino_base_norm = normalizar_cidade(destino_base)
-        
-        print(f"[AGENTES] Buscando transferência: {origem_base_norm} → {destino_base_norm}")
-        
-        # Normalizar colunas para busca
-        transferencias_base['Origem_Normalizada'] = transferencias_base['Origem'].apply(normalizar_cidade)
-        transferencias_base['Destino_Normalizado'] = transferencias_base['Destino'].apply(normalizar_cidade)
-        
-        # Buscar correspondência entre bases
-        matches_transferencia = transferencias_base[
-            (transferencias_base['Origem_Normalizada'] == origem_base_norm) &
-            (transferencias_base['Destino_Normalizado'] == destino_base_norm)
-        ]
-        
-        if matches_transferencia.empty:
-            # Tentar busca mais flexível
+            print(f"[AGENTES] Origem e destino na mesma base ({base_origem}), buscando agentes LOCAIS (sem transferência)")
+            # Continuar processamento para agentes locais e diretos
+            transferencias_encontradas = []  # Lista vazia - sem transferência necessária
+        else:
+            # 1. BUSCAR TRANSFERÊNCIA ENTRE BASES NA PLANILHA REAL
+            transferencias_encontradas = []
+            
+            # Usar dados de transferência do cache
+            transferencias_base = df_transferencias.copy()
+            
+            # Filtrar transferências diretas entre as bases na planilha
+            origem_base = bases_disponiveis.get(base_origem, '')
+            destino_base = bases_disponiveis.get(base_destino, '')
+            
+            # Normalizar nomes das bases para busca
+            origem_base_norm = normalizar_cidade(origem_base)
+            destino_base_norm = normalizar_cidade(destino_base)
+            
+            print(f"[AGENTES] Buscando transferência: {origem_base_norm} → {destino_base_norm}")
+            
+            # Normalizar colunas para busca
+            transferencias_base['Origem_Normalizada'] = transferencias_base['Origem'].apply(normalizar_cidade)
+            transferencias_base['Destino_Normalizado'] = transferencias_base['Destino'].apply(normalizar_cidade)
+            
+            # Buscar correspondência entre bases
             matches_transferencia = transferencias_base[
-                (transferencias_base['Origem_Normalizada'].str.contains(origem_base_norm[:3], case=False, na=False)) &
-                (transferencias_base['Destino_Normalizado'].str.contains(destino_base_norm[:3], case=False, na=False))
+                (transferencias_base['Origem_Normalizada'] == origem_base_norm) &
+                (transferencias_base['Destino_Normalizado'] == destino_base_norm)
             ]
-        
-        print(f"[AGENTES] Transferências encontradas: {len(matches_transferencia)} registros")
-        
-        # Processar transferências encontradas
-        for _, linha_trans in matches_transferencia.iterrows():
-            try:
-                linha_processada = processar_linha_transferencia(linha_trans, maior_peso, valor_nf)
-                if linha_processada:
-                    transferencias_encontradas.append(linha_processada)
-                    print(f"[AGENTES] ✅ Transferência: {linha_trans.get('Fornecedor')} - {origem_base} → {destino_base} - R$ {linha_processada['custo']:.2f}")
-                
-            except Exception as e:
-                print(f"[AGENTES] Erro ao processar transferência: {e}")
-                continue
+            
+            if matches_transferencia.empty:
+                # Tentar busca mais flexível
+                matches_transferencia = transferencias_base[
+                    (transferencias_base['Origem_Normalizada'].str.contains(origem_base_norm[:3], case=False, na=False)) &
+                    (transferencias_base['Destino_Normalizado'].str.contains(destino_base_norm[:3], case=False, na=False))
+                ]
+            
+            print(f"[AGENTES] Transferências encontradas: {len(matches_transferencia)} registros")
+            
+            # Processar transferências encontradas
+            for _, linha_trans in matches_transferencia.iterrows():
+                try:
+                    linha_processada = processar_linha_transferencia(linha_trans, maior_peso, valor_nf)
+                    if linha_processada:
+                        transferencias_encontradas.append(linha_processada)
+                        print(f"[AGENTES] ✅ Transferência: {linha_trans.get('Fornecedor')} - {origem_base} → {destino_base} - R$ {linha_processada['custo']:.2f}")
+                    
+                except Exception as e:
+                    print(f"[AGENTES] Erro ao processar transferência: {e}")
+                    continue
         
         # 2. BUSCAR AGENTES REAIS NA BASE DE DADOS
+        # Carregar base de agentes (retorna tupla: agentes, transferencias)
+        resultado_base = carregar_base_agentes()
+        if resultado_base is None:
+            print("[AGENTES] Erro ao carregar base de agentes")
+            return None
+        
+        df_agentes, df_transferencias = resultado_base
+        
         # Verificar se df_agentes foi carregado corretamente
         if df_agentes is None or df_agentes.empty:
             print("[AGENTES] Base de agentes vazia ou não carregada")
             return None
         
         print(f"[AGENTES] Colunas disponíveis na base de agentes: {list(df_agentes.columns)}")
+        
+        # Carregar base completa para incluir agentes diretos
+        df_base_completa = carregar_base_completa()
+        if df_base_completa is None:
+            print("[AGENTES] Erro ao carregar base completa")
+            return None
+        
+        # Adicionar normalização para busca
+        if 'Origem_Normalizada' not in df_base_completa.columns:
+            df_base_completa['Origem_Normalizada'] = df_base_completa['Origem'].apply(normalizar_cidade)
+        if 'Destino_Normalizada' not in df_base_completa.columns:
+            df_base_completa['Destino_Normalizada'] = df_base_completa['Destino'].apply(normalizar_cidade)
         
         # NOVA LÓGICA: Agentes fazem coleta/entrega entre cidade do cliente e base
         # Busca flexível considerando múltiplas bases possíveis para uma UF
@@ -2783,8 +2804,102 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             'RJ': ['RIO', 'QVR', 'CAW', 'JDF']  # Rio de Janeiro múltiplas bases
         }
         
+        # Carregar base completa para incluir agentes diretos
+        df_base_completa = carregar_base_completa()
+        if df_base_completa is None:
+            print("[AGENTES] Erro ao carregar base completa")
+            return None
+        
+        # Adicionar normalização para busca
+        if 'Origem_Normalizada' not in df_base_completa.columns:
+            df_base_completa['Origem_Normalizada'] = df_base_completa['Origem'].apply(normalizar_cidade)
+        if 'Destino_Normalizada' not in df_base_completa.columns:
+            df_base_completa['Destino_Normalizada'] = df_base_completa['Destino'].apply(normalizar_cidade)
+        
+        # 1. BUSCAR AGENTES DIRETOS (PORTA-A-PORTA) - NOVA FUNCIONALIDADE
+        print(f"[AGENTES] 🚀 Buscando agentes diretos (porta-a-porta)...")
+        agentes_diretos = df_base_completa[
+            (df_base_completa['Tipo'] == 'Direto') &
+            (df_base_completa['Origem_Normalizada'] == origem_normalizada) &
+            (df_base_completa['Destino_Normalizada'] == destino_normalizado)
+        ]
+        
+        print(f"[AGENTES] Agentes diretos encontrados: {len(agentes_diretos)}")
+        
+        # Processar agentes diretos (sem transferência)
+        for _, agente_direto in agentes_diretos.iterrows():
+            try:
+                # Validar se agente tem valores válidos
+                colunas_peso = [col for col in agente_direto.index if isinstance(col, int) or col in ['VALOR MÍNIMO ATÉ 10', 'Acima 500']]
+                valores_peso = [agente_direto.get(col, 0) for col in colunas_peso]
+                
+                # Pular agentes com todos valores zerados
+                if all(v == 0 or pd.isna(v) for v in valores_peso):
+                    print(f"[AGENTES] ❌ Agente direto {agente_direto.get('Fornecedor')} pulado - valores zerados")
+                    continue
+                
+                # Validar peso máximo do agente direto
+                validacao_peso_direto = validar_peso_maximo_agente(agente_direto, maior_peso, "Agente Direto")
+                
+                # Processar linha do agente direto
+                linha_direto_processada = processar_linha_transferencia(agente_direto, maior_peso, valor_nf)
+                if not linha_direto_processada:
+                    continue
+                
+                # ROTA DIRETA (SEM TRANSFERÊNCIA)
+                total_rota_direta = (linha_direto_processada['custo'] + 
+                                   linha_direto_processada['pedagio'] + 
+                                   linha_direto_processada['gris'])
+                
+                rota_direta = {
+                    'tipo_rota': 'direta',
+                    'fornecedor_direto': agente_direto.get('Fornecedor', 'N/A'),
+                    'agente_direto': {
+                        'fornecedor': agente_direto.get('Fornecedor', 'N/A'),
+                        'origem': agente_direto.get('Origem', origem),
+                        'destino': agente_direto.get('Destino', destino),
+                        'base_origem': agente_direto.get('Base Origem', 'N/A'),
+                        'custo': float(linha_direto_processada['custo']),
+                        'pedagio': float(linha_direto_processada['pedagio']),
+                        'gris': float(linha_direto_processada['gris']),
+                        'prazo': linha_direto_processada['prazo'],
+                        'peso_maximo': agente_direto.get('PESO MÁXIMO TRANSPORTADO', 'N/A'),
+                        'validacao_peso': validacao_peso_direto
+                    },
+                    'total': float(total_rota_direta),
+                    'prazo_total': int(linha_direto_processada['prazo']),
+                    'peso_real': float(peso_real),
+                    'peso_cubado': float(peso_cubado),
+                    'maior_peso': float(maior_peso),
+                    'peso_usado': 'Cubado' if maior_peso == peso_cubado else 'Real',
+                    'resumo': f"DIRETO: {agente_direto.get('Fornecedor', 'N/A')} (Porta-a-Porta)",
+                    'observacoes': "🚀 Serviço DIRETO porta-a-porta - sem transferência",
+                    'detalhamento_custos': {
+                        'servico_direto': float(linha_direto_processada['custo']),
+                        'pedagio': float(linha_direto_processada['pedagio']),
+                        'gris_total': float(linha_direto_processada['gris'])
+                    },
+                    'alertas_peso': {
+                        'tem_alerta': not validacao_peso_direto['valido'],
+                        'alertas': [validacao_peso_direto.get('alerta')] if validacao_peso_direto.get('alerta') else []
+                    }
+                }
+                
+                rotas_encontradas.append(rota_direta)
+                print(f"[AGENTES] ✅ DIRETO: {agente_direto.get('Fornecedor')} - R$ {total_rota_direta:.2f}")
+                
+            except Exception as e:
+                print(f"[AGENTES] Erro ao processar agente direto: {e}")
+                continue
+        
+        # 2. BUSCAR AGENTES TRADICIONAIS (COM TRANSFERÊNCIA)
+        print(f"[AGENTES] 🔄 Buscando agentes tradicionais (com transferência)...")
+        
+        # Adicionar normalização para df_agentes se não existe
+        if 'Origem_Normalizada' not in df_agentes.columns:
+            df_agentes['Origem_Normalizada'] = df_agentes['Origem'].apply(normalizar_cidade)
+        
         # Agentes de COLETA: buscam na cidade de origem
-        origem_normalizada = normalizar_cidade(origem)
         bases_possiveis_origem = bases_alternativas.get(uf_origem, [base_origem])
         if base_origem not in bases_possiveis_origem:
             bases_possiveis_origem.append(base_origem)
@@ -2796,7 +2911,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         ]
         
         # Agentes de ENTREGA: saem da base de destino e entregam na cidade de destino
-        destino_normalizado = normalizar_cidade(destino)
         bases_possiveis_destino = bases_alternativas.get(uf_destino, [base_destino])
         if base_destino not in bases_possiveis_destino:
             bases_possiveis_destino.append(base_destino)
@@ -2806,6 +2920,24 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             (df_agentes['Base Origem'].isin(bases_possiveis_destino)) &
             (df_agentes['Origem_Normalizada'] == destino_normalizado)
         ]
+        
+        # Filtrar agentes com valores válidos
+        def filtrar_agentes_validos(agentes_df):
+            agentes_validos = []
+            for _, agente in agentes_df.iterrows():
+                colunas_peso = [col for col in agente.index if isinstance(col, int) or col in ['VALOR MÍNIMO ATÉ 10', 'Acima 500']]
+                valores_peso = [agente.get(col, 0) for col in colunas_peso]
+                
+                # Manter apenas agentes com pelo menos um valor > 0
+                if any(v > 0 and not pd.isna(v) for v in valores_peso):
+                    agentes_validos.append(agente)
+                else:
+                    print(f"[AGENTES] ❌ Agente {agente.get('Fornecedor')} pulado - valores zerados")
+            
+            return pd.DataFrame(agentes_validos) if agentes_validos else pd.DataFrame()
+        
+        agentes_coleta = filtrar_agentes_validos(agentes_coleta)
+        agentes_entrega = filtrar_agentes_validos(agentes_entrega)
         
         print(f"[AGENTES] Agentes de coleta encontrados: {len(agentes_coleta)}")
         print(f"[AGENTES] Agentes de entrega encontrados: {len(agentes_entrega)}")
@@ -3681,86 +3813,135 @@ def formatar_resultado_fracionado(resultado):
                 posicao_icon = f"{i}º"
                 row_style = "background: #ffffff;"
             
-            agente_coleta = opcao.get('agente_coleta', {})
-            transferencia = opcao.get('transferencia', {})
-            agente_entrega = opcao.get('agente_entrega', {})
+            # Verificar se é agente direto ou tradicional
+            tipo_rota = opcao.get('tipo_rota', 'tradicional')
             
-            html += f"""
-                    <tr style="{row_style}">
-                        <td style="padding: 12px; border: 1px solid #dee2e6; font-weight: bold; font-size: 1.1em;">{posicao_icon}</td>
-                        <td style="padding: 12px; border: 1px solid #dee2e6;">
-                            <strong>{opcao.get('resumo', 'N/A')}</strong><br>
-                            <small style="color: #6c757d;">
-                                Coleta: {agente_coleta.get('fornecedor', 'N/A')} → 
-                                Transfer: {transferencia.get('fornecedor', 'N/A')} → 
-                                Entrega: {agente_entrega.get('fornecedor', 'N/A')}
-                            </small>
-                        </td>
-                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; color: #0a6ed1; font-size: 1.1em;">
-                            R$ {opcao.get('total', 0):,.2f}
-                        </td>
-                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
-                            {opcao.get('prazo_total', 'N/A')} dias
-                        </td>
-                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
-                            <button class="btn-secondary" onclick="toggleDetails('detalhes_coleta_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #007bff;">
-                                Ver Coleta
-                            </button><br>
-                            <button class="btn-secondary" onclick="toggleDetails('detalhes_transfer_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #fd7e14;">
-                                Ver Transfer
-                            </button><br>
-                            <button class="btn-secondary" onclick="toggleDetails('detalhes_entrega_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #28a745;">
-                                Ver Entrega
-                            </button>
-                        </td>
-                    </tr>
-                    
-                    <!-- Detalhes da Coleta -->
-                    <tr id="detalhes_coleta_{i}" style="display: none;">
-                        <td colspan="5" style="padding: 15px; background: #e3f2fd; border: 1px solid #dee2e6;">
-                            <strong style="color: #007bff;">🚚 Agente de Coleta:</strong><br>
-                            • <strong>Fornecedor:</strong> {agente_coleta.get('fornecedor', 'N/A')}<br>
-                            • <strong>Origem:</strong> {agente_coleta.get('origem', 'N/A')}<br>
-                            • <strong>Base Destino:</strong> {agente_coleta.get('base_destino', 'N/A')}<br>
-                            • <strong>Custo:</strong> R$ {agente_coleta.get('custo', 0):.2f}<br>
-                            • <strong>Pedágio:</strong> R$ {agente_coleta.get('pedagio', 0):.2f}<br>
-                            • <strong>GRIS:</strong> R$ {agente_coleta.get('gris', 0):.2f}<br>
-                            • <strong>Prazo:</strong> {agente_coleta.get('prazo', opcao.get('agente_coleta', {}).get('prazo', 'N/A'))} dias<br>
-                            • <strong>Peso Máximo:</strong> {agente_coleta.get('peso_maximo', opcao.get('agente_coleta', {}).get('peso_maximo', 'N/A'))} kg<br>
-                            {_gerar_alerta_peso_html(agente_coleta.get('validacao_peso', {}))}
-                        </td>
-                    </tr>
-                    
-                    <!-- Detalhes da Transferência -->
-                    <tr id="detalhes_transfer_{i}" style="display: none;">
-                        <td colspan="5" style="padding: 15px; background: #fff3e0; border: 1px solid #dee2e6;">
-                            <strong style="color: #fd7e14;">🚛 Transferência entre Bases:</strong><br>
-                            • <strong>Fornecedor:</strong> {transferencia.get('fornecedor', 'N/A')}<br>
-                            • <strong>Origem:</strong> {transferencia.get('origem', 'N/A')}<br>
-                            • <strong>Destino:</strong> {transferencia.get('destino', 'N/A')}<br>
-                            • <strong>Custo Base:</strong> R$ {transferencia.get('custo', 0):.2f}<br>
-                            • <strong>Pedágio:</strong> R$ {transferencia.get('pedagio', 0):.2f}<br>
-                            • <strong>GRIS:</strong> R$ {transferencia.get('gris', 0):.2f}<br>
-                            • <strong>Prazo:</strong> {transferencia.get('prazo', 'N/A')} dias
-                        </td>
-                    </tr>
-                    
-                    <!-- Detalhes da Entrega -->
-                    <tr id="detalhes_entrega_{i}" style="display: none;">
-                        <td colspan="5" style="padding: 15px; background: #e8f5e8; border: 1px solid #dee2e6;">
-                            <strong style="color: #28a745;">🏠 Agente de Entrega:</strong><br>
-                            • <strong>Fornecedor:</strong> {agente_entrega.get('fornecedor', 'N/A')}<br>
-                            • <strong>Base Origem:</strong> {agente_entrega.get('base_origem', 'N/A')}<br>
-                            • <strong>Destino:</strong> {agente_entrega.get('destino', 'N/A')}<br>
-                            • <strong>Custo:</strong> R$ {agente_entrega.get('custo', 0):.2f}<br>
-                            • <strong>Pedágio:</strong> R$ {agente_entrega.get('pedagio', 0):.2f}<br>
-                            • <strong>GRIS:</strong> R$ {agente_entrega.get('gris', 0):.2f}<br>
-                            • <strong>Prazo:</strong> {agente_entrega.get('prazo', opcao.get('agente_entrega', {}).get('prazo', 'N/A'))} dias<br>
-                            • <strong>Peso Máximo:</strong> {agente_entrega.get('peso_maximo', opcao.get('agente_entrega', {}).get('peso_maximo', 'N/A'))} kg<br>
-                            {_gerar_alerta_peso_html(agente_entrega.get('validacao_peso', {}))}
-                        </td>
-                    </tr>
-            """
+            if tipo_rota == 'direta':
+                # AGENTE DIRETO
+                agente_direto = opcao.get('agente_direto', {})
+                
+                html += f"""
+                        <tr style="{row_style}">
+                            <td style="padding: 12px; border: 1px solid #dee2e6; font-weight: bold; font-size: 1.1em;">{posicao_icon}</td>
+                            <td style="padding: 12px; border: 1px solid #dee2e6;">
+                                <strong style="color: #28a745;">🚀 {opcao.get('resumo', 'N/A')}</strong><br>
+                                <small style="color: #6c757d;">
+                                    Serviço DIRETO porta-a-porta • {agente_direto.get('fornecedor', 'N/A')}
+                                </small>
+                            </td>
+                            <td style="padding: 12px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; color: #28a745; font-size: 1.1em;">
+                                R$ {opcao.get('total', 0):,.2f}
+                            </td>
+                            <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
+                                {opcao.get('prazo_total', 'N/A')} dias
+                            </td>
+                            <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
+                                <button class="btn-secondary" onclick="toggleDetails('detalhes_direto_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #28a745;">
+                                    Ver Detalhes
+                                </button>
+                            </td>
+                        </tr>
+                        
+                        <!-- Detalhes do Agente Direto -->
+                        <tr id="detalhes_direto_{i}" style="display: none;">
+                            <td colspan="5" style="padding: 15px; background: #e8f5e8; border: 1px solid #dee2e6;">
+                                <strong style="color: #28a745;">🚀 Agente DIRETO (Porta-a-Porta):</strong><br>
+                                • <strong>Fornecedor:</strong> {agente_direto.get('fornecedor', 'N/A')}<br>
+                                • <strong>Origem:</strong> {agente_direto.get('origem', 'N/A')}<br>
+                                • <strong>Destino:</strong> {agente_direto.get('destino', 'N/A')}<br>
+                                • <strong>Base Operacional:</strong> {agente_direto.get('base_origem', 'N/A')}<br>
+                                • <strong>Custo do Serviço:</strong> R$ {agente_direto.get('custo', 0):.2f}<br>
+                                • <strong>Pedágio:</strong> R$ {agente_direto.get('pedagio', 0):.2f}<br>
+                                • <strong>GRIS:</strong> R$ {agente_direto.get('gris', 0):.2f}<br>
+                                • <strong>Prazo:</strong> {agente_direto.get('prazo', 'N/A')} dias<br>
+                                • <strong>Peso Máximo:</strong> {agente_direto.get('peso_maximo', 'N/A')} kg<br>
+                                • <strong>Vantagem:</strong> <span style="color: #28a745;">✅ SEM transferência - porta-a-porta</span><br>
+                                {_gerar_alerta_peso_html(agente_direto.get('validacao_peso', {}))}
+                            </td>
+                        </tr>
+                """
+            else:
+                # AGENTE TRADICIONAL (com transferência)
+                agente_coleta = opcao.get('agente_coleta', {})
+                transferencia = opcao.get('transferencia', {})
+                agente_entrega = opcao.get('agente_entrega', {})
+                
+                html += f"""
+                        <tr style="{row_style}">
+                            <td style="padding: 12px; border: 1px solid #dee2e6; font-weight: bold; font-size: 1.1em;">{posicao_icon}</td>
+                            <td style="padding: 12px; border: 1px solid #dee2e6;">
+                                <strong>{opcao.get('resumo', 'N/A')}</strong><br>
+                                <small style="color: #6c757d;">
+                                    Coleta: {agente_coleta.get('fornecedor', 'N/A')} → 
+                                    Transfer: {transferencia.get('fornecedor', 'N/A')} → 
+                                    Entrega: {agente_entrega.get('fornecedor', 'N/A')}
+                                </small>
+                            </td>
+                            <td style="padding: 12px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; color: #0a6ed1; font-size: 1.1em;">
+                                R$ {opcao.get('total', 0):,.2f}
+                            </td>
+                            <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
+                                {opcao.get('prazo_total', 'N/A')} dias
+                            </td>
+                            <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
+                                <button class="btn-secondary" onclick="toggleDetails('detalhes_coleta_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #007bff;">
+                                    Ver Coleta
+                                </button><br>
+                                <button class="btn-secondary" onclick="toggleDetails('detalhes_transfer_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #fd7e14;">
+                                    Ver Transfer
+                                </button><br>
+                                <button class="btn-secondary" onclick="toggleDetails('detalhes_entrega_{i}')" style="margin: 2px; font-size: 0.8rem; padding: 4px 8px; background: #28a745;">
+                                    Ver Entrega
+                                </button>
+                            </td>
+                        </tr>
+                        
+                        <!-- Detalhes da Coleta -->
+                        <tr id="detalhes_coleta_{i}" style="display: none;">
+                            <td colspan="5" style="padding: 15px; background: #e3f2fd; border: 1px solid #dee2e6;">
+                                <strong style="color: #007bff;">🚚 Agente de Coleta:</strong><br>
+                                • <strong>Fornecedor:</strong> {agente_coleta.get('fornecedor', 'N/A')}<br>
+                                • <strong>Origem:</strong> {agente_coleta.get('origem', 'N/A')}<br>
+                                • <strong>Base Destino:</strong> {agente_coleta.get('base_destino', 'N/A')}<br>
+                                • <strong>Custo:</strong> R$ {agente_coleta.get('custo', 0):.2f}<br>
+                                • <strong>Pedágio:</strong> R$ {agente_coleta.get('pedagio', 0):.2f}<br>
+                                • <strong>GRIS:</strong> R$ {agente_coleta.get('gris', 0):.2f}<br>
+                                • <strong>Prazo:</strong> {agente_coleta.get('prazo', opcao.get('agente_coleta', {}).get('prazo', 'N/A'))} dias<br>
+                                • <strong>Peso Máximo:</strong> {agente_coleta.get('peso_maximo', opcao.get('agente_coleta', {}).get('peso_maximo', 'N/A'))} kg<br>
+                                {_gerar_alerta_peso_html(agente_coleta.get('validacao_peso', {}))}
+                            </td>
+                        </tr>
+                        
+                        <!-- Detalhes da Transferência -->
+                        <tr id="detalhes_transfer_{i}" style="display: none;">
+                            <td colspan="5" style="padding: 15px; background: #fff3e0; border: 1px solid #dee2e6;">
+                                <strong style="color: #fd7e14;">🚛 Transferência entre Bases:</strong><br>
+                                • <strong>Fornecedor:</strong> {transferencia.get('fornecedor', 'N/A')}<br>
+                                • <strong>Origem:</strong> {transferencia.get('origem', 'N/A')}<br>
+                                • <strong>Destino:</strong> {transferencia.get('destino', 'N/A')}<br>
+                                • <strong>Custo Base:</strong> R$ {transferencia.get('custo', 0):.2f}<br>
+                                • <strong>Pedágio:</strong> R$ {transferencia.get('pedagio', 0):.2f}<br>
+                                • <strong>GRIS:</strong> R$ {transferencia.get('gris', 0):.2f}<br>
+                                • <strong>Prazo:</strong> {transferencia.get('prazo', 'N/A')} dias
+                            </td>
+                        </tr>
+                        
+                        <!-- Detalhes da Entrega -->
+                        <tr id="detalhes_entrega_{i}" style="display: none;">
+                            <td colspan="5" style="padding: 15px; background: #e8f5e8; border: 1px solid #dee2e6;">
+                                <strong style="color: #28a745;">🏠 Agente de Entrega:</strong><br>
+                                • <strong>Fornecedor:</strong> {agente_entrega.get('fornecedor', 'N/A')}<br>
+                                • <strong>Base Origem:</strong> {agente_entrega.get('base_origem', 'N/A')}<br>
+                                • <strong>Destino:</strong> {agente_entrega.get('destino', 'N/A')}<br>
+                                • <strong>Custo:</strong> R$ {agente_entrega.get('custo', 0):.2f}<br>
+                                • <strong>Pedágio:</strong> R$ {agente_entrega.get('pedagio', 0):.2f}<br>
+                                • <strong>GRIS:</strong> R$ {agente_entrega.get('gris', 0):.2f}<br>
+                                • <strong>Prazo:</strong> {agente_entrega.get('prazo', opcao.get('agente_entrega', {}).get('prazo', 'N/A'))} dias<br>
+                                • <strong>Peso Máximo:</strong> {agente_entrega.get('peso_maximo', opcao.get('agente_entrega', {}).get('peso_maximo', 'N/A'))} kg<br>
+                                {_gerar_alerta_peso_html(agente_entrega.get('validacao_peso', {}))}
+                            </td>
+                        </tr>
+                """
         
         html += """
                 </tbody>
