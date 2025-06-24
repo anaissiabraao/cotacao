@@ -3724,7 +3724,7 @@ def processar_linha_transferencia(linha, peso, valor_nf):
         except (ValueError, TypeError):
             tda = 0.0
         
-        # Calcular Seguro - CORRIGIDO PARA VERIFICAR BASE PRIMEIRO
+        # Calcular Seguro - CORRIGIDO PARA CALCULAR PERCENTUAL SOBRE VALOR NF
         seguro = 0.0
         try:
             if is_agente and tipo == 'Direto' and valor_nf and valor_nf > 0:
@@ -3737,8 +3737,12 @@ def processar_linha_transferencia(linha, peso, valor_nf):
                         # Se na base está 0, não calcular seguro (ex: GRITSCH)
                         seguro = 0.0
                     else:
-                        # Se tem valor na base, usar esse valor
-                        seguro = seguro_base
+                        # CORREÇÃO: Usar valor da base como percentual sobre valor da NF
+                        # Ex: se seguro_base = 0.3, então 0.3% do valor da NF
+                        seguro = valor_nf * (seguro_base / 100)
+                        # Valor mínimo de seguro: R$ 5,00
+                        if seguro < 5.0:
+                            seguro = 5.0
                 else:
                     # Se não tem valor na base, calcular como 0.1% do valor da NF
                     seguro = valor_nf * 0.001  # 0.1%
