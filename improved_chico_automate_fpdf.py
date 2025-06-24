@@ -4025,7 +4025,19 @@ def formatar_resultado_fracionado(resultado):
             
             <!-- Botão para Ocultar/Mostrar Seções Técnicas -->
             <div class="analise-item" style="text-align: center; margin-top: 15px;">
-                <button id="toggleTechnicalSections" onclick="window.toggleTechnicalSections()" style="
+                <button id="toggleTechnicalSections" onclick="
+                    var sections = document.getElementById('technicalSections');
+                    var button = document.getElementById('toggleTechnicalSections');
+                    if (sections.style.display === 'none' || sections.style.display === '') {
+                        sections.style.display = 'block';
+                        button.innerHTML = '📊 Ocultar Informações Técnicas';
+                        button.style.background = '#6c757d';
+                    } else {
+                        sections.style.display = 'none';
+                        button.innerHTML = '📊 Mostrar Informações Técnicas';
+                        button.style.background = '#17a2b8';
+                    }
+                " style="
                     background: #17a2b8; 
                     color: white; 
                     border: none; 
@@ -4546,8 +4558,12 @@ def formatar_resultado_fracionado(resultado):
     
     // Tornar a função toggleTechnicalSections globalmente disponível
     window.toggleTechnicalSections = function() {
+        console.log('toggleTechnicalSections chamada!');
         const sections = document.getElementById('technicalSections');
         const button = document.getElementById('toggleTechnicalSections');
+        
+        console.log('sections:', sections);
+        console.log('button:', button);
         
         if (sections) {
             if (sections.style.display === 'none' || sections.style.display === '') {
@@ -4556,13 +4572,17 @@ def formatar_resultado_fracionado(resultado):
                     button.innerHTML = '📊 Ocultar Informações Técnicas';
                     button.style.background = '#6c757d';
                 }
+                console.log('Mostrando seções técnicas');
             } else {
                 sections.style.display = 'none';
                 if (button) {
                     button.innerHTML = '📊 Mostrar Informações Técnicas';
                     button.style.background = '#17a2b8';
                 }
+                console.log('Ocultando seções técnicas');
             }
+        } else {
+            console.log('Elemento technicalSections não encontrado!');
         }
     };
     
