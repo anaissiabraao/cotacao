@@ -3741,9 +3741,7 @@ def processar_linha_transferencia(linha, peso, valor_nf):
                         # CORREÇÃO: Usar valor da base como percentual sobre valor da NF
                         # Ex: se seguro_base = 0.3, então 0.3% do valor da NF
                         seguro = valor_nf * (seguro_base / 100)
-                        # Valor mínimo de seguro: R$ 5,00 (apenas para seguros reais)
-                        if seguro < 5.0:
-                            seguro = 5.0
+                        # REMOVIDO: Valor mínimo - seguro deve ser exatamente o percentual calculado
                 else:
                     # Se não tem valor na base, não calcular seguro
                     seguro = 0.0
