@@ -3472,6 +3472,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         return {
             'rotas': rotas_encontradas,
+            'cotacoes_ranking': rotas_encontradas,  # Adicionar este campo para compatibilidade
             'total_opcoes': len(rotas_encontradas),
             'origem': f"{origem}/{uf_origem}",
             'destino': f"{destino}/{uf_destino}",
@@ -4024,7 +4025,7 @@ def formatar_resultado_fracionado(resultado):
             
             <!-- Botão para Ocultar/Mostrar Seções Técnicas -->
             <div class="analise-item" style="text-align: center; margin-top: 15px;">
-                <button id="toggleTechnicalSections" onclick="toggleTechnicalSections()" style="
+                <button id="toggleTechnicalSections" onclick="window.toggleTechnicalSections()" style="
                     background: #17a2b8; 
                     color: white; 
                     border: none; 
