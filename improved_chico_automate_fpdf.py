@@ -2841,7 +2841,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     # Tentar busca mais flexível
                     matches_transferencia = transferencias_base[
                         (transferencias_base['Origem_Normalizada'].str.contains(origem_base_norm[:3], case=False, na=False)) &
-                        (transferencias_base['Destino_Normalizado'].str.contains(destino_base_norm[:3], case=False, na=False))
+                        (transferencias_base['Destino_Normalizada'].str.contains(destino_base_norm[:3], case=False, na=False))
                     ]
                 
                 # Processar transferências encontradas
@@ -3533,20 +3533,84 @@ def processar_linha_transferencia(linha, peso, valor_nf):
         
         if is_agente:
             # LÓGICA PARA AGENTES (CORRIGIDA)
-            valor_minimo = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
-            valor_excedente = float(linha_dict.get('EXCEDENTE', 0) or 0)
-            
-            if peso <= 10:
-                # Peso ≤ 10kg: usar apenas VALOR MÍNIMO ATÉ 10
-                valor_base = valor_minimo
-                faixa_peso_usada = "Valor Mínimo (≤10kg)"
-                valor_kg_usado = valor_minimo / 10 if valor_minimo > 0 else 0  # Para referência
+            if tipo == 'Direto':
+                # CORREÇÃO: Para agentes DIRETOS, usar valor da faixa de peso correspondente
+                # Multiplicar o valor por kg pelo peso real
+                if peso <= 10:
+                    valor_kg = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
+                    valor_base = valor_kg  # Para até 10kg, usar valor fixo
+                    faixa_peso_usada = "VALOR MÍNIMO ATÉ 10 (fixo)"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0 / 10 if valor_kg > 0 else 0
+                elif peso <= 20:
+                    valor_kg = float(linha_dict.get(20, 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "20kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                elif peso <= 30:
+                    valor_kg = float(linha_dict.get(30, 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "30kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                elif peso <= 50:
+                    valor_kg = float(linha_dict.get(50, 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "50kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                elif peso <= 70:
+                    valor_kg = float(linha_dict.get(70, 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "70kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                elif peso <= 100:
+                    valor_kg = float(linha_dict.get(100, 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "100kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                elif peso <= 150:
+                    valor_kg = float(linha_dict.get(150, 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "150kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                elif peso <= 200:
+                    valor_kg = float(linha_dict.get(200, 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "200kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                elif peso <= 300:
+                    valor_kg = float(linha_dict.get(300, 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "300kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                elif peso <= 500:
+                    valor_kg = float(linha_dict.get(500, 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "500kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                else:
+                    valor_kg = float(linha_dict.get('Acima 500', 0) or 0)
+                    valor_base = valor_kg  # Valor direto da base
+                    faixa_peso_usada = "Acima 500kg"
+                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
+                
+                # Garantir valor mínimo para agentes diretos
+                valor_minimo = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
+                if valor_base < valor_minimo:
+                    valor_base = valor_minimo
+                    faixa_peso_usada += " (aplicado valor mínimo)"
             else:
-                # Peso > 10kg: VALOR MÍNIMO + (peso - 10) × EXCEDENTE
-                peso_excedente = peso - 10
-                valor_base = valor_minimo + (peso_excedente * valor_excedente)
-                faixa_peso_usada = f"Valor Mínimo + Excedente (>{peso:.1f}kg)"
-                valor_kg_usado = valor_excedente
+                # Para outros tipos de agentes (não diretos), manter lógica original com EXCEDENTE
+                valor_minimo = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
+                valor_excedente = float(linha_dict.get('EXCEDENTE', 0) or 0)
+                
+                if peso <= 10:
+                    valor_base = valor_minimo
+                    faixa_peso_usada = "Valor Mínimo (≤10kg)"
+                    valor_kg_usado = valor_minimo / 10 if valor_minimo > 0 else 0
+                else:
+                    peso_excedente = peso - 10
+                    valor_base = valor_minimo + (peso_excedente * valor_excedente)
+                    faixa_peso_usada = f"Valor Mínimo + Excedente (>{peso:.1f}kg)"
+                    valor_kg_usado = valor_excedente
         else:
             # LÓGICA PARA TRANSFERÊNCIAS (corrigida)
             if peso <= 10:
@@ -3659,15 +3723,27 @@ def processar_linha_transferencia(linha, peso, valor_nf):
         except (ValueError, TypeError):
             tda = 0.0
         
-        # Calcular Seguro - NOVO PARA DIRETOS
+        # Calcular Seguro - CORRIGIDO PARA VERIFICAR BASE PRIMEIRO
         seguro = 0.0
         try:
             if is_agente and tipo == 'Direto' and valor_nf and valor_nf > 0:
-                # Seguro calculado como 0.1% do valor da NF (padrão do mercado)
-                seguro = valor_nf * 0.001  # 0.1%
-                # Valor mínimo de seguro: R$ 5,00
-                if seguro < 5.0:
-                    seguro = 5.0
+                # CORREÇÃO: Verificar primeiro se o fornecedor tem seguro na base
+                seguro_base = linha_dict.get('Seguro', None)
+                
+                if seguro_base is not None and not pd.isna(seguro_base):
+                    seguro_base = float(seguro_base)
+                    if seguro_base == 0:
+                        # Se na base está 0, não calcular seguro (ex: GRITSCH)
+                        seguro = 0.0
+                    else:
+                        # Se tem valor na base, usar esse valor
+                        seguro = seguro_base
+                else:
+                    # Se não tem valor na base, calcular como 0.1% do valor da NF
+                    seguro = valor_nf * 0.001  # 0.1%
+                    # Valor mínimo de seguro: R$ 5,00
+                    if seguro < 5.0:
+                        seguro = 5.0
         except (ValueError, TypeError):
             seguro = 0.0
         
@@ -3949,7 +4025,7 @@ def formatar_resultado_fracionado(resultado):
             <!-- Botão para Ocultar/Mostrar Seções Técnicas -->
             <div class="analise-item" style="text-align: center; margin-top: 15px;">
                 <button id="toggleTechnicalSections" onclick="toggleTechnicalSections()" style="
-                    background: #6c757d; 
+                    background: #17a2b8; 
                     color: white; 
                     border: none; 
                     padding: 8px 16px; 
@@ -3957,14 +4033,14 @@ def formatar_resultado_fracionado(resultado):
                     font-size: 0.9rem; 
                     cursor: pointer;
                     transition: all 0.3s ease;
-                " onmouseover="this.style.background='#5a6268'" onmouseout="this.style.background='#6c757d'">
-                    📊 Ocultar Informações Técnicas
+                " onmouseover="this.style.background='#138496'" onmouseout="this.style.background='#17a2b8'">
+                    📊 Mostrar Informações Técnicas
                 </button>
             </div>
         </div>
 
-        <!-- Container das Seções Técnicas -->
-        <div id="technicalSections">
+        <!-- Container das Seções Técnicas (inicialmente oculto) -->
+        <div id="technicalSections" style="display: none;">
         <!-- Filtros de Qualidade Aplicados -->
         <div class="analise-container">
             <div class="analise-title">
@@ -4467,20 +4543,27 @@ def formatar_resultado_fracionado(resultado):
         }
     }
     
-    function toggleTechnicalSections() {
+    // Tornar a função toggleTechnicalSections globalmente disponível
+    window.toggleTechnicalSections = function() {
         const sections = document.getElementById('technicalSections');
         const button = document.getElementById('toggleTechnicalSections');
         
-        if (sections.style.display === 'none') {
-            sections.style.display = 'block';
-            button.innerHTML = '📊 Ocultar Informações Técnicas';
-            button.style.background = '#6c757d';
-        } else {
-            sections.style.display = 'none';
-            button.innerHTML = '📊 Mostrar Informações Técnicas';
-            button.style.background = '#17a2b8';
+        if (sections) {
+            if (sections.style.display === 'none' || sections.style.display === '') {
+                sections.style.display = 'block';
+                if (button) {
+                    button.innerHTML = '📊 Ocultar Informações Técnicas';
+                    button.style.background = '#6c757d';
+                }
+            } else {
+                sections.style.display = 'none';
+                if (button) {
+                    button.innerHTML = '📊 Mostrar Informações Técnicas';
+                    button.style.background = '#17a2b8';
+                }
+            }
         }
-    }
+    };
     
     // Adicionar notificação toast quando há alertas de peso
     document.addEventListener('DOMContentLoaded', function() {
