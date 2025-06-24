@@ -1425,381 +1425,128 @@ def aereo():
 @app.route("/gerar-pdf", methods=["POST"])
 def gerar_pdf():
     try:
-        import matplotlib
-        matplotlib.use('Agg')  # Backend sem interface gráfica
-        import matplotlib.pyplot as plt
-        import io
         import datetime
         import json
         import os
-        import tempfile
-        
-        # Tentar importar matplotlib para gráficos
-        try:
-            matplotlib.use('Agg')  # Backend sem interface gráfica
-            import matplotlib.pyplot as plt
-            matplotlib_available = True
-        except ImportError:
-            print("Matplotlib não disponível - gráficos não serão gerados")
-            matplotlib_available = False
+        import io
         
         dados = request.get_json()
-        analise = dados.get("analise")
+        analise = dados.get("analise", {})
+        dados_cotacao = dados.get("dados", {})
+        
         pdf = FPDF()
         pdf.add_page()
         
-        # Adicionar logo no cabeçalho
+        # Função para limpar caracteres especiais para PDF
+        def limpar_texto_pdf(texto):
+            if not texto:
+                return ""
+            # Remover caracteres não ASCII
+            return ''.join(char for char in str(texto) if ord(char) < 128)
+        
+        # Adicionar logo se disponível
         logo_paths = [
             os.path.join(app.static_folder, 'portoex-logo.png'),
-            os.path.join(os.path.dirname(__file__), 'static', 'portoex-logo.png'),
-            'static/portoex-logo.png',
-            'portoex-logo.png'
+            'static/portoex-logo.png'
         ]
         
         logo_added = False
         for logo_path in logo_paths:
             if os.path.exists(logo_path):
                 try:
-                    # Posicionar logo no canto superior esquerdo
-                    pdf.image(logo_path, x=10, y=10, w=30)  # x, y, largura
-                    pdf.ln(25)  # Espaço após a logo
+                    pdf.image(logo_path, x=10, y=10, w=30)
+                    pdf.ln(25)
                     logo_added = True
-                    print(f"Logo adicionada ao PDF de: {logo_path}")
                     break
-                except Exception as e:
-                    print(f"Erro ao adicionar logo de {logo_path}: {e}")
+                except:
                     continue
         
         if not logo_added:
-            print("Logo não pôde ser adicionada ao PDF")
-            pdf.ln(10)  # Espaço sem logo
-        
-        # Função para limpar caracteres especiais para PDF
-        def limpar_texto_pdf(texto):
-            if not texto:
-                return ""
-            # Substituir caracteres especiais problemáticos
-            replacements = {
-                'ₓ': 'x',
-                '₂': '2', 
-                '₃': '3',
-                'ᵒ': 'o',
-                '°': 'graus',
-                '²': '2',
-                '³': '3',
-                'µ': 'u',
-                '–': '-',
-                '—': '-',
-                '"': '"',
-                '"': '"',
-                ''': "'",
-                ''': "'",
-                '…': '...'
-            }
-            for old, new in replacements.items():
-                texto = str(texto).replace(old, new)
-            return texto
-        
-        # Função para gerar gráfico de custos
-        def gerar_grafico_custos(custos_dict):
-            if not matplotlib_available:
-                return None
-            
-            try:
-                # Configurar o gráfico
-                plt.figure(figsize=(8, 5))
-                tipos = list(custos_dict.keys())
-                valores = list(custos_dict.values())
-                
-                # Criar gráfico de barras
-                bars = plt.bar(tipos, valores, color='#0a6ed1', alpha=0.8)
-                
-                # Adicionar valores nas barras
-                for bar, valor in zip(bars, valores):
-                    height = bar.get_height()
-                    plt.text(bar.get_x() + bar.get_width()/2., height + height*0.01,
-                            f'R$ {valor:.0f}', ha='center', va='bottom', fontsize=10)
-                
-                # Configurar títulos e labels
-                plt.title('Custos por Tipo de Veículo', fontsize=14, fontweight='bold', pad=20)
-                plt.xlabel('Tipo de Veículo', fontsize=12)
-                plt.ylabel('Custo (R$)', fontsize=12)
-                plt.xticks(rotation=45, ha='right')
-                plt.grid(axis='y', alpha=0.3)
-                plt.tight_layout()
-                
-                # Salvar em arquivo temporário
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                plt.savefig(temp_file.name, dpi=150, bbox_inches='tight')
-                plt.close()
-                
-                return temp_file.name
-            except Exception as e:
-                print(f"Erro ao gerar gráfico: {e}")
-                return None
-        
-        # Função para gerar mapa estático da rota
-        def gerar_mapa_estatico(rota_pontos):
-            if not rota_pontos or len(rota_pontos) < 2:
-                return None
-            
-            try:
-                # Calcular bounds da rota
-                lats = [p[0] for p in rota_pontos]
-                lngs = [p[1] for p in rota_pontos]
-                
-                min_lat, max_lat = min(lats), max(lats)
-                min_lng, max_lng = min(lngs), max(lngs)
-                
-                # Adicionar margem
-                margin = 0.1
-                min_lat -= margin
-                max_lat += margin
-                min_lng -= margin
-                max_lng += margin
-                
-                # Usar API de mapa estático (OpenStreetMap)
-                # Como o OSM não tem API oficial de mapa estático, vamos usar uma alternativa
-                
-                # Opção 1: Usar MapBox Static API (requer token)
-                # Opção 2: Usar uma imagem placeholder com informações da rota
-                
-                # Por enquanto, vamos gerar uma imagem simples com matplotlib
-                if not matplotlib_available:
-                    return None
-                
-                # Criar mapa simples com matplotlib
-                plt.figure(figsize=(8, 6))
-                
-                # Plotar a rota
-                lats_plot = [p[0] for p in rota_pontos]
-                lngs_plot = [p[1] for p in rota_pontos]
-                
-                plt.plot(lngs_plot, lats_plot, 'b-', linewidth=2, label='Rota')
-                
-                # Marcar origem e destino
-                plt.plot(lngs_plot[0], lats_plot[0], 'go', markersize=10, label='Origem')
-                plt.plot(lngs_plot[-1], lats_plot[-1], 'ro', markersize=10, label='Destino')
-                
-                # Configurar o mapa
-                plt.xlabel('Longitude')
-                plt.ylabel('Latitude')
-                plt.title('Mapa da Rota', fontsize=14, fontweight='bold')
-                plt.grid(True, alpha=0.3)
-                plt.legend()
-                plt.axis('equal')
-                
-                # Definir limites
-                plt.xlim(min_lng, max_lng)
-                plt.ylim(min_lat, max_lat)
-                
-                plt.tight_layout()
-                
-                # Salvar em arquivo temporário
-                temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-                plt.savefig(temp_file.name, dpi=150, bbox_inches='tight')
-                plt.close()
-                
-                return temp_file.name
-                
-            except Exception as e:
-                print(f"Erro ao gerar mapa estático: {e}")
-                return None
+            pdf.ln(10)
         
         # Cabeçalho
         pdf.set_font("Arial", "B", 16)
-        pdf.cell(0, 12, "PortoEx - Relatório de Frete", 0, 1, "C")
+        pdf.cell(0, 12, "PortoEx - Relatorio de Frete", 0, 1, "C")
         pdf.set_font("Arial", "", 12)
         pdf.cell(0, 10, f"Data: {datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", 0, 1)
         pdf.ln(5)
         
-        # Dados principais
-        if analise:
-            pdf.set_font("Arial", "B", 14)
-            pdf.cell(0, 10, limpar_texto_pdf(f"ID: {analise.get('id_historico', 'N/A')} - Tipo: {analise.get('tipo', 'N/A')}"), 0, 1)
-            pdf.ln(3)
-            
-            # === SEÇÃO: INFORMAÇÕES BÁSICAS ===
-            pdf.set_font("Arial", "B", 12)
-            pdf.set_fill_color(240, 248, 255)  # Fundo azul claro
-            pdf.cell(0, 8, "INFORMAÇÕES BÁSICAS", 0, 1, "L", True)
-            pdf.ln(2)
-            
-            pdf.set_font("Arial", "", 11)
-            origem = limpar_texto_pdf(analise.get("origem", "N/A"))
-            destino = limpar_texto_pdf(analise.get("destino", "N/A"))
-            
-            pdf.cell(0, 6, f"Origem: {origem}", 0, 1)
-            pdf.cell(0, 6, f"Destino: {destino}", 0, 1)
-            pdf.cell(0, 6, limpar_texto_pdf(f"Distância: {analise.get('distancia', 'N/A')} km"), 0, 1)
-            
-            if analise.get("tempo_estimado"):
-                pdf.cell(0, 6, limpar_texto_pdf(f"Tempo estimado: {analise.get('tempo_estimado')}"), 0, 1)
-            if analise.get("peso"):
-                pdf.cell(0, 6, limpar_texto_pdf(f"Peso: {analise.get('peso')} kg"), 0, 1)
-            if analise.get("cubagem"):
-                pdf.cell(0, 6, limpar_texto_pdf(f"Cubagem: {analise.get('cubagem')} m³"), 0, 1)
-            
-            pdf.ln(5)
-            
-            # === SEÇÃO: ANÁLISE DA ROTA ===
+        # Informações básicas
+        pdf.set_font("Arial", "B", 12)
+        pdf.set_fill_color(240, 248, 255)
+        pdf.cell(0, 8, "INFORMACOES BASICAS", 0, 1, "L", True)
+        pdf.ln(2)
+        
+        pdf.set_font("Arial", "", 11)
+        
+        # ID e Tipo
+        id_historico = analise.get('id_historico', 'N/A')
+        tipo_analise = analise.get('tipo', dados_cotacao.get('tipo', 'N/A'))
+        pdf.cell(0, 6, limpar_texto_pdf(f"ID: {id_historico}"), 0, 1)
+        pdf.cell(0, 6, limpar_texto_pdf(f"Tipo: {tipo_analise}"), 0, 1)
+        
+        # Origem e Destino
+        origem = dados_cotacao.get('origem', analise.get('origem', 'N/A'))
+        destino = dados_cotacao.get('destino', analise.get('destino', 'N/A'))
+        pdf.cell(0, 6, limpar_texto_pdf(f"Origem: {origem}"), 0, 1)
+        pdf.cell(0, 6, limpar_texto_pdf(f"Destino: {destino}"), 0, 1)
+        
+        # Peso e Cubagem
+        peso = dados_cotacao.get('peso', analise.get('peso', 'N/A'))
+        cubagem = dados_cotacao.get('cubagem', analise.get('cubagem', 'N/A'))
+        if peso != 'N/A':
+            pdf.cell(0, 6, limpar_texto_pdf(f"Peso: {peso} kg"), 0, 1)
+        if cubagem != 'N/A':
+            pdf.cell(0, 6, limpar_texto_pdf(f"Cubagem: {cubagem} m3"), 0, 1)
+        
+        pdf.ln(5)
+        
+        # Resultados das cotações
+        rotas_agentes = dados_cotacao.get('rotas_agentes', {})
+        cotacoes = rotas_agentes.get('cotacoes_ranking', [])
+        
+        if cotacoes:
             pdf.set_font("Arial", "B", 12)
             pdf.set_fill_color(240, 248, 255)
-            pdf.cell(0, 8, "ANÁLISE DA ROTA", 0, 1, "L", True)
+            pdf.cell(0, 8, "RESULTADOS DAS COTACOES", 0, 1, "L", True)
             pdf.ln(2)
             
-            pdf.set_font("Arial", "", 11)
-            if analise.get("consumo_combustivel"):
-                pdf.cell(0, 6, limpar_texto_pdf(f"Consumo estimado de combustível: {analise.get('consumo_combustivel')} L"), 0, 1)
-            if analise.get("emissao_co2"):
-                pdf.cell(0, 6, limpar_texto_pdf(f"Emissão de CO2: {analise.get('emissao_co2')} kg"), 0, 1)
-            if analise.get("pedagio_estimado"):
-                pdf.cell(0, 6, limpar_texto_pdf(f"Pedágio estimado: R$ {analise.get('pedagio_estimado')}"), 0, 1)
-            if analise.get("provider"):
-                pdf.cell(0, 6, limpar_texto_pdf(f"Provedor de rota: {analise.get('provider')}"), 0, 1)
-            if analise.get("duracao_minutos"):
-                horas = int(analise.get("duracao_minutos", 0) / 60)
-                minutos = int(analise.get("duracao_minutos", 0) % 60)
-                pdf.cell(0, 6, limpar_texto_pdf(f"Duração da viagem: {horas}h {minutos}min"), 0, 1)
+            pdf.set_font("Arial", "", 10)
             
-            pdf.ln(5)
-            
-            # === SEÇÃO: TABELA DE CUSTOS ===
-            custos = analise.get("custos")
-            if custos:
-                pdf.set_font("Arial", "B", 12)
-                pdf.set_fill_color(240, 248, 255)
-                pdf.cell(0, 8, "CUSTOS POR TIPO DE VEÍCULO", 0, 1, "L", True)
-                pdf.ln(2)
+            for i, cotacao in enumerate(cotacoes[:10], 1):  # Máximo 10 cotações
+                resumo = cotacao.get('resumo', 'N/A')
+                total = cotacao.get('total', 0)
+                prazo = cotacao.get('prazo_total', 'N/A')
                 
-                # Cabeçalho da tabela
-                pdf.set_font("Arial", "B", 10)
-                pdf.set_fill_color(220, 220, 220)
-                pdf.cell(60, 8, "Tipo de Veículo", 1, 0, "C", True)
-                pdf.cell(40, 8, "Custo (R$)", 1, 0, "C", True)
-                pdf.cell(50, 8, "Custo por km (R$)", 1, 1, "C", True)
-                
-                # Dados da tabela
-                pdf.set_font("Arial", "", 10)
-                distancia = analise.get('distancia', 1)
-                for tipo, valor in custos.items():
-                    custo_km = valor / distancia if distancia > 0 else 0
-                    pdf.cell(60, 7, limpar_texto_pdf(str(tipo)), 1, 0, "L")
-                    pdf.cell(40, 7, limpar_texto_pdf(f"R$ {valor:.2f}"), 1, 0, "C")
-                    pdf.cell(50, 7, limpar_texto_pdf(f"R$ {custo_km:.2f}"), 1, 1, "C")
-                
-                pdf.ln(5)
-                
-                # === SEÇÃO: ANÁLISE DE CUSTOS ===
-                pdf.set_font("Arial", "B", 12)
-                pdf.set_fill_color(240, 248, 255)
-                pdf.cell(0, 8, "ANÁLISE DE CUSTOS", 0, 1, "L", True)
-                pdf.ln(2)
-                
-                pdf.set_font("Arial", "", 11)
-                valores = list(custos.values())
-                menor_custo = min(valores)
-                maior_custo = max(valores)
-                custo_medio = sum(valores) / len(valores)
-                
-                tipo_menor = [k for k, v in custos.items() if v == menor_custo][0]
-                tipo_maior = [k for k, v in custos.items() if v == maior_custo][0]
-                
-                pdf.cell(0, 6, limpar_texto_pdf(f"Opção mais econômica: {tipo_menor} - R$ {menor_custo:.2f}"), 0, 1)
-                pdf.cell(0, 6, limpar_texto_pdf(f"Opção mais cara: {tipo_maior} - R$ {maior_custo:.2f}"), 0, 1)
-                pdf.cell(0, 6, limpar_texto_pdf(f"Custo médio: R$ {custo_medio:.2f}"), 0, 1)
-                diferenca = maior_custo - menor_custo
-                pdf.cell(0, 6, limpar_texto_pdf(f"Diferença entre maior e menor: R$ {diferenca:.2f}"), 0, 1)
-                
-                pdf.ln(5)
-        else:
-            pdf.cell(0, 10, "Nenhum dado disponível", 0, 1)
+                pdf.cell(0, 5, limpar_texto_pdf(f"{i}. {resumo}"), 0, 1)
+                pdf.cell(0, 5, limpar_texto_pdf(f"   Valor: R$ {total:,.2f} - Prazo: {prazo} dias"), 0, 1)
+                pdf.ln(1)
         
-        # === ESPAÇO PARA GRÁFICO (será implementado) ===
-        pdf.set_font("Arial", "B", 12)
-        pdf.set_fill_color(240, 248, 255)
-        pdf.cell(0, 8, "GRÁFICO DE CUSTOS", 0, 1, "L", True)
-        pdf.ln(2)
-        
-        # Gerar e inserir gráfico se houver custos
-        if analise and analise.get("custos") and matplotlib_available:
-            grafico_path = gerar_grafico_custos(analise.get("custos"))
-            if grafico_path:
-                try:
-                    # Inserir gráfico no PDF
-                    pdf.image(grafico_path, x=15, w=180)  # Centralizado, largura 180mm
-                    pdf.ln(10)
-                    # Limpar arquivo temporário
-                    os.unlink(grafico_path)
-                except Exception as e:
-                    print(f"Erro ao inserir gráfico no PDF: {e}")
-                    pdf.set_font("Arial", "", 11)
-                    pdf.cell(0, 6, "Erro ao gerar gráfico", 0, 1)
-            else:
-                pdf.set_font("Arial", "", 11)
-                pdf.cell(0, 6, "Não foi possível gerar o gráfico", 0, 1)
-        else:
-            pdf.set_font("Arial", "", 11)
-            if not matplotlib_available:
-                pdf.cell(0, 6, "Matplotlib não disponível - instale com: pip install matplotlib", 0, 1)
-            else:
-                pdf.cell(0, 6, "Nenhum dado de custos disponível para gráfico", 0, 1)
-        
+        # Rodapé
         pdf.ln(10)
+        pdf.set_font("Arial", "I", 8)
+        pdf.cell(0, 4, "Relatorio gerado automaticamente pelo sistema PortoEx", 0, 1, "C")
         
-        # === ESPAÇO PARA MAPA (será implementado) ===
-        pdf.set_font("Arial", "B", 12)
-        pdf.set_fill_color(240, 248, 255)
-        pdf.cell(0, 8, "MAPA DA ROTA", 0, 1, "L", True)
-        pdf.ln(2)
+        # Gerar PDF com codificação correta
+        try:
+            pdf_bytes = pdf.output(dest="S")
+            if isinstance(pdf_bytes, str):
+                pdf_bytes = pdf_bytes.encode('latin-1')
+        except Exception as e:
+            print(f"Erro na codificacao do PDF: {e}")
+            pdf_bytes = pdf.output(dest="S").encode('latin-1', errors='ignore')
         
-        # Gerar e inserir mapa se houver pontos de rota
-        if analise and analise.get("rota_pontos") and matplotlib_available:
-            mapa_path = gerar_mapa_estatico(analise.get("rota_pontos"))
-            if mapa_path:
-                try:
-                    # Inserir mapa no PDF
-                    pdf.image(mapa_path, x=15, w=180)  # Centralizado, largura 180mm
-                    pdf.ln(5)
-                    # Limpar arquivo temporário
-                    os.unlink(mapa_path)
-                    
-                    # Adicionar informações sobre o mapa
-                    pdf.set_font("Arial", "", 9)
-                    rota_pontos = analise.get("rota_pontos", [])
-                    pdf.cell(0, 4, f"Pontos na rota: {len(rota_pontos)}", 0, 1)
-                    if len(rota_pontos) >= 2:
-                        origem_lat, origem_lng = rota_pontos[0]
-                        destino_lat, destino_lng = rota_pontos[-1]
-                        pdf.cell(0, 4, f"Origem: {origem_lat:.4f}, {origem_lng:.4f}", 0, 1)
-                        pdf.cell(0, 4, f"Destino: {destino_lat:.4f}, {destino_lng:.4f}", 0, 1)
-                        
-                except Exception as e:
-                    print(f"Erro ao inserir mapa no PDF: {e}")
-                    pdf.set_font("Arial", "", 11)
-                    pdf.cell(0, 6, "Erro ao gerar mapa", 0, 1)
-            else:
-                pdf.set_font("Arial", "", 11)
-                pdf.cell(0, 6, "Não foi possível gerar o mapa", 0, 1)
-        else:
-            pdf.set_font("Arial", "", 11)
-            if not matplotlib_available:
-                pdf.cell(0, 6, "Matplotlib não disponível - instale com: pip install matplotlib", 0, 1)
-            elif not analise or not analise.get("rota_pontos"):
-                pdf.cell(0, 6, "Nenhum dado de rota disponível para o mapa", 0, 1)
-            else:
-                pdf.cell(0, 6, "Dados de rota insuficientes para gerar mapa", 0, 1)
-        
-        pdf_bytes = pdf.output(dest="S").encode("latin-1")
         return send_file(
             io.BytesIO(pdf_bytes),
             mimetype="application/pdf",
             as_attachment=True,
             download_name=f"relatorio_frete_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         )
+        
     except Exception as e:
         print(f"Erro ao gerar PDF: {e}")
         return jsonify({"error": f"Erro ao gerar PDF: {str(e)}"})
+
 
 @app.route("/exportar-excel", methods=["POST"])
 def exportar_excel():
@@ -2777,98 +2524,65 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         rotas_encontradas = []
         
-        # Mapear bases alternativas para UFs - DEFINIR NO INÍCIO
-        bases_alternativas = {
-            'GO': ['APS', 'BSB', 'GYN', 'UDI'],  # Goiás pode usar APS, BSB, GYN ou UDI
-            'PR': ['CWB', 'LDB'],  # Paraná pode usar CWB ou LDB
-            'SC': ['ITJ', 'CCM'],  # Santa Catarina pode usar ITJ ou CCM 
-            'RS': ['POA', 'CXJ'],  # Rio Grande do Sul pode usar POA ou CXJ
-            'SP': ['FILIAL', 'RAO', 'SJK', 'CPQ', 'MII', 'PPB', 'SSZ'],  # São Paulo múltiplas bases
-            'MG': ['BHZ', 'CPQ', 'FILIAL', 'JDF', 'VAG', 'POO', 'PPY', 'UDI'],  # Minas Gerais múltiplas bases
-            'RJ': ['RIO', 'QVR', 'CAW', 'JDF']  # Rio de Janeiro múltiplas bases
-        }
-        
-        # NOVA LÓGICA: BUSCAR TRANSFERÊNCIAS ENTRE TODAS AS BASES POSSÍVEIS
-        # Conectar bases locais SOMENTE dentro da mesma UF
+        # LÓGICA SIMPLIFICADA: USAR APENAS A BASE DE ORIGEM DIRETA
+        # Remover lógica de múltiplas bases por UF
         transferencias_encontradas = []
         
-        # Obter bases possíveis para origem e destino
-        bases_possiveis_origem = bases_alternativas.get(uf_origem, [base_origem])
-        if base_origem not in bases_possiveis_origem:
-            bases_possiveis_origem.append(base_origem)
-            
-        bases_possiveis_destino = bases_alternativas.get(uf_destino, [base_destino])
-        if base_destino not in bases_possiveis_destino:
-            bases_possiveis_destino.append(base_destino)
-        
-        print(f"[AGENTES] Bases possíveis origem ({uf_origem}): {bases_possiveis_origem}")
-        print(f"[AGENTES] Bases possíveis destino ({uf_destino}): {bases_possiveis_destino}")
-        
-        # BUSCAR TRANSFERÊNCIAS PARA TODAS AS ROTAS (LOCAL E INTERESTADUAL)
-        # Todos os agentes devem ser conectados por transferências reais da base
+        # BUSCAR TRANSFERÊNCIAS APENAS ENTRE BASE ORIGEM → BASE DESTINO
         transferencias_base = df_transferencias.copy()
         transferencias_base['Origem_Normalizada'] = transferencias_base['Origem'].apply(normalizar_cidade)
         transferencias_base['Destino_Normalizado'] = transferencias_base['Destino'].apply(normalizar_cidade)
         
-        print(f"[AGENTES] Buscando transferências entre TODAS as bases possíveis")
+        print(f"[AGENTES] Buscando transferência direta: {base_origem} → {base_destino}")
         
-        # Para cada combinação de base origem → base destino
-        for base_orig in bases_possiveis_origem:
-            for base_dest in bases_possiveis_destino:
-                if base_orig == base_dest:
-                    continue  # Pular mesma base
-                
-                # Obter nomes das bases para busca
-                origem_base = bases_disponiveis.get(base_orig, '')
-                destino_base = bases_disponiveis.get(base_dest, '')
-                
-                if not origem_base or not destino_base:
-                    continue
-                
-                # Normalizar nomes das bases para busca
-                origem_base_norm = normalizar_cidade(origem_base)
-                destino_base_norm = normalizar_cidade(destino_base)
-                
-                print(f"[AGENTES] Buscando transferência: {origem_base_norm} → {destino_base_norm}")
-                
-                # Buscar correspondência entre bases
-                matches_transferencia = transferencias_base[
-                    (transferencias_base['Origem_Normalizada'] == origem_base_norm) &
-                    (transferencias_base['Destino_Normalizado'] == destino_base_norm)
-                ]
-                
-                if matches_transferencia.empty:
-                    # Tentar busca mais flexível
-                    matches_transferencia = transferencias_base[
-                        (transferencias_base['Origem_Normalizada'].str.contains(origem_base_norm[:3], case=False, na=False)) &
-                        (transferencias_base['Destino_Normalizada'].str.contains(destino_base_norm[:3], case=False, na=False))
-                    ]
-                
-                # Processar transferências encontradas
-                for _, linha_trans in matches_transferencia.iterrows():
-                    try:
-                        linha_processada = processar_linha_transferencia(linha_trans, maior_peso, valor_nf)
-                        if linha_processada:
-                            # Adicionar informações da combinação de bases
-                            linha_processada['base_origem_codigo'] = base_orig
-                            linha_processada['base_destino_codigo'] = base_dest
-                            linha_processada['rota_bases'] = f"{base_orig} → {base_dest}"
-                            
-                            # Determinar tipo de rota
-                            if uf_origem == uf_destino:
-                                linha_processada['tipo_rota'] = 'local_com_transferencia'
-                                tipo_rota = "LOCAL"
-                            else:
-                                linha_processada['tipo_rota'] = 'interestadual'
-                                tipo_rota = "INTERESTADUAL"
-                            
-                            transferencias_encontradas.append(linha_processada)
-                            print(f"[AGENTES] ✅ Transferência {tipo_rota}: {linha_trans.get('Fornecedor')} - {origem_base} → {destino_base} - R$ {linha_processada['custo']:.2f}")
-                        
-                    except Exception as e:
-                        print(f"[AGENTES] Erro ao processar transferência: {e}")
-                        continue
+        # Obter nomes das bases para busca
+        origem_base = bases_disponiveis.get(base_origem, '')
+        destino_base = bases_disponiveis.get(base_destino, '')
+        
+        if origem_base and destino_base and base_origem != base_destino:
+            # Normalizar nomes das bases para busca
+            origem_base_norm = normalizar_cidade(origem_base)
+            destino_base_norm = normalizar_cidade(destino_base)
             
+            print(f"[AGENTES] Buscando transferência: {origem_base_norm} → {destino_base_norm}")
+            
+            # Buscar correspondência entre bases
+            matches_transferencia = transferencias_base[
+                (transferencias_base['Origem_Normalizada'] == origem_base_norm) &
+                (transferencias_base['Destino_Normalizado'] == destino_base_norm)
+            ]
+            
+            if matches_transferencia.empty:
+                # Tentar busca mais flexível
+                matches_transferencia = transferencias_base[
+                    (transferencias_base['Origem_Normalizada'].str.contains(origem_base_norm[:3], case=False, na=False)) &
+                    (transferencias_base['Destino_Normalizado'].str.contains(destino_base_norm[:3], case=False, na=False))
+                ]
+            
+            # Processar transferências encontradas
+            for _, linha_trans in matches_transferencia.iterrows():
+                try:
+                    linha_processada = processar_linha_transferencia(linha_trans, maior_peso, valor_nf)
+                    if linha_processada:
+                        # Adicionar informações da combinação de bases
+                        linha_processada['base_origem_codigo'] = base_origem
+                        linha_processada['base_destino_codigo'] = base_destino
+                        linha_processada['rota_bases'] = f"{base_origem} → {base_destino}"
+                        
+                        # Determinar tipo de rota
+                        if uf_origem == uf_destino:
+                            linha_processada['tipo_rota'] = 'local_com_transferencia'
+                            tipo_rota = "LOCAL"
+                        else:
+                            linha_processada['tipo_rota'] = 'interestadual'
+                            tipo_rota = "INTERESTADUAL"
+                        
+                        transferencias_encontradas.append(linha_processada)
+                        print(f"[AGENTES] ✅ Transferência {tipo_rota}: {linha_trans.get('Fornecedor')} - {origem_base} → {destino_base} - R$ {linha_processada['custo']:.2f}")
+                    
+                except Exception as e:
+                    print(f"[AGENTES] Erro ao processar transferência: {e}")
+                    continue
 
         
         print(f"[AGENTES] Total de transferências encontradas: {len(transferencias_encontradas)}")
@@ -2898,8 +2612,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # Adicionar normalização para busca
         if 'Origem_Normalizada' not in df_base_completa.columns:
             df_base_completa['Origem_Normalizada'] = df_base_completa['Origem'].apply(normalizar_cidade)
-        if 'Destino_Normalizada' not in df_base_completa.columns:
-            df_base_completa['Destino_Normalizada'] = df_base_completa['Destino'].apply(normalizar_cidade)
+        if 'Destino_Normalizado' not in df_base_completa.columns:
+            df_base_completa['Destino_Normalizado'] = df_base_completa['Destino'].apply(normalizar_cidade)
         
         # NOVA LÓGICA: Agentes fazem coleta/entrega entre cidade do cliente e base
         # Busca flexível considerando múltiplas bases possíveis para uma UF
@@ -2907,15 +2621,15 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # Adicionar normalização para busca
         if 'Origem_Normalizada' not in df_agentes.columns:
             df_agentes['Origem_Normalizada'] = df_agentes['Origem'].apply(normalizar_cidade)
-        if 'Destino_Normalizada' not in df_agentes.columns:
-            df_agentes['Destino_Normalizada'] = df_agentes['Destino'].apply(normalizar_cidade)
+        if 'Destino_Normalizado' not in df_agentes.columns:
+            df_agentes['Destino_Normalizado'] = df_agentes['Destino'].apply(normalizar_cidade)
         
         # 1. BUSCAR AGENTES DIRETOS (PORTA-A-PORTA) - NOVA FUNCIONALIDADE
         print(f"[AGENTES] 🚀 Buscando agentes diretos (porta-a-porta)...")
         agentes_diretos = df_base_completa[
             (df_base_completa['Tipo'] == 'Direto') &
             (df_base_completa['Origem_Normalizada'] == origem_normalizada) &
-            (df_base_completa['Destino_Normalizada'] == destino_normalizado)
+            (df_base_completa['Destino_Normalizado'] == destino_normalizado)
         ]
         
         print(f"[AGENTES] Agentes diretos encontrados: {len(agentes_diretos)}")
@@ -2995,18 +2709,18 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # 2. BUSCAR AGENTES TRADICIONAIS (COM TRANSFERÊNCIA)
         print(f"[AGENTES] 🔄 Buscando agentes para rota {uf_origem} → {uf_destino}...")
         
-        # Buscar agentes de coleta e entrega para todas as rotas (com transferência obrigatória)
-        # Agentes de COLETA: buscam na cidade de origem
+        # Buscar agentes de coleta e entrega apenas para a base de origem direta
+        # Agentes de COLETA: buscam na cidade de origem e conectam à base de origem
         agentes_coleta = df_agentes[
             (df_agentes['Tipo'] == 'Agente') &
-            (df_agentes['Base Origem'].isin(bases_possiveis_origem)) &
+            (df_agentes['Base Origem'] == base_origem) &
             (df_agentes['Origem_Normalizada'] == origem_normalizada)
         ]
         
         # Agentes de ENTREGA: saem da base de destino e entregam na cidade de destino
         agentes_entrega = df_agentes[
             (df_agentes['Tipo'] == 'Agente') &
-            (df_agentes['Base Origem'].isin(bases_possiveis_destino)) &
+            (df_agentes['Base Origem'] == base_destino) &
             (df_agentes['Origem_Normalizada'] == destino_normalizado)
         ]
 
@@ -3528,76 +3242,127 @@ def processar_linha_transferencia(linha, peso, valor_nf):
         faixa_peso_usada = ""
         valor_kg_usado = 0.0
         
-        # Verificar se é agente (Tipo == 'Agente' ou 'Direto')
+        # Verificar se é um agente (Tipo == 'Agente' ou 'Direto')
         tipo = linha_dict.get('Tipo', '')
         is_agente = tipo in ['Agente', 'Direto']
         
         if is_agente:
-            # LÓGICA PARA AGENTES (CORRIGIDA)
+            # LÓGICA PARA AGENTES DIRETOS (CORRIGIDA PARA REUNIDAS E GRITSCH)
             if tipo == 'Direto':
-                # CORREÇÃO: Para agentes DIRETOS, usar valor da faixa de peso correspondente
-                # Multiplicar o valor por kg pelo peso real
-                if peso <= 10:
-                    valor_kg = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
-                    valor_base = valor_kg  # Para até 10kg, usar valor fixo
-                    faixa_peso_usada = "VALOR MÍNIMO ATÉ 10 (fixo)"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0 / 10 if valor_kg > 0 else 0
-                elif peso <= 20:
-                    valor_kg = float(linha_dict.get(20, 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "20kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                elif peso <= 30:
-                    valor_kg = float(linha_dict.get(30, 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "30kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                elif peso <= 50:
-                    valor_kg = float(linha_dict.get(50, 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "50kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                elif peso <= 70:
-                    valor_kg = float(linha_dict.get(70, 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "70kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                elif peso <= 100:
-                    valor_kg = float(linha_dict.get(100, 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "100kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                elif peso <= 150:
-                    valor_kg = float(linha_dict.get(150, 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "150kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                elif peso <= 200:
-                    valor_kg = float(linha_dict.get(200, 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "200kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                elif peso <= 300:
-                    valor_kg = float(linha_dict.get(300, 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "300kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                elif peso <= 500:
-                    valor_kg = float(linha_dict.get(500, 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "500kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                else:
-                    valor_kg = float(linha_dict.get('Acima 500', 0) or 0)
-                    valor_base = valor_kg  # Valor direto da base
-                    faixa_peso_usada = "Acima 500kg"
-                    valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else 0
-                
-                # Garantir valor mínimo para agentes diretos
+                fornecedor = linha_dict.get('Fornecedor', '').upper()
                 valor_minimo = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
-                if valor_base < valor_minimo:
-                    valor_base = valor_minimo
-                    faixa_peso_usada += " (aplicado valor mínimo)"
+                valor_excedente = float(linha_dict.get('EXCEDENTE', 0) or 0)
+                
+                # REGRAS ESPECÍFICAS POR FORNECEDOR
+                if 'REUNIDAS' in fornecedor:
+                    # REUNIDAS: Até 300kg usa faixas, acima de 300kg usa excedente
+                    if peso <= 10:
+                        valor_base = valor_minimo
+                        faixa_peso_usada = "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_minimo / 10 if valor_minimo > 0 else 0
+                    elif peso <= 300:
+                        # Usar faixa de peso correspondente
+                        if peso <= 20:
+                            valor_base = float(linha_dict.get(20, 0) or 0)
+                            faixa_peso_usada = "20kg"
+                        elif peso <= 30:
+                            valor_base = float(linha_dict.get(30, 0) or 0)
+                            faixa_peso_usada = "30kg"
+                        elif peso <= 50:
+                            valor_base = float(linha_dict.get(50, 0) or 0)
+                            faixa_peso_usada = "50kg"
+                        elif peso <= 70:
+                            valor_base = float(linha_dict.get(70, 0) or 0)
+                            faixa_peso_usada = "70kg"
+                        elif peso <= 100:
+                            valor_base = float(linha_dict.get(100, 0) or 0)
+                            faixa_peso_usada = "100kg"
+                        elif peso <= 150:
+                            valor_base = float(linha_dict.get(150, 0) or 0)
+                            faixa_peso_usada = "150kg"
+                        elif peso <= 200:
+                            valor_base = float(linha_dict.get(200, 0) or 0)
+                            faixa_peso_usada = "200kg"
+                        else:  # peso <= 300
+                            valor_base = float(linha_dict.get(300, 0) or 0)
+                            faixa_peso_usada = "300kg"
+                        
+                        valor_kg_usado = valor_base / peso if valor_base > 0 and peso > 0 else 0
+                    else:
+                        # ACIMA DE 300KG: usar excedente (peso × valor_excedente)
+                        valor_base = peso * valor_excedente
+                        faixa_peso_usada = f"Excedente (>{peso:.0f}kg)"
+                        valor_kg_usado = valor_excedente
+                        
+                elif 'GRITSCH' in fornecedor:
+                    # GRITSCH: Até 10kg usa valor mínimo, acima usa valor mínimo + excedente
+                    if peso <= 10:
+                        valor_base = valor_minimo
+                        faixa_peso_usada = "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_minimo / 10 if valor_minimo > 0 else 0
+                    else:
+                        # ACIMA DE 10KG: valor mínimo + (peso_excedente × valor_excedente)
+                        peso_excedente = peso - 10
+                        valor_base = valor_minimo + (peso_excedente * valor_excedente)
+                        faixa_peso_usada = f"Valor Mínimo + Excedente (>{peso:.0f}kg)"
+                        valor_kg_usado = valor_excedente
+                        
+                else:
+                    # OUTROS AGENTES DIRETOS: usar lógica de faixas padrão
+                    if peso <= 10:
+                        valor_base = valor_minimo
+                        faixa_peso_usada = "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_minimo / 10 if valor_minimo > 0 else 0
+                    elif peso <= 20:
+                        valor_kg = float(linha_dict.get(20, 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "20kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
+                    elif peso <= 30:
+                        valor_kg = float(linha_dict.get(30, 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "30kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
+                    elif peso <= 50:
+                        valor_kg = float(linha_dict.get(50, 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "50kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
+                    elif peso <= 70:
+                        valor_kg = float(linha_dict.get(70, 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "70kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
+                    elif peso <= 100:
+                        valor_kg = float(linha_dict.get(100, 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "100kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
+                    elif peso <= 150:
+                        valor_kg = float(linha_dict.get(150, 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "150kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
+                    elif peso <= 200:
+                        valor_kg = float(linha_dict.get(200, 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "200kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
+                    elif peso <= 300:
+                        valor_kg = float(linha_dict.get(300, 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "300kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
+                    elif peso <= 500:
+                        valor_kg = float(linha_dict.get(500, 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "500kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
+                    else:
+                        valor_kg = float(linha_dict.get('Acima 500', 0) or 0)
+                        valor_base = valor_kg if valor_kg > 0 else valor_minimo
+                        faixa_peso_usada = "Acima 500kg" if valor_kg > 0 else "VALOR MÍNIMO ATÉ 10"
+                        valor_kg_usado = valor_kg / peso if valor_kg > 0 and peso > 0 else valor_minimo / 10
             else:
                 # Para outros tipos de agentes (não diretos), manter lógica original com EXCEDENTE
                 valor_minimo = float(linha_dict.get('VALOR MÍNIMO ATÉ 10', 0) or 0)
@@ -4028,15 +3793,15 @@ def formatar_resultado_fracionado(resultado):
                 <button id="toggleTechnicalSections" onclick="
                     var sections = document.getElementById('technicalSections');
                     var button = document.getElementById('toggleTechnicalSections');
-                    if (sections.style.display === 'none' || sections.style.display === '') {
+                    if (sections.style.display === 'none' || sections.style.display === '') {{
                         sections.style.display = 'block';
                         button.innerHTML = '📊 Ocultar Informações Técnicas';
                         button.style.background = '#6c757d';
-                    } else {
+                    }} else {{
                         sections.style.display = 'none';
                         button.innerHTML = '📊 Mostrar Informações Técnicas';
                         button.style.background = '#17a2b8';
-                    }
+                    }}
                 " style="
                     background: #17a2b8; 
                     color: white; 
@@ -4141,8 +3906,7 @@ def formatar_resultado_fracionado(resultado):
         </div>
 
         <!-- Alerta de Valor Alto -->
-        {_gerar_alerta_valor_alto_html(resultado.get('validacao_valor', {}))}
-
+        
     """
     
     # Tabela com ranking das opções disponíveis
@@ -4556,36 +4320,6 @@ def formatar_resultado_fracionado(resultado):
         }
     }
     
-    // Tornar a função toggleTechnicalSections globalmente disponível
-    window.toggleTechnicalSections = function() {
-        console.log('toggleTechnicalSections chamada!');
-        const sections = document.getElementById('technicalSections');
-        const button = document.getElementById('toggleTechnicalSections');
-        
-        console.log('sections:', sections);
-        console.log('button:', button);
-        
-        if (sections) {
-            if (sections.style.display === 'none' || sections.style.display === '') {
-                sections.style.display = 'block';
-                if (button) {
-                    button.innerHTML = '📊 Ocultar Informações Técnicas';
-                    button.style.background = '#6c757d';
-                }
-                console.log('Mostrando seções técnicas');
-            } else {
-                sections.style.display = 'none';
-                if (button) {
-                    button.innerHTML = '📊 Mostrar Informações Técnicas';
-                    button.style.background = '#17a2b8';
-                }
-                console.log('Ocultando seções técnicas');
-            }
-        } else {
-            console.log('Elemento technicalSections não encontrado!');
-        }
-    };
-    
     // Adicionar notificação toast quando há alertas de peso
     document.addEventListener('DOMContentLoaded', function() {
         const alertas = document.querySelectorAll('.alerta-peso-excedido');
@@ -4653,17 +4387,7 @@ def formatar_resultado_fracionado(resultado):
         </div>
         """
     
-    # Botões de exportação
-    html += f"""
-        <div style="margin-top: 20px; text-align: center;">
-            <button class="btn-primary" onclick="exportarPDF('Fracionado')" style="margin-right: 10px;">
-                <i class="fa-solid fa-file-pdf"></i> Exportar PDF
-            </button>
-            <button class="btn-primary" onclick="exportarExcel('Fracionado')">
-                <i class="fa-solid fa-file-excel"></i> Exportar Excel
-            </button>
-        </div>
-    """
+    # Botões de exportação removidos - são adicionados pelo JavaScript
     
     return html
 
