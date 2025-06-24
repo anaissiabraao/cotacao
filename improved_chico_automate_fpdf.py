@@ -3733,22 +3733,20 @@ def processar_linha_transferencia(linha, peso, valor_nf):
                 
                 if seguro_base is not None and not pd.isna(seguro_base):
                     seguro_base = float(seguro_base)
-                    if seguro_base == 0:
-                        # Se na base está 0, não calcular seguro (ex: GRITSCH)
+                    # CORREÇÃO: Se valor na base é muito baixo (< 0.01%), considerar como zero
+                    if seguro_base < 0.01:
+                        # Valores irrisórios como 0.003 = sem seguro
                         seguro = 0.0
                     else:
                         # CORREÇÃO: Usar valor da base como percentual sobre valor da NF
                         # Ex: se seguro_base = 0.3, então 0.3% do valor da NF
                         seguro = valor_nf * (seguro_base / 100)
-                        # Valor mínimo de seguro: R$ 5,00
+                        # Valor mínimo de seguro: R$ 5,00 (apenas para seguros reais)
                         if seguro < 5.0:
                             seguro = 5.0
                 else:
-                    # Se não tem valor na base, calcular como 0.1% do valor da NF
-                    seguro = valor_nf * 0.001  # 0.1%
-                    # Valor mínimo de seguro: R$ 5,00
-                    if seguro < 5.0:
-                        seguro = 5.0
+                    # Se não tem valor na base, não calcular seguro
+                    seguro = 0.0
         except (ValueError, TypeError):
             seguro = 0.0
         
