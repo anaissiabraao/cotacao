@@ -1,19 +1,24 @@
 services:
   - type: web
-    name: portoex
+    name: portoex-cotacao
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --config gunicorn.conf.py improved_chico_automate_fpdf:app
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: gunicorn app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: SECRET_KEY
         generateValue: true
       - key: DEBUG
-        value: False
+        value: false
       - key: FLASK_ENV
         value: production
       - key: WEB_CONCURRENCY
-        value: 2
-    healthCheckPath: / 
+        value: 4
+      - key: GUNICORN_CMD_ARGS
+        value: "--timeout 120 --workers 4 --worker-class gthread --threads 4"
+    healthCheckPath: /
+    autoDeploy: true 

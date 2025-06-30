@@ -18,4 +18,6 @@ unicodedata2==15.1.0
 geopy==2.4.1
 folium==0.15.1
 branca==0.7.0
+packaging==23.2
+pillow==10.2.0
 leaflet==1.0.1 
