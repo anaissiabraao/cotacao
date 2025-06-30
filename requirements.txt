@@ -20,4 +20,10 @@ folium==0.15.1
 branca==0.7.0
 packaging==23.2
 pillow==10.2.0
-leaflet==1.0.1 
+click==8.1.7
+itsdangerous==2.1.2
+MarkupSafe==2.1.5
+python-dateutil==2.8.2
+pytz==2024.1
+six==1.16.0
+tzdata==2024.1 
