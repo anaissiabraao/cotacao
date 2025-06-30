@@ -103,6 +103,333 @@
                 margin-top: 10px;
             }
         }
+        
+        /* === MELHORIAS ESPECÍFICAS PARA MOBILE === */
+        @media (max-width: 768px) {
+            /* === HEADER MOBILE === */
+            header .container {
+                flex-direction: column;
+                gap: 15px;
+                padding: 0 15px;
+            }
+
+            .logo h1 {
+                font-size: 1.5rem;
+            }
+
+            .logo img {
+                width: 40px;
+                height: 40px;
+            }
+
+            .user-menu {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                width: 100%;
+            }
+
+            .user-greeting {
+                font-size: 0.9rem;
+                padding: 6px 12px;
+            }
+
+            .user-actions {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 8px;
+            }
+
+            .btn-admin, .btn-logout, .btn-login {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+
+            /* === LAYOUT MOBILE === */
+            body {
+                font-size: 0.95rem;
+                padding: 0;
+                margin: 0;
+            }
+
+            .card {
+                margin: 8px 4px;
+                padding: 16px 12px;
+                border-radius: 12px;
+            }
+
+            .card h2 {
+                font-size: 1.3rem;
+                text-align: center;
+                margin-bottom: 20px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #e3e8ee;
+            }
+
+            /* === FORMULÁRIOS MOBILE === */
+            .form-grid {
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+                margin-bottom: 20px;
+            }
+
+            .form-group {
+                width: 100%;
+                margin-bottom: 0;
+            }
+
+            .form-group label {
+                font-size: 1rem;
+                font-weight: 600;
+                color: #0a6ed1;
+                margin-bottom: 8px;
+                display: block;
+            }
+
+            /* === INPUTS E SELECTS MOBILE === */
+            .form-group input, 
+            .form-group select {
+                width: 100%;
+                padding: 14px 16px;
+                border-radius: 8px;
+                border: 2px solid #b3e5fc;
+                font-size: 16px; /* Impede zoom no iOS */
+                background: #fafdff;
+                color: #222b45;
+                transition: all 0.3s ease;
+                min-height: 50px;
+                box-sizing: border-box;
+                -webkit-appearance: none;
+                -moz-appearance: none;
+                appearance: none;
+            }
+
+            .form-group input:focus, 
+            .form-group select:focus {
+                border-color: #ff9800;
+                box-shadow: 0 0 0 3px rgba(255, 152, 0, 0.15);
+                outline: none;
+                background: #fff;
+            }
+
+            /* === DATALISTS MOBILE === */
+            .form-group input[list] {
+                background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+                background-position: right 12px center;
+                background-repeat: no-repeat;
+                background-size: 16px;
+                padding-right: 40px;
+            }
+
+            /* === SELECTS MOBILE === */
+            .form-group select {
+                background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+                background-position: right 12px center;
+                background-repeat: no-repeat;
+                background-size: 16px;
+                padding-right: 40px;
+                cursor: pointer;
+            }
+
+            .form-group select:focus {
+                background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23ff9800' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+            }
+
+            /* === BOTÕES MOBILE === */
+            .btn-primary {
+                width: 100%;
+                padding: 16px 20px;
+                font-size: 1.1rem;
+                font-weight: 600;
+                margin-top: 20px;
+                border-radius: 8px;
+                min-height: 50px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+                transition: all 0.3s ease;
+            }
+
+            .btn-primary:hover, .btn-primary:focus {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+            }
+
+            /* === TABS MOBILE === */
+            .tabs {
+                display: flex;
+                flex-direction: column;
+                margin: 15px 0;
+                border-bottom: none;
+                background: #fff;
+                border-radius: 12px;
+                overflow: hidden;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            }
+
+            .tab-btn {
+                width: 100%;
+                padding: 16px 20px;
+                font-size: 1rem;
+                font-weight: 600;
+                border: none;
+                border-bottom: 1px solid #e3e8ee;
+                background: #fff;
+                color: #0a6ed1;
+                text-align: left;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                transition: all 0.3s ease;
+            }
+
+            .tab-btn:last-child {
+                border-bottom: none;
+            }
+
+            .tab-btn.active {
+                background: #0a6ed1;
+                color: #fff;
+                transform: scale(1.02);
+            }
+
+            .tab-btn:hover {
+                background: #f0f8ff;
+                transform: translateX(5px);
+            }
+
+            .tab-btn.active:hover {
+                background: #0a6ed1;
+                transform: scale(1.02);
+            }
+
+            /* === CALCULADORA MOBILE === */
+            .cubagem-calculator {
+                background: #f8f9fa;
+                border-radius: 8px;
+                padding: 16px;
+                margin: 16px 0;
+                border: 1px solid #dee2e6;
+            }
+
+            .dimensao-input {
+                font-size: 16px !important;
+            }
+
+            /* === BOTÕES AUXILIARES MOBILE === */
+            .btn-reset-cubagem, 
+            .btn-calculator-avancada {
+                padding: 8px 12px;
+                margin: 4px 2px;
+                font-size: 0.85rem;
+                border-radius: 6px;
+                border: none;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+
+            .btn-reset-cubagem {
+                background: #6c757d;
+                color: white;
+            }
+
+            .btn-calculator-avancada {
+                background: #17a2b8;
+                color: white;
+            }
+
+            /* === SMALL TEXT MOBILE === */
+            small {
+                font-size: 0.9rem;
+                line-height: 1.4;
+                display: block;
+                margin-top: 8px;
+            }
+
+            /* === LOADING SPINNER MOBILE === */
+            .loading-spinner {
+                margin: 20px auto;
+                width: 40px;
+                height: 40px;
+            }
+
+            /* === RESULTADOS MOBILE === */
+            .results {
+                font-size: 0.85rem;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .results th, 
+            .results td {
+                padding: 12px 8px;
+                white-space: nowrap;
+            }
+
+            /* === MODAL MOBILE === */
+            .modal-content {
+                width: 95%;
+                margin: 5% auto;
+                max-height: 90vh;
+                border-radius: 12px;
+            }
+
+            .modal-header {
+                padding: 16px;
+            }
+
+            .modal-header h3 {
+                font-size: 1.2rem;
+            }
+
+            .modal-body {
+                padding: 16px;
+            }
+
+            /* === TOUCH IMPROVEMENTS === */
+            .touch-device .form-group input:focus,
+            .touch-device .form-group select:focus {
+                transform: scale(1.02);
+                z-index: 10;
+                position: relative;
+            }
+
+            /* === ACCESSIBILITY MOBILE === */
+            @media (prefers-reduced-motion: reduce) {
+                * {
+                    animation-duration: 0.01ms !important;
+                    animation-iteration-count: 1 !important;
+                    transition-duration: 0.01ms !important;
+                }
+            }
+        }
+        
+        /* === MICRO MOBILE (telas muito pequenas) === */
+        @media (max-width: 480px) {
+            .card {
+                margin: 4px 2px;
+                padding: 12px 8px;
+                border-radius: 8px;
+            }
+            
+            .form-group input, 
+            .form-group select {
+                padding: 12px 14px;
+                min-height: 48px;
+            }
+            
+            .btn-primary {
+                padding: 14px 16px;
+                min-height: 48px;
+            }
+            
+            .tab-btn {
+                padding: 14px 16px;
+                font-size: 0.95rem;
+            }
+        }
         .loading-spinner {
             display: none;
             margin: 18px auto 0 auto;
@@ -546,189 +873,6 @@
             0% { transform: scale(1); }
             50% { transform: scale(1.05); }
             100% { transform: scale(1); }
-        }
-
-        @media (max-width: 768px) {
-            /* === HEADER MOBILE === */
-            header .container {
-                flex-direction: column;
-                gap: 15px;
-                padding: 0 15px;
-            }
-
-            .logo h1 {
-                font-size: 1.5rem;
-            }
-
-            .logo img {
-                width: 40px;
-                height: 40px;
-            }
-
-            .user-menu {
-                flex-direction: column;
-                align-items: center;
-                gap: 10px;
-                width: 100%;
-            }
-
-            .user-greeting {
-                font-size: 0.9rem;
-                padding: 6px 12px;
-            }
-
-            .user-actions {
-                flex-wrap: wrap;
-                justify-content: center;
-                gap: 8px;
-            }
-
-            .btn-admin, .btn-logout, .btn-login {
-                padding: 6px 12px;
-                font-size: 0.8rem;
-            }
-
-            /* === LAYOUT MOBILE === */
-            body {
-                font-size: 0.95rem;
-            }
-
-            .card {
-                margin: 12px 6px;
-                padding: 16px 12px;
-                border-radius: 12px;
-            }
-
-            .form-group label {
-                font-size: 0.95rem;
-                margin-bottom: 4px;
-            }
-
-            .form-group input, .form-group select {
-                font-size: 16px; /* Evita zoom no iOS */
-                padding: 12px 10px;
-                height: auto;
-                min-height: 44px; /* Touch target mínimo */
-            }
-
-            /* === CALCULADORA CUBAGEM MOBILE === */
-            .cubagem-calculator {
-                padding: 12px;
-                margin: 8px 0;
-            }
-
-            .cubagem-calculator::before {
-                font-size: 0.8rem;
-                padding: 3px 8px;
-                top: -10px;
-                left: 10px;
-            }
-
-            /* === TABELAS MOBILE === */
-            .results {
-                font-size: 0.8rem;
-                overflow-x: auto;
-                white-space: nowrap;
-            }
-
-            .results th, .results td {
-                padding: 6px 4px;
-                min-width: 80px;
-            }
-
-            /* === MAPAS MOBILE === */
-            .map-container {
-                height: 250px;
-                margin: 15px 0;
-            }
-
-            .map-title {
-                font-size: 1.1rem;
-                margin-bottom: 8px;
-            }
-
-            /* === LOADING MOBILE === */
-            .loading-spinner {
-                width: 36px;
-                height: 36px;
-                border-width: 4px;
-            }
-
-            /* === TEXTOS E MENSAGENS === */
-            .error, .success {
-                padding: 10px 12px;
-                font-size: 0.95rem;
-                margin-bottom: 12px;
-            }
-
-            .analise-container {
-                padding: 12px;
-                margin: 12px 0;
-            }
-
-            .analise-title {
-                font-size: 1rem;
-            }
-
-            .analise-item {
-                font-size: 0.9rem;
-            }
-
-            /* === CALCULADORA AVANÇADA MOBILE === */
-            .calculadora-content {
-                width: 95%;
-                margin: 1% auto;
-                max-height: 95vh;
-            }
-
-            .calculadora-header {
-                padding: 15px;
-            }
-
-            .calculadora-header h3 {
-                font-size: 1.1rem;
-            }
-
-            .calculadora-body {
-                padding: 15px;
-            }
-
-            .sku-fields {
-                grid-template-columns: 1fr;
-                gap: 8px;
-            }
-
-            .sku-fields .form-group {
-                margin-bottom: 8px;
-            }
-
-            .sku-fields input {
-                padding: 10px 8px;
-                font-size: 16px; /* Evita zoom no iOS */
-            }
-
-            .volumes-container {
-                padding: 15px;
-                margin: 15px 0;
-            }
-
-            .sku-item {
-                padding: 12px;
-                margin-bottom: 12px;
-            }
-
-            .calculadora-actions {
-                padding: 15px;
-                flex-direction: column;
-                gap: 10px;
-            }
-
-            .calculadora-actions .btn-primary,
-            .calculadora-actions .btn-secondary {
-                width: 100%;
-                padding: 12px 20px;
-                font-size: 16px;
-            }
         }
 
         /* === CELULARES PEQUENOS === */
