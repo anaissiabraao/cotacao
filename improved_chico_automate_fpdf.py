@@ -18,6 +18,16 @@ import tempfile
 # Carregar variáveis de ambiente
 load_dotenv()
 
+# Imports para PostgreSQL (com fallback se não disponível)
+try:
+    from models import db, HistoricoCalculo, LogSistema
+    POSTGRESQL_AVAILABLE = True
+    print("[PostgreSQL] ✅ Modelos importados com sucesso")
+except ImportError as e:
+    POSTGRESQL_AVAILABLE = False
+    print(f"[PostgreSQL] ⚠️ PostgreSQL não disponível: {e}")
+    print("[PostgreSQL] Usando fallback para logs em arquivo")
+
 # Cache global para agentes
 _BASE_AGENTES_CACHE = None
 _ULTIMO_CARREGAMENTO = 0
@@ -3319,7 +3329,7 @@ def calcular():
         
         # Usar pedágio real para calcular custos
         pedagio_real = analise_preliminar.get('pedagio_real', 0)
-        custos = calcular_custos_dedicado(df_unificado, uf_origem, municipio_origem, uf_destino, municipio_destino, rota_info["distancia"], pedagio_real)
+        custos = calcular_custos_dedicado(uf_origem, municipio_origem, uf_destino, municipio_destino, rota_info["distancia"], pedagio_real)
         
         # Gerar análise final com custos atualizados
         analise = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, custos, "Dedicado", municipio_origem, uf_origem, municipio_destino, uf_destino)
@@ -5464,9 +5474,25 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             if chave_unica not in rotas_unicas:
                 rotas_unicas[chave_unica] = rota
         
-        # Converter de volta para lista e ordenar por custo total
+        # Converter de volta para lista e ordenar priorizando rotas completas
         rotas_encontradas = list(rotas_unicas.values())
-        rotas_encontradas = sorted(rotas_encontradas, key=lambda x: x.get('total', float('inf')))
+        
+        # Ordenar com prioridade:
+        # 1. Rotas completas (coleta + transferência + entrega) primeiro
+        # 2. Depois por menor custo total
+        def prioridade_rota(rota):
+            tipo_rota = rota.get('tipo_rota', '')
+            total = rota.get('total', float('inf'))
+            
+            # Dar prioridade para rotas completas (coleta + transferência + entrega)
+            if tipo_rota == 'coleta_transferencia_entrega':
+                return (0, total)  # Maior prioridade
+            elif tipo_rota in ['transferencia_entrega', 'coleta_transferencia']:
+                return (1, total)  # Prioridade média
+            else:
+                return (2, total)  # Menor prioridade
+        
+        rotas_encontradas = sorted(rotas_encontradas, key=prioridade_rota)
         
         print(f"[AGENTES] ✅ {len(rotas_encontradas)} rotas únicas com agentes calculadas (após deduplicação)")
         
