@@ -483,22 +483,42 @@ def geocode(municipio, uf):
         # Normalizar cidade e UF
         cidade_norm = normalizar_cidade(municipio)
         uf_norm = normalizar_uf(uf)
+        
+        # Tentar obter do cache primeiro
+        from utils.coords_cache import get_coords
+        coords_cache = get_coords(cidade_norm, uf_norm)
+        if coords_cache:
+            return coords_cache
+            
+        # Se não estiver no cache, tentar API
         query = f"{cidade_norm}, {uf_norm}, Brasil"
         url = f"https://nominatim.openstreetmap.org/search"
         params = {"q": query, "format": "json", "limit": 1}
         headers = {"User-Agent": "PortoEx/1.0"}
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        data = response.json()
-        if not data:
-            params = {"q": f"{cidade_norm}, Brasil", "format": "json", "limit": 1}
+        
+        try:
             response = requests.get(url, params=params, headers=headers, timeout=10)
             data = response.json()
-        if data:
-            lat = float(data[0]["lat"])
-            lon = float(data[0]["lon"])
-            return [lat, lon]
+            
+            if not data:
+                params = {"q": f"{cidade_norm}, Brasil", "format": "json", "limit": 1}
+                response = requests.get(url, params=params, headers=headers, timeout=10)
+                data = response.json()
+                
+            if data:
+                lat = float(data[0]["lat"])
+                lon = float(data[0]["lon"])
+                return [lat, lon]
+                
+        except Exception as e:
+            print(f"[geocode] Erro ao geocodificar {municipio}, {uf}: {str(e)}")
+            # Em caso de erro na API, tentar usar cache como fallback
+            return coords_cache
+            
         return None
     except Exception as e:
+        print(f"[geocode] Erro geral ao geocodificar {municipio}, {uf}: {str(e)}")
+        return None
         print(f"[geocode] Erro ao geocodificar {municipio}, {uf}: {e}")
         return None
 
@@ -631,7 +651,7 @@ DEDICADO_KM_ACIMA_600 = {
     "CARRETA": 8.0
 }
 
-def calcular_custos_dedicado(df, uf_origem, municipio_origem, uf_destino, municipio_destino, distancia, pedagio_real=0):
+def calcular_custos_dedicado(uf_origem, municipio_origem, uf_destino, municipio_destino, distancia, pedagio_real=0):
     try:
         # Inicializar dicionário de custos
         custos = {}
@@ -1123,7 +1143,7 @@ def calcular():
         
         # Usar pedágio real para calcular custos
         pedagio_real = analise_preliminar.get('pedagio_real', 0)
-        custos = calcular_custos_dedicado(df_unificado, uf_origem, municipio_origem, uf_destino, municipio_destino, rota_info["distancia"], pedagio_real)
+        custos = calcular_custos_dedicado(uf_origem, municipio_origem, uf_destino, municipio_destino, rota_info["distancia"], pedagio_real)
         
         # Gerar análise final com custos atualizados
         analise = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, custos, "Dedicado", municipio_origem, uf_origem, municipio_destino, uf_destino)
@@ -3411,9 +3431,9 @@ def calcular_aereo():
             for opcao in opcoes:
                 fornecedor = opcao['fornecedor']
                 custos_aereo[fornecedor] = opcao['total']
-            else:
+        else:
         # Se não encontrou dados específicos, usar valores padrão
-                peso_cubado = max(float(peso), float(cubagem) * 300)
+            peso_cubado = max(float(peso), float(cubagem) * 300)
             custos_aereo = {
                 "ECONOMICO": round(peso_cubado * 8.5, 2),
                 "RAPIDO": round(peso_cubado * 12.0, 2),
