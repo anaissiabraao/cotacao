@@ -1328,26 +1328,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function exibirResultadoFracionado(data) {
         const container = document.getElementById('fracionado-resultado');
-        if (!container) return;
+        if (!container) {
+            console.error('[FRACIONADO] Container fracionado-resultado não encontrado');
+            return;
+        }
 
+        console.log('[FRACIONADO] Dados recebidos:', data);
+        
+        // Usar o HTML formatado do backend se disponível
+        if (data.html) {
+            container.innerHTML = data.html;
+            console.log('[FRACIONADO] HTML formatado aplicado com sucesso');
+            return;
+        }
+
+        // Fallback para estrutura manual se não houver HTML formatado
         let html = '<h3>Resultados do Frete Fracionado</h3>';
         
-        if (data.resultado && data.resultado.rotas_completas) {
-            html += '<h4>Rotas Completas (Coleta + Transferência + Entrega)</h4>';
-            html += '<table class="results"><thead><tr><th>Coleta</th><th>Transferência</th><th>Entrega</th><th>Total</th></tr></thead><tbody>';
+        if (data.cotacoes_ranking && data.cotacoes_ranking.length > 0) {
+            html += '<h4>Rotas com Agentes Encontradas</h4>';
+            html += '<table class="results"><thead><tr><th>Posição</th><th>Rota</th><th>Custo Total</th><th>Prazo</th></tr></thead><tbody>';
             
-            data.resultado.rotas_completas.forEach(rota => {
+            data.cotacoes_ranking.slice(0, 10).forEach((rota, index) => {
+                const posicao = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}º`;
                 html += `
                     <tr>
-                        <td>${rota.fornecedor_coleta} - R$ ${rota.custo_coleta.toFixed(2)}</td>
-                        <td>${rota.fornecedor_transferencia} - R$ ${rota.custo_transferencia.toFixed(2)}</td>
-                        <td>${rota.fornecedor_entrega} - R$ ${rota.custo_entrega.toFixed(2)}</td>
-                        <td><strong>R$ ${rota.total_rota.toFixed(2)}</strong></td>
-                              </tr>
-                        `;
-                    });
+                        <td>${posicao}</td>
+                        <td>${rota.resumo || 'N/A'}</td>
+                        <td><strong>R$ ${(rota.total || 0).toFixed(2)}</strong></td>
+                        <td>${rota.prazo_total || 'N/A'} dias</td>
+                    </tr>
+                `;
+            });
             
             html += '</tbody></table>';
+        } else {
+            html += '<div class="error">Nenhuma rota com agentes encontrada para esta origem/destino.</div>';
         }
         
         container.innerHTML = html;
@@ -1355,10 +1371,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function exibirResultadoDedicado(data) {
         const container = document.getElementById('resultados-dedicado');
-        if (!container) return;
+        const analiseContainer = document.getElementById('analise-dedicado');
+        const mapaSection = document.getElementById('mapa-section-dedicado');
+        const mapContainer = document.getElementById('map-dedicado');
+        
+        if (!container) {
+            console.error('[DEDICADO] Container resultados-dedicado não encontrado');
+            return;
+        }
+
+        console.log('[DEDICADO] Dados recebidos:', data);
 
         let html = '<h3>Resultados do Frete Dedicado</h3>';
         
+        // Exibir tabela de custos por tipo de veículo
         if (data.custos) {
             html += '<table class="results"><thead><tr><th>Tipo de Veículo</th><th>Valor</th></tr></thead><tbody>';
             
@@ -1367,25 +1393,105 @@ document.addEventListener('DOMContentLoaded', function() {
                     <tr>
                         <td>${tipo}</td>
                         <td><strong>R$ ${valor.toFixed(2)}</strong></td>
-                              </tr>
+                    </tr>
                 `;
             });
             
             html += '</tbody></table>';
         }
         
-        if (data.analise) {
-            html += `
+        container.innerHTML = html;
+
+        // Exibir análise da rota se disponível
+        if (data.analise && analiseContainer) {
+            let analiseHtml = `
                 <div class="analise-container">
                     <div class="analise-title">Análise da Rota</div>
-                    <div class="analise-item">Distância: ${data.analise.distancia} km</div>
-                    <div class="analise-item">Tempo estimado: ${data.analise.tempo_estimado}</div>
-                    <div class="analise-item">Consumo de combustível: ${data.analise.consumo_combustivel}</div>
-                        </div>
-                    `;
+                    <div class="analise-item">Distância: ${data.analise.distancia || data.distancia || 'N/A'} km</div>
+                    <div class="analise-item">Tempo estimado: ${data.analise.tempo_estimado || 'N/A'}</div>
+                    <div class="analise-item">Consumo de combustível: ${data.analise.consumo_combustivel || 'N/A'}</div>
+                    ${data.analise.pedagio_real ? `<div class="analise-item">Pedágio: R$ ${data.analise.pedagio_real.toFixed(2)}</div>` : ''}
+                    ${data.analise.emissao_co2 ? `<div class="analise-item">Emissão CO2: ${data.analise.emissao_co2}</div>` : ''}
+                </div>
+            `;
+            analiseContainer.innerHTML = analiseHtml;
         }
-        
-        container.innerHTML = html;
+
+        // Exibir mapa se há pontos da rota
+        if (data.rota_pontos && data.rota_pontos.length > 0 && mapContainer) {
+            console.log('[DEDICADO] Inicializando mapa com pontos:', data.rota_pontos);
+            
+            // Mostrar seção do mapa
+            if (mapaSection) {
+                mapaSection.style.display = 'block';
+            }
+            
+            // Inicializar mapa
+            try {
+                if (window.mapaDedicado) {
+                    window.mapaDedicado.remove();
+                }
+                
+                // Verificar se os pontos são válidos
+                const pontosValidos = data.rota_pontos.filter(ponto => 
+                    Array.isArray(ponto) && ponto.length >= 2 && 
+                    typeof ponto[0] === 'number' && typeof ponto[1] === 'number' &&
+                    ponto[0] !== 0 && ponto[1] !== 0
+                );
+                
+                if (pontosValidos.length >= 2) {
+                    // Criar mapa centrado na rota
+                    const bounds = L.latLngBounds(pontosValidos.map(p => [p[0], p[1]]));
+                    
+                    window.mapaDedicado = L.map('map-dedicado').fitBounds(bounds, {
+                        padding: [20, 20]
+                    });
+                    
+                    // Adicionar camada de tiles
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors'
+                    }).addTo(window.mapaDedicado);
+                    
+                    // Adicionar marcadores de origem e destino
+                    const origem = pontosValidos[0];
+                    const destino = pontosValidos[pontosValidos.length - 1];
+                    
+                    L.marker([origem[0], origem[1]])
+                        .addTo(window.mapaDedicado)
+                        .bindPopup(`<b>Origem</b><br>${data.analise?.origem || 'Ponto de partida'}`)
+                        .openPopup();
+                    
+                    L.marker([destino[0], destino[1]])
+                        .addTo(window.mapaDedicado)
+                        .bindPopup(`<b>Destino</b><br>${data.analise?.destino || 'Ponto de chegada'}`);
+                    
+                    // Adicionar linha da rota
+                    const latlngs = pontosValidos.map(p => [p[0], p[1]]);
+                    L.polyline(latlngs, {
+                        color: '#ff9800',
+                        weight: 4,
+                        opacity: 0.8
+                    }).addTo(window.mapaDedicado);
+                    
+                    console.log('[DEDICADO] Mapa criado com sucesso');
+                } else {
+                    console.warn('[DEDICADO] Pontos da rota inválidos, ocultando mapa');
+                    if (mapaSection) {
+                        mapaSection.style.display = 'none';
+                    }
+                }
+            } catch (error) {
+                console.error('[DEDICADO] Erro ao criar mapa:', error);
+                if (mapaSection) {
+                    mapaSection.style.display = 'none';
+                }
+            }
+        } else {
+            console.warn('[DEDICADO] Sem pontos de rota disponíveis');
+            if (mapaSection) {
+                mapaSection.style.display = 'none';
+            }
+        }
     }
 
     function exibirResultadoAereo(data) {
@@ -2355,4 +2461,28 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ... existing code ...
+
+    // Funções auxiliares para controle de detalhes técnicos
+    window.toggleDetails = function(elementId) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.style.display = element.style.display === 'none' ? 'block' : 'none';
+        }
+    };
+
+    window.toggleTechnicalSections = function() {
+        const sections = document.getElementById('technicalSections');
+        const button = document.getElementById('toggleTechnicalSections');
+        if (sections && button) {
+            if (sections.style.display === 'none' || sections.style.display === '') {
+                sections.style.display = 'block';
+                button.innerHTML = '📊 Ocultar Informações Técnicas';
+                button.style.background = '#6c757d';
+            } else {
+                sections.style.display = 'none';
+                button.innerHTML = '📊 Mostrar Informações Técnicas';
+                button.style.background = '#17a2b8';
+            }
+        }
+    };
 });

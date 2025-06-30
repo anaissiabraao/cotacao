@@ -2884,64 +2884,7 @@ DEDICADO_KM_ACIMA_600 = {
     "CARRETA": 8.0
 }
 
-def calcular_custos_dedicado(df, uf_origem, municipio_origem, uf_destino, municipio_destino, distancia, pedagio_real=0):
-    try:
-        # Inicializar dicionário de custos
-        custos = {}
-        
-        # Garantir que pedagio_real e distancia são números válidos
-        pedagio_real = float(pedagio_real) if pedagio_real is not None else 0.0
-        distancia = float(distancia) if distancia is not None else 0.0
-        
-        # Determinar a faixa de distância
-        faixa = determinar_faixa(distancia)
-        
-        # Calcular custos baseado na faixa de distância
-        if faixa and faixa in TABELA_CUSTOS_DEDICADO:
-            # Usar tabela de custos fixos por faixa
-            tabela = TABELA_CUSTOS_DEDICADO[faixa]
-            for tipo_veiculo, valor in tabela.items():
-                custo_total = float(valor) + pedagio_real
-                custos[tipo_veiculo] = round(custo_total, 2)
-                
-        elif distancia > 600:
-            # Para distâncias acima de 600km, usar custo por km
-            for tipo_veiculo, valor_km in DEDICADO_KM_ACIMA_600.items():
-                custo_total = (distancia * float(valor_km)) + pedagio_real
-                custos[tipo_veiculo] = round(custo_total, 2)
-        else:
-            # Custos padrão + pedágio real (fallback)
-            custos_base = {
-                "FIORINO": 150.0, 
-                "VAN": 200.0, 
-                "3/4": 250.0, 
-                "TOCO": 300.0, 
-                "TRUCK": 350.0, 
-                "CARRETA": 500.0
-            }
-            for tipo_veiculo, valor in custos_base.items():
-                custo_total = float(valor) + pedagio_real
-                custos[tipo_veiculo] = round(custo_total, 2)
-        
-        # Garantir que todos os valores são números válidos
-        for tipo_veiculo in list(custos.keys()):
-            if not isinstance(custos[tipo_veiculo], (int, float)) or custos[tipo_veiculo] < 0:
-                custos[tipo_veiculo] = 0.0
-        
-        print(f"[DEBUG] Custos calculados: {custos}")
-        return custos
-        
-    except Exception as e:
-        print(f"[ERRO] Erro ao calcular custos dedicado: {e}")
-        # Retornar custos padrão em caso de erro
-        return {
-            "FIORINO": 150.0, 
-            "VAN": 200.0, 
-            "3/4": 250.0, 
-            "TOCO": 300.0, 
-            "TRUCK": 350.0, 
-            "CARRETA": 500.0
-        }
+# Função removida - duplicada (versão correta mantida na linha 653)
 
 def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="Dedicado", municipio_origem=None, uf_origem=None, municipio_destino=None, uf_destino=None):
     global CONTADOR_DEDICADO, CONTADOR_FRACIONADO # Adicionado CONTADOR_FRACIONADO
