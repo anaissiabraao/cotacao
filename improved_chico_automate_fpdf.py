@@ -5113,8 +5113,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                         rotas_encontradas.append(rota)
                         rotas_completas += 1
                         
-                        tipo_rota_desc = "LOCAL" if transferencia.get('tipo_rota') == 'local_com_transferencia' else "COMPLETA"
-                        print(f"[AGENTES] ✅ Rota {tipo_rota_desc}: {agente_col.get('Fornecedor')} (R$ {linha_coleta_processada['custo']:.2f}) + {transferencia['fornecedor']} (R$ {transferencia['custo']:.2f}) + {agente_ent.get('Fornecedor')} (R$ {linha_entrega_processada['custo']:.2f}) = R$ {total_rota:.2f}")
+                        # Log apenas para debug - removido para evitar spam no console
+                        # tipo_rota_desc = "LOCAL" if transferencia.get('tipo_rota') == 'local_com_transferencia' else "COMPLETA"
+                        # log_debug(f"[AGENTES] ✅ Rota {tipo_rota_desc}: {agente_col.get('Fornecedor')} + {transferencia['fornecedor']} + {agente_ent.get('Fornecedor')} = R$ {total_rota:.2f}")
                         
                     except Exception as e:
                         print(f"[AGENTES] Erro ao combinar rota: {e}")
@@ -5218,7 +5219,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                         
                         # Salvar a melhor rota para esta combinação
                         melhores_rotas_entrega[chave_combinacao] = rota_parcial
-                        print(f"[AGENTES] ✅ Melhor rota: Transfer {transferencia['fornecedor']} + Entrega {agente_ent.get('Fornecedor')} = R$ {total_rota:.2f}")
+                        # Log apenas no debug para evitar spam - somente melhores rotas
+                        log_debug(f"[AGENTES] ✅ Melhor rota: Transfer {transferencia['fornecedor']} + Entrega {agente_ent.get('Fornecedor')} = R$ {total_rota:.2f}")
                         
                     except Exception as e:
                         print(f"[AGENTES] Erro ao processar rota parcial: {e}")
@@ -5322,7 +5324,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                         
                         # Salvar a melhor rota para esta combinação
                         melhores_rotas_coleta[chave_combinacao] = rota_parcial
-                        print(f"[AGENTES] ✅ Melhor rota: Coleta {agente_col.get('Fornecedor')} + Transfer {transferencia['fornecedor']} = R$ {total_rota:.2f}")
+                        # Log apenas no debug para evitar spam
+                        log_debug(f"[AGENTES] ✅ Melhor rota: Coleta {agente_col.get('Fornecedor')} + Transfer {transferencia['fornecedor']} = R$ {total_rota:.2f}")
                         
                     except Exception as e:
                         print(f"[AGENTES] Erro ao processar rota parcial: {e}")
@@ -5443,15 +5446,29 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             }
                         }
                         rotas_encontradas.append(rota_direta)
-                        print(f"[AGENTES] ✅ Transferência: {linha_processada['fornecedor']} - R$ {rota_direta['total']:.2f}")
+                        # Log apenas no debug para evitar spam
+                        log_debug(f"[AGENTES] ✅ Transferência: {linha_processada['fornecedor']} - R$ {rota_direta['total']:.2f}")
                 except Exception as e:
                     print(f"[AGENTES] Erro ao processar transferência direta: {e}")
                     continue
         
-        # Ordenar por custo total
+        # Deduplicar rotas baseado em fornecedores e valores (evitar duplicatas)
+        rotas_unicas = {}
+        for rota in rotas_encontradas:
+            # Criar chave única baseada nos fornecedores e valor total
+            resumo = rota.get('resumo', '')
+            total = rota.get('total', 0)
+            chave_unica = f"{resumo}_{total:.2f}"
+            
+            # Manter apenas a primeira ocorrência (que já é a melhor por estar ordenada)
+            if chave_unica not in rotas_unicas:
+                rotas_unicas[chave_unica] = rota
+        
+        # Converter de volta para lista e ordenar por custo total
+        rotas_encontradas = list(rotas_unicas.values())
         rotas_encontradas = sorted(rotas_encontradas, key=lambda x: x.get('total', float('inf')))
         
-        print(f"[AGENTES] ✅ {len(rotas_encontradas)} rotas com agentes calculadas")
+        print(f"[AGENTES] ✅ {len(rotas_encontradas)} rotas únicas com agentes calculadas (após deduplicação)")
         
         return {
             'rotas': rotas_encontradas,
