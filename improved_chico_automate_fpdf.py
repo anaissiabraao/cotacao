@@ -2691,24 +2691,69 @@ def geocode(municipio, uf):
         # Normalizar cidade e UF
         cidade_norm = normalizar_cidade(municipio)
         uf_norm = normalizar_uf(uf)
-        query = f"{cidade_norm}, {uf_norm}, Brasil"
-        url = f"https://nominatim.openstreetmap.org/search"
-        params = {"q": query, "format": "json", "limit": 1}
-        headers = {"User-Agent": "PortoEx/1.0"}
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        data = response.json()
-        if not data:
-            params = {"q": f"{cidade_norm}, Brasil", "format": "json", "limit": 1}
+        
+        # Primeiro, tentar obter do cache de coordenadas
+        from utils.coords_cache import COORDS_CACHE
+        chave_cache = f"{cidade_norm}-{uf_norm}"
+        
+        print(f"[geocode] Buscando coordenadas para: {chave_cache}")
+        
+        if chave_cache in COORDS_CACHE:
+            coords = COORDS_CACHE[chave_cache]
+            print(f"[geocode] ✅ Encontrado no cache: {coords}")
+            return coords
+        
+        # Se não encontrou no cache, tentar a API do OpenStreetMap
+        print(f"[geocode] Não encontrado no cache, tentando API...")
+        
+        try:
+            query = f"{cidade_norm}, {uf_norm}, Brasil"
+            url = f"https://nominatim.openstreetmap.org/search"
+            params = {"q": query, "format": "json", "limit": 1}
+            headers = {"User-Agent": "PortoEx/1.0"}
             response = requests.get(url, params=params, headers=headers, timeout=10)
             data = response.json()
-        if data:
-            lat = float(data[0]["lat"])
-            lon = float(data[0]["lon"])
-            return [lat, lon]
-        return None
+            
+            if not data:
+                params = {"q": f"{cidade_norm}, Brasil", "format": "json", "limit": 1}
+                response = requests.get(url, params=params, headers=headers, timeout=10)
+                data = response.json()
+                
+            if data:
+                lat = float(data[0]["lat"])
+                lon = float(data[0]["lon"])
+                coords = [lat, lon]
+                print(f"[geocode] ✅ Encontrado via API: {coords}")
+                return coords
+                
+        except Exception as api_error:
+            print(f"[geocode] Erro na API: {str(api_error)}")
+        
+        # 4. Fallback: coordenadas baseadas no estado
+        coords_estados = {
+            'AC': [-8.77, -70.55], 'AL': [-9.71, -35.73], 'AP': [1.41, -51.77], 'AM': [-3.07, -61.66],
+            'BA': [-12.96, -38.51], 'CE': [-3.72, -38.54], 'DF': [-15.78, -47.93], 'ES': [-19.19, -40.34],
+            'GO': [-16.64, -49.31], 'MA': [-2.55, -44.30], 'MT': [-12.64, -55.42], 'MS': [-20.51, -54.54],
+            'MG': [-18.10, -44.38], 'PA': [-5.53, -52.29], 'PB': [-7.06, -35.55], 'PR': [-24.89, -51.55],
+            'PE': [-8.28, -35.07], 'PI': [-8.28, -43.68], 'RJ': [-22.84, -43.15], 'RN': [-5.22, -36.52],
+            'RS': [-30.01, -51.22], 'RO': [-11.22, -62.80], 'RR': [1.99, -61.33], 'SC': [-27.33, -49.44],
+            'SP': [-23.55, -46.64], 'SE': [-10.90, -37.07], 'TO': [-10.25, -48.25]
+        }
+        
+        if uf_norm in coords_estados:
+            coords = coords_estados[uf_norm]
+            print(f"[geocode] ✅ Usando coordenadas do estado {uf_norm}: {coords}")
+            return coords
+        
+        # 5. Fallback final: Brasília
+        coords = [-15.7801, -47.9292]
+        print(f"[geocode] ⚠️ Usando coordenadas padrão (Brasília): {coords}")
+        return coords
+        
     except Exception as e:
-        print(f"[geocode] Erro ao geocodificar {municipio}, {uf}: {e}")
-        return None
+        print(f"[geocode] Erro crítico ao geocodificar {municipio}, {uf}: {e}")
+        # Garantir que sempre retorna coordenadas válidas
+        return [-15.7801, -47.9292]  # Brasília
 
 def calcular_distancia_osrm(origem, destino):
     try:
