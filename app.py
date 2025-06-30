@@ -15,12 +15,20 @@ import functools
 # Carregar variáveis de ambiente
 load_dotenv()
 
-# Configuração do cache
-cache_config = {
-    'CACHE_TYPE': 'SimpleCache',
-    'CACHE_DEFAULT_TIMEOUT': 300,  # 5 minutos
-    'CACHE_THRESHOLD': 1000  # Máximo de itens no cache
-}
+# Configuração do cache baseada no ambiente
+if os.environ.get('FLASK_ENV') == 'production':
+    cache_config = {
+        'CACHE_TYPE': 'redis',
+        'CACHE_REDIS_URL': os.environ.get('REDIS_URL', 'redis://localhost:6379/0'),
+        'CACHE_DEFAULT_TIMEOUT': 300,  # 5 minutos
+        'CACHE_KEY_PREFIX': 'portoex_'
+    }
+else:
+    cache_config = {
+        'CACHE_TYPE': 'SimpleCache',
+        'CACHE_DEFAULT_TIMEOUT': 300,
+        'CACHE_THRESHOLD': 1000
+    }
 
 try:
     # Importar a aplicação principal
@@ -38,6 +46,7 @@ try:
         app.config['TESTING'] = False
         app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000  # 1 ano
         app.config['TEMPLATES_AUTO_RELOAD'] = False
+        app.config['PROPAGATE_EXCEPTIONS'] = True
     
     # Middleware para compressão gzip
     def gzipped(f):
@@ -56,6 +65,7 @@ try:
             response.data = gzip_buffer
             response.headers['Content-Encoding'] = 'gzip'
             response.headers['Content-Length'] = len(response.data)
+            response.headers['Vary'] = 'Accept-Encoding'
             
             return response
             

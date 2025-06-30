@@ -20,5 +20,15 @@ services:
         value: 4
       - key: GUNICORN_CMD_ARGS
         value: "--timeout 120 --workers 4 --worker-class gthread --threads 4"
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: portoex-cache
+          property: connectionString
     healthCheckPath: /
-    autoDeploy: true 
+    autoDeploy: true
+
+  - type: redis
+    name: portoex-cache
+    ipAllowList: []
+    plan: free 
