@@ -5,6 +5,23 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-01-20
+
+### Adicionado
+- Aba "All In" para cotação unificada de todas as modalidades
+- Calculadora de volumes avançada em todas as abas
+- Exibição de capacidade de carga e volume para cada veículo
+- Validação visual de capacidade excedida nos veículos
+- Detalhamento de custos operacionais por veículo
+- Margens comerciais personalizadas por tipo de veículo
+- Interface interativa para seleção de veículos
+
+### Melhorado
+- Layout responsivo em todas as abas
+- Feedback visual para usuário em todas as interações
+- Performance no cálculo de rotas e custos
+- Organização do código e documentação
+
 ## [1.0.0] - 2025-01-15
 
 ### Adicionado

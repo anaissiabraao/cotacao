@@ -1,9 +1,6 @@
-console.log('[DEBUG] correcao_mapa_dedicado.js carregado');
-
 // Função para verificar se o Leaflet está carregado
 function verificarLeaflet() {
     if (typeof L === 'undefined') {
-        console.error('[MAPA] Leaflet não está carregado!');
         return false;
     }
     return true;
@@ -34,7 +31,6 @@ window.initializeDedicadoMap = function(routePoints, mapId = 'map-dedicado') {
     const mapContainer = document.getElementById(mapId);
 
     if (!mapContainer) {
-        console.error('[MAPA] Container do mapa não encontrado!', mapId);
         return;
     }
 

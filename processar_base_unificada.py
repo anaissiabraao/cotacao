@@ -11,10 +11,10 @@ MAPEAMENTO_BASES = {
     "RAO": "Ribeirão Preto",
     "CPQ": "Campinas",
     "SJK": "São José dos Campos",
-    "SJP": "São José do Rio Preto",
+    "RPO": "São José do Rio Preto",
     "BAU": "Bauru",
     # Rio de Janeiro
-    "RJO": "Rio de Janeiro",
+    "RIO": "Rio de Janeiro",
     "CAW": "Campos dos Goytacazes",
     # Minas Gerais
     "BHZ": "Belo Horizonte",
@@ -28,6 +28,7 @@ MAPEAMENTO_BASES = {
     "FLN": "Florianópolis",
     "JOI": "Joinville",
     "CFC": "Chapecó",
+    "ITJ": "Itajaí",
     # Rio Grande do Sul
     "POA": "Porto Alegre",
     "CXJ": "Caxias do Sul",
@@ -588,7 +589,7 @@ def obter_mapeamento_bases_completo():
     """
     mapeamento_expandido = {
         # Principais bases
-        "SAO": "São Paulo",
+        "SPO": "São Paulo",
         "RIO": "Rio de Janeiro", 
         "RAO": "Ribeirão Preto",
         "BHZ": "Belo Horizonte",
@@ -609,7 +610,7 @@ def obter_mapeamento_bases_completo():
         
         # Bases secundárias
         "SJK": "São José dos Campos",
-        "SJP": "São José do Rio Preto", 
+        "RPO": "São José do Rio Preto", 
         "BAU": "Bauru",
         "CAW": "Campos dos Goytacazes",
         "UDI": "Uberlândia",
@@ -621,7 +622,8 @@ def obter_mapeamento_bases_completo():
         "CXJ": "Caxias do Sul",
         "CGB": "Cuiabá",
         "CGR": "Campo Grande",
-        "MAO": "Manaus"
+        "MAO": "Manaus",
+        "ITJ": "Itajaí"
     }
     
     return mapeamento_expandido
