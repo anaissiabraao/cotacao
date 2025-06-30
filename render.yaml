@@ -6,7 +6,17 @@ services:
     buildCommand: |
       pip install --upgrade pip
       pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: |
+      python -c "
+      import os
+      import pandas as pd
+      print('Verificando ambiente...')
+      print(f'Diretório atual: {os.getcwd()}')
+      print(f'Arquivos disponíveis: {os.listdir()}')
+      df = pd.read_excel('Base_Unificada.xlsx')
+      print(f'Base carregada com sucesso! Shape: {df.shape}')
+      "
+      gunicorn app:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
@@ -25,6 +35,14 @@ services:
           type: redis
           name: portoex-cache
           property: connectionString
+      - key: NOMINATIM_USER_AGENT
+        value: "PortoEx/1.0"
+      - key: DISABLE_GEOCODING
+        value: "true"
+      - key: USE_COORDS_CACHE
+        value: "true"
+      - key: BASE_UNIFICADA_PATH
+        value: "/opt/render/project/src/Base_Unificada.xlsx"
     healthCheckPath: /
     autoDeploy: true
 
