@@ -1357,9 +1357,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <td>${rota.resumo || 'N/A'}</td>
                         <td><strong>R$ ${(rota.total || 0).toFixed(2)}</strong></td>
                         <td>${rota.prazo_total || 'N/A'} dias</td>
-                    </tr>
-                `;
-            });
+                              </tr>
+                        `;
+                    });
             
             html += '</tbody></table>';
         } else {
@@ -1382,23 +1382,201 @@ document.addEventListener('DOMContentLoaded', function() {
 
         console.log('[DEDICADO] Dados recebidos:', data);
 
-        let html = '<h3>Resultados do Frete Dedicado</h3>';
+        // Criar layout similar ao All In com mais detalhes
+        let html = `
+            <div class="success">
+                <h3><i class="fa-solid fa-truck"></i> Cotação de Frete Dedicado Calculada - ${data.analise?.id_historico || 'N/A'}</h3>
+                
+                <div class="analise-container">
+                    <div class="analise-title">🚛 Melhor Opção: ${Object.keys(data.custos || {})[0] || 'CARRETA'}</div>
+                    <div class="analise-item" style="font-size: 1.3rem; font-weight: bold; color: #0a6ed1; background: #e8f4fd; padding: 12px; border-radius: 8px; text-align: center;">
+                        💰 <strong>CUSTO TOTAL: R$ ${Object.values(data.custos || {})[0]?.toFixed(2) || '0.00'}</strong>
+                    </div>
+                    <div class="analise-item"><strong>Distância:</strong> ${data.analise?.distancia || data.distancia || 'N/A'} km</div>
+                    <div class="analise-item"><strong>Tempo Estimado:</strong> ${data.analise?.tempo_estimado || 'N/A'}</div>
+                    ${data.analise?.pedagio_real ? `<div class="analise-item"><strong>Pedágios:</strong> R$ ${data.analise.pedagio_real.toFixed(2)}</div>` : ''}
+                    ${data.analise?.consumo_combustivel ? `<div class="analise-item"><strong>Consumo Estimado:</strong> ${data.analise.consumo_combustivel.toFixed(1)}L</div>` : ''}
+                </div>
+
+                <!-- Informações da Rota -->
+                <div class="analise-container">
+                    <div class="analise-title">
+                        📍 Informações da Rota
+                        <button class="btn-secondary" onclick="toggleDetails('detalhes_rota_dedicado')" style="float: right; margin-left: 10px; font-size: 0.8rem; padding: 4px 8px; background: #6f42c1;">
+                            Ver Detalhes
+                        </button>
+                    </div>
+                    <div class="analise-item"><strong>Origem:</strong> ${data.analise?.origem || 'N/A'}</div>
+                    <div class="analise-item"><strong>Destino:</strong> ${data.analise?.destino || 'N/A'}</div>
+                    <div class="analise-item"><strong>Tipo de Frete:</strong> Dedicado</div>
+                    
+                    <!-- Detalhes da Rota -->
+                    <div id="detalhes_rota_dedicado" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
+                        <strong style="color: #6f42c1;">🚛 Detalhamento do Frete Dedicado:</strong><br><br>
+                        <div style="margin-bottom: 10px;">
+                            <strong>📦 Características do Serviço:</strong><br>
+                            • <strong>Modalidade:</strong> Frete dedicado/exclusivo<br>
+                            • <strong>Distância Total:</strong> ${data.analise?.distancia || data.distancia || 'N/A'} km<br>
+                            • <strong>Duração:</strong> ${data.analise?.tempo_estimado || 'N/A'}<br>
+                            • <strong>Tipo de Rota:</strong> Porta-a-porta
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <strong>💰 Composição de Custos:</strong><br>
+                            • <strong>Frete Base:</strong> Conforme tabela por distância<br>
+                            ${data.analise?.pedagio_real ? `• <strong>Pedágios:</strong> R$ ${data.analise.pedagio_real.toFixed(2)}<br>` : ''}
+                            ${data.analise?.consumo_combustivel ? `• <strong>Combustível Estimado:</strong> ${data.analise.consumo_combustivel.toFixed(1)}L<br>` : ''}
+                            ${data.analise?.emissao_co2 ? `• <strong>Emissão CO2:</strong> ${data.analise.emissao_co2.toFixed(1)}kg<br>` : ''}
+                        </div>
+                        <div>
+                            <strong>⚙️ Processamento:</strong><br>
+                            • Cálculo baseado em <strong>tabela de faixas de distância</strong><br>
+                            • Pedágios calculados com <strong>APIs reais</strong> quando disponível<br>
+                            • Custos ajustados conforme <strong>tipo de veículo</strong><br>
+                            • Análise de <strong>consumo e emissões</strong> incluída
+                        </div>
+                    </div>
+                </div>
+        `;
         
         // Exibir tabela de custos por tipo de veículo
         if (data.custos) {
-            html += '<table class="results"><thead><tr><th>Tipo de Veículo</th><th>Valor</th></tr></thead><tbody>';
-            
-            Object.entries(data.custos).forEach(([tipo, valor]) => {
                 html += `
-                    <tr>
-                        <td>${tipo}</td>
-                        <td><strong>R$ ${valor.toFixed(2)}</strong></td>
-                    </tr>
+                <div class="analise-container">
+                    <div class="analise-title">📊 Opções de Veículos Disponíveis</div>
+                    <table class="result-table" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+                        <thead style="background: #f8f9fa;">
+                            <tr>
+                                <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Posição</th>
+                                <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Tipo de Veículo</th>
+                                <th style="padding: 12px; text-align: right; border: 1px solid #dee2e6;">Custo Total</th>
+                                <th style="padding: 12px; text-align: center; border: 1px solid #dee2e6;">Capacidade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            // Ordenar veículos por preço
+            const veiculosOrdenados = Object.entries(data.custos).sort(([,a], [,b]) => a - b);
+            
+            veiculosOrdenados.forEach(([tipo, valor], index) => {
+                const capacidades = {
+                    'FIORINO': { peso: '500kg', volume: '1.2m³', descricao: 'Utilitário pequeno' },
+                    'VAN': { peso: '1.5t', volume: '6m³', descricao: 'Van/Kombi' },
+                    '3/4': { peso: '3.5t', volume: '12m³', descricao: 'Caminhão 3/4' },
+                    'TOCO': { peso: '7t', volume: '40m³', descricao: 'Caminhão toco' },
+                    'TRUCK': { peso: '12t', volume: '70m³', descricao: 'Caminhão truck' },
+                    'CARRETA': { peso: '28t', volume: '110m³', descricao: 'Carreta/bitrem' }
+                };
+                
+                const capacidade = capacidades[tipo] || { peso: 'N/A', volume: 'N/A', descricao: 'Veículo' };
+                
+                let posicaoIcon, rowStyle;
+                if (index === 0) {
+                    posicaoIcon = "🥇";
+                    rowStyle = "background: #fff3cd; border-left: 4px solid #ffc107;";
+                } else if (index === 1) {
+                    posicaoIcon = "🥈";
+                    rowStyle = "background: #f8f9fa; border-left: 4px solid #6c757d;";
+                } else if (index === 2) {
+                    posicaoIcon = "🥉";
+                    rowStyle = "background: #fff3cd; border-left: 4px solid #fd7e14;";
+                } else {
+                    posicaoIcon = `${index + 1}º`;
+                    rowStyle = "background: #ffffff;";
+                }
+                
+                html += `
+                    <tr style="${rowStyle}">
+                        <td style="padding: 12px; border: 1px solid #dee2e6; font-weight: bold; font-size: 1.1em;">${posicaoIcon}</td>
+                        <td style="padding: 12px; border: 1px solid #dee2e6;">
+                            <strong>${tipo}</strong><br>
+                            <small style="color: #6c757d;">${capacidade.descricao}</small>
+                        </td>
+                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; color: #0a6ed1; font-size: 1.1em;">
+                            R$ ${valor.toFixed(2)}
+                        </td>
+                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
+                            <strong>Peso:</strong> ${capacidade.peso}<br>
+                            <strong>Volume:</strong> ${capacidade.volume}
+                        </td>
+                              </tr>
                 `;
             });
             
-            html += '</tbody></table>';
+            html += `
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 10px; font-size: 0.85rem; color: #666; text-align: center;">
+                        <strong>Legenda:</strong> 
+                        🥇 Melhor preço | 🥈 2º melhor | 🥉 3º melhor | 
+                        🚛 Frete Dedicado
+                    </div>
+                </div>
+            `;
         }
+        
+            html += `
+            </div>
+            
+            <style>
+            .analise-container {
+                background: #f8f9fa;
+                border: 1px solid #dee2e6;
+                border-radius: 8px;
+                padding: 15px;
+                margin: 15px 0;
+            }
+            
+            .analise-title {
+                font-size: 1.1rem;
+                font-weight: bold;
+                color: #495057;
+                margin-bottom: 10px;
+                padding-bottom: 8px;
+                border-bottom: 2px solid #e9ecef;
+            }
+            
+            .analise-item {
+                margin: 8px 0;
+                padding: 5px 0;
+                font-size: 0.95rem;
+            }
+            
+            .result-table {
+                font-size: 0.9rem;
+            }
+            
+            .result-table th, .result-table td {
+                border: 1px solid #dee2e6;
+                padding: 8px 12px;
+            }
+            
+            .btn-secondary {
+                background: #6c757d;
+                color: white;
+                border: none;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 0.8rem;
+                cursor: pointer;
+            }
+            
+            .btn-secondary:hover {
+                background: #5a6268;
+            }
+            </style>
+            
+            <script>
+            function toggleDetails(elementId) {
+                var element = document.getElementById(elementId);
+                if (element.style.display === "none" || element.style.display === "") {
+                    element.style.display = "block";
+                } else {
+                    element.style.display = "none";
+                }
+            }
+            </script>
+        `;
         
         container.innerHTML = html;
 
@@ -1412,8 +1590,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="analise-item">Consumo de combustível: ${data.analise.consumo_combustivel || 'N/A'}</div>
                     ${data.analise.pedagio_real ? `<div class="analise-item">Pedágio: R$ ${data.analise.pedagio_real.toFixed(2)}</div>` : ''}
                     ${data.analise.emissao_co2 ? `<div class="analise-item">Emissão CO2: ${data.analise.emissao_co2}</div>` : ''}
-                </div>
-            `;
+                        </div>
+                    `;
             analiseContainer.innerHTML = analiseHtml;
         }
 
@@ -1472,6 +1650,37 @@ document.addEventListener('DOMContentLoaded', function() {
                         weight: 4,
                         opacity: 0.8
                     }).addTo(window.mapaDedicado);
+                    
+                    // Adicionar pontos de pedágio se disponíveis
+                    if (data.analise?.pedagios_mapa && data.analise.pedagios_mapa.pontos_pedagio) {
+                        data.analise.pedagios_mapa.pontos_pedagio.forEach((pedagio, index) => {
+                            if (pedagio.coordenadas && pedagio.coordenadas.length >= 2) {
+                                const [lat, lng] = pedagio.coordenadas;
+                                
+                                // Criar ícone personalizado para pedágio
+                                const pedagioIcon = L.divIcon({
+                                    className: 'pedagio-marker',
+                                    html: '<div style="background: #dc3545; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">💰</div>',
+                                    iconSize: [24, 24],
+                                    iconAnchor: [12, 12]
+                                });
+                                
+                                L.marker([lat, lng], { icon: pedagioIcon })
+                                    .addTo(window.mapaDedicado)
+                                    .bindPopup(`
+                                        <div style="min-width: 200px;">
+                                            <b>🛣️ Ponto de Pedágio ${index + 1}</b><br>
+                                            <strong>Localização:</strong> ${pedagio.nome || 'N/A'}<br>
+                                            <strong>Valor Estimado:</strong> R$ ${pedagio.valor ? pedagio.valor.toFixed(2) : 'N/A'}<br>
+                                            <strong>Tipo:</strong> ${pedagio.tipo || 'Convencional'}<br>
+                                            <small style="color: #666;">Coordenadas: ${lat.toFixed(4)}, ${lng.toFixed(4)}</small>
+                                        </div>
+                                    `);
+                            }
+                        });
+                        
+                        console.log(`[DEDICADO] Adicionados ${data.analise.pedagios_mapa.pontos_pedagio.length} pontos de pedágio ao mapa`);
+                    }
                     
                     console.log('[DEDICADO] Mapa criado com sucesso');
                 } else {
