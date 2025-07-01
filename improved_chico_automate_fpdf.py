@@ -4902,13 +4902,41 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         # 1. BUSCAR AGENTES DIRETOS (PORTA-A-PORTA) - NOVA FUNCIONALIDADE
         log_debug(f"[AGENTES] 🚀 Buscando agentes diretos (porta-a-porta)...")
-        agentes_diretos = df_base_completa[
+        log_debug(f"[AGENTES] Origem normalizada: '{origem_normalizada}', Destino normalizado: '{destino_normalizado}'")
+        
+        # Debug: mostrar tipos disponíveis na base
+        tipos_disponiveis = df_base_completa['Tipo'].unique()
+        log_debug(f"[AGENTES] Tipos disponíveis na base: {tipos_disponiveis}")
+        
+        # Busca específica exata
+        agentes_diretos_exatos = df_base_completa[
             (df_base_completa['Tipo'] == 'Direto') &
             (df_base_completa['Origem_Normalizada'] == origem_normalizada) &
             (df_base_completa['Destino_Normalizado'] == destino_normalizado)
         ]
         
-        log_debug(f"[AGENTES] Agentes diretos encontrados: {len(agentes_diretos)}")
+        # Se não encontrar exatos, tentar busca por UF
+        if len(agentes_diretos_exatos) == 0:
+            log_debug(f"[AGENTES] ⚠️ Nenhum agente direto exato encontrado, tentando busca por UF...")
+            agentes_diretos_uf = df_base_completa[
+                (df_base_completa['Tipo'] == 'Direto') &
+                (df_base_completa['Origem'].str.contains(uf_origem, case=False, na=False)) &
+                (df_base_completa['Destino'].str.contains(uf_destino, case=False, na=False))
+            ]
+            agentes_diretos = agentes_diretos_uf
+            log_debug(f"[AGENTES] Agentes diretos por UF: {len(agentes_diretos)}")
+        else:
+            agentes_diretos = agentes_diretos_exatos
+            log_debug(f"[AGENTES] Agentes diretos exatos: {len(agentes_diretos)}")
+        
+        # Debug: mostrar origens e destinos dos diretos disponíveis
+        if len(agentes_diretos) == 0:
+            diretos_origem = df_base_completa[df_base_completa['Tipo'] == 'Direto']['Origem'].unique()
+            diretos_destino = df_base_completa[df_base_completa['Tipo'] == 'Direto']['Destino'].unique()
+            log_debug(f"[AGENTES] ❌ Nenhum direto encontrado. Origens disponíveis: {diretos_origem[:10]}")
+            log_debug(f"[AGENTES] ❌ Destinos disponíveis: {diretos_destino[:10]}")
+        
+        log_debug(f"[AGENTES] Total agentes diretos encontrados: {len(agentes_diretos)}")
         
         # Processar agentes diretos (sem transferência)
         for _, agente_direto in agentes_diretos.iterrows():
@@ -5071,7 +5099,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                         
                         # Criar rota completa
                         rota = {
-                            'tipo_rota': transferencia.get('tipo_rota', 'completa'),
+                            'tipo_rota': 'coleta_transferencia_entrega',  # SEMPRE será rota completa
                             'fornecedor_coleta': agente_col.get('Fornecedor', 'N/A'),
                             'fornecedor_transferencia': transferencia['fornecedor'],
                             'agente_entrega': {'fornecedor': agente_ent.get('Fornecedor', 'N/A')},
@@ -5527,14 +5555,29 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 print(f"[PRIORIZAÇÃO] ❌ OUTRAS ROTAS: {rota.get('resumo', 'N/A')} - R$ {total:,.2f}")
                 return (200000, total)
         
-        rotas_encontradas = sorted(rotas_encontradas, key=prioridade_rota)
+        # FILTRAR APENAS ROTAS COMPLETAS E DIRETAS (conforme solicitado)
+        rotas_filtradas = []
+        for rota in rotas_encontradas:
+            tipo_rota = rota.get('tipo_rota', '')
+            
+            if tipo_rota == 'coleta_transferencia_entrega':
+                print(f"[FILTRO] ✅ INCLUINDO rota completa: {rota.get('resumo', 'N/A')}")
+                rotas_filtradas.append(rota)
+            elif tipo_rota == 'direta':
+                print(f"[FILTRO] ✅ INCLUINDO rota direta: {rota.get('resumo', 'N/A')}")
+                rotas_filtradas.append(rota)
+            else:
+                print(f"[FILTRO] ❌ REMOVENDO rota parcial: {rota.get('resumo', 'N/A')} (tipo: {tipo_rota})")
         
-        print(f"[AGENTES] ✅ {len(rotas_encontradas)} rotas únicas com agentes calculadas (após deduplicação)")
+        rotas_filtradas = sorted(rotas_filtradas, key=prioridade_rota)
+        
+        print(f"[AGENTES] ✅ {len(rotas_filtradas)} rotas finais (apenas completas e diretas)")
+        print(f"[AGENTES] 📊 Rotas removidas: {len(rotas_encontradas) - len(rotas_filtradas)} (parciais)")
         
         return {
-            'rotas': rotas_encontradas,
-            'cotacoes_ranking': rotas_encontradas,  # Adicionar este campo para compatibilidade
-            'total_opcoes': len(rotas_encontradas),
+            'rotas': rotas_filtradas,
+            'cotacoes_ranking': rotas_filtradas,  # Adicionar este campo para compatibilidade
+            'total_opcoes': len(rotas_filtradas),
             'origem': f"{origem}/{uf_origem}",
             'destino': f"{destino}/{uf_destino}",
             'base_origem': base_origem,
