@@ -1,52 +1,19 @@
 services:
   - type: web
-    name: portoex-cotacao
+    name: portoex
     env: python
     plan: free
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -r requirements.txt
-    startCommand: |
-      python -c "
-      import os
-      import pandas as pd
-      print('Verificando ambiente...')
-      print(f'Diretório atual: {os.getcwd()}')
-      print(f'Arquivos disponíveis: {os.listdir()}')
-      df = pd.read_excel('Base_Unificada.xlsx')
-      print(f'Base carregada com sucesso! Shape: {df.shape}')
-      "
-      gunicorn app:app
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --config gunicorn.conf.py improved_chico_automate_fpdf:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: SECRET_KEY
         generateValue: true
       - key: DEBUG
-        value: false
+        value: False
       - key: FLASK_ENV
         value: production
       - key: WEB_CONCURRENCY
-        value: 4
-      - key: GUNICORN_CMD_ARGS
-        value: "--timeout 120 --workers 4 --worker-class gthread --threads 4"
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: portoex-cache
-          property: connectionString
-      - key: NOMINATIM_USER_AGENT
-        value: "PortoEx/1.0"
-      - key: DISABLE_GEOCODING
-        value: "true"
-      - key: USE_COORDS_CACHE
-        value: "true"
-      - key: BASE_UNIFICADA_PATH
-        value: "/opt/render/project/src/Base_Unificada.xlsx"
-    healthCheckPath: /
-    autoDeploy: true
-
-  - type: redis
-    name: portoex-cache
-    ipAllowList: []
-    plan: free 
+        value: 2
+    healthCheckPath: / 

@@ -8773,7 +8773,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 print(f"[PRIORIZAÇÃO] ❌ OUTRAS ROTAS: {rota.get('resumo', 'N/A')} - R$ {total:,.2f}")
                 return (200000, total)
         
-        # FILTRAR APENAS ROTAS COMPLETAS E DIRETAS (conforme solicitado)
+        # INCLUIR TODAS AS ROTAS (completas, diretas E parciais)
         rotas_filtradas = []
         for rota in rotas_encontradas:
             tipo_rota = rota.get('tipo_rota', '')
@@ -8784,13 +8784,17 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             elif tipo_rota == 'direta':
                 print(f"[FILTRO] ✅ INCLUINDO rota direta: {rota.get('resumo', 'N/A')}")
                 rotas_filtradas.append(rota)
+            elif tipo_rota in ['transferencia_entrega', 'coleta_transferencia']:
+                print(f"[FILTRO] ✅ INCLUINDO rota parcial: {rota.get('resumo', 'N/A')} (tipo: {tipo_rota})")
+                rotas_filtradas.append(rota)
             else:
-                print(f"[FILTRO] ❌ REMOVENDO rota parcial: {rota.get('resumo', 'N/A')} (tipo: {tipo_rota})")
+                print(f"[FILTRO] ⚠️ INCLUINDO outras rotas: {rota.get('resumo', 'N/A')} (tipo: {tipo_rota})")
+                rotas_filtradas.append(rota)
         
         rotas_filtradas = sorted(rotas_filtradas, key=prioridade_rota)
         
-        print(f"[AGENTES] ✅ {len(rotas_filtradas)} rotas finais (apenas completas e diretas)")
-        print(f"[AGENTES] 📊 Rotas removidas: {len(rotas_encontradas) - len(rotas_filtradas)} (parciais)")
+        print(f"[AGENTES] ✅ {len(rotas_filtradas)} rotas finais (completas, diretas E parciais)")
+        print(f"[AGENTES] 📊 Total de rotas retornadas: {len(rotas_filtradas)}")
         
         return {
             'rotas': rotas_filtradas,

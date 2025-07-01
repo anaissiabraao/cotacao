@@ -657,20 +657,21 @@ document.addEventListener('DOMContentLoaded', function() {
                                     ${index === 0 ? '⭐ Melhor Opção' : `Opção ${index + 1}`}
                             </div>
                                 <div class="opcao-rota">
-                                    <div class="rota-etapa">
-                                        <span class="etapa-icon">📦</span>
-                                        <span class="etapa">Coleta:</span> ${agenteColeta.fornecedor || fornecedorColeta || 'Cliente leva até base'}
-                                </div>
-                                    <div class="rota-etapa">
-                                        <span class="etapa-icon">🚛</span>
-                                        <span class="etapa">Transfer:</span> ${fornecedorTransf || 'N/A'}
-                                        <span class="etapa-valor">R$ ${custoTransf.toFixed(2)}</span>
+                                                                    <div class="rota-etapa">
+                                    <span class="etapa-icon">📦</span>
+                                    <span class="etapa">Coleta:</span> ${agenteColeta.fornecedor || 'Cliente leva até base'}
+                                    <span class="etapa-valor">R$ ${(agenteColeta.custo || 0).toFixed(2)}</span>
                             </div>
-                                    <div class="rota-etapa">
-                                        <span class="etapa-icon">🏠</span>
-                                        <span class="etapa">Entrega:</span> ${fornecedorEntrega || 'N/A'}
-                                        <span class="etapa-valor">R$ ${custoEntrega.toFixed(2)}</span>
-                                    </div>
+                                <div class="rota-etapa">
+                                    <span class="etapa-icon">🚛</span>
+                                    <span class="etapa">Transfer:</span> ${fornecedorTransf || 'N/A'}
+                                    <span class="etapa-valor">R$ ${custoTransf.toFixed(2)}</span>
+                        </div>
+                                <div class="rota-etapa">
+                                    <span class="etapa-icon">🏠</span>
+                                    <span class="etapa">Entrega:</span> ${fornecedorEntrega || 'N/A'}
+                                    <span class="etapa-valor">R$ ${custoEntrega.toFixed(2)}</span>
+                                </div>
                                 </div>
                                 <div class="opcao-footer">
                                     <div class="opcao-total">
@@ -1338,10 +1339,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Usar o HTML formatado do backend se disponível
         if (data.html) {
             container.innerHTML = data.html;
-            
-            // Adicionar botão de PDF após carregar o HTML
-            adicionarBotaoPDF(container, 'fracionado', data);
-            
             console.log('[FRACIONADO] HTML formatado aplicado com sucesso');
             return;
         }
@@ -1361,9 +1358,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         <td>${rota.resumo || 'N/A'}</td>
                         <td><strong>R$ ${(rota.total || 0).toFixed(2)}</strong></td>
                         <td>${rota.prazo_total || 'N/A'} dias</td>
-                    </tr>
-                `;
-            });
+                              </tr>
+                        `;
+                    });
             
             html += '</tbody></table>';
         } else {
@@ -1371,9 +1368,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         container.innerHTML = html;
-        
-        // Adicionar botão de PDF para o fallback também
-        adicionarBotaoPDF(container, 'fracionado', data);
     }
 
     function exibirResultadoDedicado(data) {
@@ -1506,7 +1500,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <strong>Peso:</strong> ${capacidade.peso}<br>
                             <strong>Volume:</strong> ${capacidade.volume}
                         </td>
-                    </tr>
+                              </tr>
                 `;
             });
             
@@ -1522,7 +1516,7 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         }
         
-        html += `
+            html += `
             </div>
             
             <style>
@@ -1586,9 +1580,6 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         
         container.innerHTML = html;
-        
-        // Adicionar botão de PDF
-        adicionarBotaoPDF(container, 'dedicado', data);
 
         // Exibir análise da rota se disponível
         if (data.analise && analiseContainer) {
@@ -2704,189 +2695,4 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     };
-
-    // Função para adicionar botão de PDF
-    function adicionarBotaoPDF(container, tipo, data) {
-        // Verificar se já existe um botão PDF para evitar duplicatas
-        if (container.querySelector('.btn-pdf')) {
-            return;
-        }
-        
-        // Criar div para os botões de ação
-        const botoesDiv = document.createElement('div');
-        botoesDiv.className = 'acoes-resultado';
-        botoesDiv.style.cssText = `
-            margin-top: 20px;
-            padding: 15px;
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            text-align: center;
-        `;
-        
-        // Criar botão de PDF
-        const botaoPDF = document.createElement('button');
-        botaoPDF.className = 'btn-pdf';
-        botaoPDF.innerHTML = '<i class="fa-solid fa-file-pdf"></i> Gerar PDF';
-        botaoPDF.style.cssText = `
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 6px;
-            font-size: 1rem;
-            cursor: pointer;
-            margin: 0 10px;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        `;
-        
-        // Hover effect
-        botaoPDF.addEventListener('mouseenter', function() {
-            this.style.background = '#c82333';
-            this.style.transform = 'translateY(-1px)';
-            this.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
-        });
-        
-        botaoPDF.addEventListener('mouseleave', function() {
-            this.style.background = '#dc3545';
-            this.style.transform = 'translateY(0)';
-            this.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-        });
-        
-        // Evento de clique
-        botaoPDF.addEventListener('click', function() {
-            gerarPDFResultado(tipo, data);
-        });
-        
-        // Adicionar título e botão
-        botoesDiv.innerHTML = '<h4 style="margin-bottom: 10px; color: #495057;"><i class="fa-solid fa-download"></i> Exportar Resultado</h4>';
-        botoesDiv.appendChild(botaoPDF);
-        
-        // Adicionar ao container
-        container.appendChild(botoesDiv);
-    }
-
-    // Função para gerar PDF
-    function gerarPDFResultado(tipo, data) {
-        // Mostrar loading
-        const botao = event.target;
-        const textoOriginal = botao.innerHTML;
-        botao.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Gerando PDF...';
-        botao.disabled = true;
-        
-        try {
-            // Determinar endpoint baseado no tipo
-            let endpoint = '';
-            let payload = {};
-            
-            if (tipo === 'fracionado') {
-                endpoint = '/gerar_pdf_fracionado';
-                payload = {
-                    dados_calculo: data,
-                    id_historico: data.id_historico || 'Fra001'
-                };
-            } else if (tipo === 'dedicado') {
-                endpoint = '/gerar_pdf_dedicado';
-                payload = {
-                    dados_calculo: data,
-                    id_historico: data.analise?.id_historico || 'Ded001'
-                };
-            }
-            
-            console.log(`[PDF] Gerando PDF para ${tipo}:`, payload);
-            
-            // Fazer requisição para gerar PDF
-            fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload)
-            })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`Erro HTTP: ${response.status}`);
-                }
-                return response.blob();
-            })
-            .then(blob => {
-                // Criar URL para download
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `${tipo}_${payload.id_historico}_${new Date().toISOString().slice(0,10)}.pdf`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                console.log(`[PDF] Download iniciado para ${tipo}`);
-                
-                // Mostrar feedback de sucesso
-                mostrarMensagemSucesso('PDF gerado com sucesso!');
-            })
-            .catch(error => {
-                console.error(`[PDF] Erro ao gerar PDF:`, error);
-                mostrarMensagemErro(`Erro ao gerar PDF: ${error.message}`);
-            })
-            .finally(() => {
-                // Restaurar botão
-                botao.innerHTML = textoOriginal;
-                botao.disabled = false;
-            });
-            
-        } catch (error) {
-            console.error(`[PDF] Erro geral:`, error);
-            mostrarMensagemErro(`Erro ao gerar PDF: ${error.message}`);
-            
-            // Restaurar botão
-            botao.innerHTML = textoOriginal;
-            botao.disabled = false;
-        }
-    }
-
-    // Funções auxiliares para mensagens
-    function mostrarMensagemSucesso(mensagem) {
-        mostrarMensagem(mensagem, 'success');
-    }
-
-    function mostrarMensagemErro(mensagem) {
-        mostrarMensagem(mensagem, 'error');
-    }
-
-    function mostrarMensagem(mensagem, tipo) {
-        const alertDiv = document.createElement('div');
-        alertDiv.className = `alert alert-${tipo === 'success' ? 'success' : 'danger'}`;
-        alertDiv.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 10000;
-            max-width: 400px;
-            padding: 15px;
-            border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            background: ${tipo === 'success' ? '#d4edda' : '#f8d7da'};
-            border: 1px solid ${tipo === 'success' ? '#c3e6cb' : '#f5c6cb'};
-            color: ${tipo === 'success' ? '#155724' : '#721c24'};
-        `;
-        
-        alertDiv.innerHTML = `
-            <strong>${tipo === 'success' ? 'Sucesso!' : 'Erro!'}</strong> ${mensagem}
-            <button type="button" class="close" style="float: right; background: none; border: none; font-size: 1.5rem; line-height: 1; margin-left: 10px;" onclick="this.parentElement.remove()">
-                &times;
-            </button>
-        `;
-        
-        document.body.appendChild(alertDiv);
-        
-        // Remover automaticamente após 5 segundos
-        setTimeout(() => {
-            if (alertDiv.parentElement) {
-                alertDiv.remove();
-            }
-        }, 5000);
-    }
 });
