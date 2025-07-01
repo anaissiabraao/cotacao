@@ -2921,8 +2921,6 @@ DEDICADO_KM_ACIMA_600 = {
     "CARRETA": 8.0
 }
 
-# Função removida - duplicada (versão correta mantida na linha 653)
-
 def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="Dedicado", municipio_origem=None, uf_origem=None, municipio_destino=None, uf_destino=None):
     global CONTADOR_DEDICADO, CONTADOR_FRACIONADO # Adicionado CONTADOR_FRACIONADO
     
@@ -5513,17 +5511,21 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             
             # PRIORIDADE ABSOLUTA para rotas completas (coleta + transferência + entrega)
             if tipo_rota == 'coleta_transferencia_entrega':
-                # Prioridade 0 = máxima prioridade, ordena por menor custo entre elas
-                log_debug(f"[PRIORIZAÇÃO] Rota completa encontrada: {rota.get('resumo', 'N/A')} - Prioridade 0")
-                return (0, total)  
+                # Prioridade negativa muito baixa = máxima prioridade ABSOLUTA
+                print(f"[PRIORIZAÇÃO] ✅ ROTA COMPLETA: {rota.get('resumo', 'N/A')} - R$ {total:,.2f}")
+                return (-1000000, total)  # Prioridade MÁXIMA garantida
+            elif tipo_rota == 'direta':
+                # Agentes diretos também têm alta prioridade, mas menor que rotas completas
+                print(f"[PRIORIZAÇÃO] 🚀 ROTA DIRETA: {rota.get('resumo', 'N/A')} - R$ {total:,.2f}")
+                return (-500000, total)
             elif tipo_rota in ['transferencia_entrega', 'coleta_transferencia']:
-                # Prioridade 1000 = muito baixa, mesmo com custo menor não supera rotas completas
-                log_debug(f"[PRIORIZAÇÃO] Rota parcial: {rota.get('resumo', 'N/A')} - Prioridade 1000")
-                return (1000, total)  
+                # Rotas parciais têm prioridade muito baixa
+                print(f"[PRIORIZAÇÃO] ⚠️ ROTA PARCIAL: {rota.get('resumo', 'N/A')} - R$ {total:,.2f}")
+                return (100000, total)  
             else:
-                # Prioridade 2000 = ainda mais baixa para outras opções
-                log_debug(f"[PRIORIZAÇÃO] Outras rotas: {rota.get('resumo', 'N/A')} - Prioridade 2000")
-                return (2000, total)
+                # Outras rotas têm prioridade ainda mais baixa
+                print(f"[PRIORIZAÇÃO] ❌ OUTRAS ROTAS: {rota.get('resumo', 'N/A')} - R$ {total:,.2f}")
+                return (200000, total)
         
         rotas_encontradas = sorted(rotas_encontradas, key=prioridade_rota)
         
@@ -6253,91 +6255,6 @@ def formatar_resultado_fracionado(resultado):
         <!-- Alertas de Peso Máximo e Valor Alto -->
         
     """
-    
-    # Verificar se há agentes com peso excedido na melhor opção
-    alertas_peso = []
-    if melhor_opcao:
-        # Verificar agente de coleta
-        agente_coleta = melhor_opcao.get('agente_coleta', {})
-        if agente_coleta and agente_coleta.get('validacao_peso', {}).get('status') == 'excedido':
-            alertas_peso.append({
-                'tipo': 'coleta',
-                'agente': agente_coleta.get('fornecedor', 'N/A'),
-                'validacao': agente_coleta.get('validacao_peso', {})
-            })
-        
-        # Verificar agente de entrega
-        agente_entrega = melhor_opcao.get('agente_entrega', {})
-        if agente_entrega and agente_entrega.get('validacao_peso', {}).get('status') == 'excedido':
-            alertas_peso.append({
-                'tipo': 'entrega',
-                'agente': agente_entrega.get('fornecedor', 'N/A'),
-                'validacao': agente_entrega.get('validacao_peso', {})
-            })
-            
-        # Verificar agente direto
-        agente_direto = melhor_opcao.get('agente_direto', {})
-        if agente_direto and agente_direto.get('validacao_peso', {}).get('status') == 'excedido':
-            alertas_peso.append({
-                'tipo': 'direto',
-                'agente': agente_direto.get('fornecedor', 'N/A'),
-                'validacao': agente_direto.get('validacao_peso', {})
-            })
-    
-    # Adicionar alertas de peso se houver
-    if alertas_peso:
-        html += """
-        <div class="alerta-peso-excedido" style="
-            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin: 20px 0;
-            border-left: 6px solid #c0392b;
-            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
-            animation: pulseAlert 2s infinite;
-            position: relative;
-            overflow: hidden;
-        ">
-            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
-                <span style="font-size: 2.5em; animation: shake 1s infinite;">⚠️</span>
-                <div>
-                    <h3 style="margin: 0; font-size: 1.4em; font-weight: bold;">ATENÇÃO: PESO MÁXIMO EXCEDIDO!</h3>
-                    <p style="margin: 5px 0 0 0; font-size: 1.1em;">A melhor rota possui agentes com peso excedido. Validação obrigatória!</p>
-                </div>
-            </div>
-        """
-        
-        for alerta in alertas_peso:
-            validacao = alerta['validacao']
-            html += f"""
-            <div style="background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 2px solid rgba(255,255,255,0.3);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <strong style="font-size: 1.2em;">🚛 Agente de {alerta['tipo'].title()}: {alerta['agente']}</strong>
-                    <span style="background: #c0392b; padding: 5px 12px; border-radius: 20px; font-size: 0.9em; font-weight: bold;">EXCEDIDO</span>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; font-size: 1.1em;">
-                    <div><strong>Peso Usado:</strong><br>{validacao.get('peso_usado', 0):.0f} kg</div>
-                    <div><strong>Peso Máximo:</strong><br>{validacao.get('peso_maximo', 0):.0f} kg</div>
-                    <div><strong>Excesso:</strong><br>+{validacao.get('excesso', 0):.0f} kg</div>
-                </div>
-                <div style="margin-top: 12px; padding: 12px; background: rgba(192, 57, 43, 0.8); border-radius: 6px; border-left: 4px solid #fff;">
-                    <strong style="font-size: 1.1em;">🎯 AÇÃO OBRIGATÓRIA:</strong> Solicite cotação específica para este peso ao agente {alerta['agente']}
-                </div>
-            </div>
-            """
-        
-        html += """
-        </div>
-        
-        <style>
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
-        }
-        </style>
-        """
     
     # Verificar se há agentes com peso excedido na melhor opção
     alertas_peso = []
