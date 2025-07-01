@@ -5511,13 +5511,19 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             tipo_rota = rota.get('tipo_rota', '')
             total = rota.get('total', float('inf'))
             
-            # Dar SUPER PRIORIDADE para rotas completas (coleta + transferência + entrega)
+            # PRIORIDADE ABSOLUTA para rotas completas (coleta + transferência + entrega)
             if tipo_rota == 'coleta_transferencia_entrega':
-                return (-100, total)  # PRIORIDADE MÁXIMA: usar peso negativo muito baixo
+                # Prioridade 0 = máxima prioridade, ordena por menor custo entre elas
+                log_debug(f"[PRIORIZAÇÃO] Rota completa encontrada: {rota.get('resumo', 'N/A')} - Prioridade 0")
+                return (0, total)  
             elif tipo_rota in ['transferencia_entrega', 'coleta_transferencia']:
-                return (10, total)  # Prioridade média
+                # Prioridade 1000 = muito baixa, mesmo com custo menor não supera rotas completas
+                log_debug(f"[PRIORIZAÇÃO] Rota parcial: {rota.get('resumo', 'N/A')} - Prioridade 1000")
+                return (1000, total)  
             else:
-                return (20, total)  # Menor prioridade
+                # Prioridade 2000 = ainda mais baixa para outras opções
+                log_debug(f"[PRIORIZAÇÃO] Outras rotas: {rota.get('resumo', 'N/A')} - Prioridade 2000")
+                return (2000, total)
         
         rotas_encontradas = sorted(rotas_encontradas, key=prioridade_rota)
         
