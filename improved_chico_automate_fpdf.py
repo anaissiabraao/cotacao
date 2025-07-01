@@ -515,19 +515,18 @@ def geocode(municipio, uf):
             headers = {"User-Agent": "PortoEx/1.0"}
             response = requests.get(url, params=params, headers=headers, timeout=10)
             data = response.json()
-                
+            
             if not data:
                 params = {"q": f"{cidade_norm}, Brasil", "format": "json", "limit": 1}
                 response = requests.get(url, params=params, headers=headers, timeout=10)
                 data = response.json()
-                    
+            
             if data:
                 lat = float(data[0]["lat"])
                 lon = float(data[0]["lon"])
                 coords = [lat, lon]
                 print(f"[geocode] ✅ Encontrado via API: {coords}")
                 return coords
-                    
         except Exception as api_error:
             print(f"[geocode] Erro na API: {str(api_error)}")
         
@@ -2750,25 +2749,24 @@ def geocode(municipio, uf):
             headers = {"User-Agent": "PortoEx/1.0"}
             response = requests.get(url, params=params, headers=headers, timeout=10)
             data = response.json()
-                
+            
             if not data:
                 params = {"q": f"{cidade_norm}, Brasil", "format": "json", "limit": 1}
                 response = requests.get(url, params=params, headers=headers, timeout=10)
                 data = response.json()
-                    
+            
             if data:
                 lat = float(data[0]["lat"])
                 lon = float(data[0]["lon"])
                 coords = [lat, lon]
                 print(f"[geocode] ✅ Encontrado via API: {coords}")
                 return coords
-                    
         except Exception as api_error:
             print(f"[geocode] Erro na API: {str(api_error)}")
         
         # 4. Fallback: coordenadas baseadas no estado
         coords_estados = {
-            'AC': [-8.77, -70.55], 'AL': [-9.71, -35.73], 'AP': [1.41, -51.77], 'AM': [-3.07, -61.66],
+            'AC': [-8.77, -70.55], 'AL': [-9.71, -38.51], 'AP': [1.41, -51.77], 'AM': [-3.07, -61.66],
             'BA': [-12.96, -38.51], 'CE': [-3.72, -38.54], 'DF': [-15.78, -47.93], 'ES': [-19.19, -40.34],
             'GO': [-16.64, -49.31], 'MA': [-2.55, -44.30], 'MT': [-12.64, -55.42], 'MS': [-20.51, -54.54],
             'MG': [-18.10, -44.38], 'PA': [-5.53, -52.29], 'PB': [-7.06, -35.55], 'PR': [-24.89, -51.55],
@@ -2919,7 +2917,7 @@ DEDICADO_KM_ACIMA_600 = {
     "TOCO": 5.0,
     "TRUCK": 5.5,
     "CARRETA": 8.0
-}
+        }
 
 def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="Dedicado", municipio_origem=None, uf_origem=None, municipio_destino=None, uf_destino=None):
     global CONTADOR_DEDICADO, CONTADOR_FRACIONADO # Adicionado CONTADOR_FRACIONADO

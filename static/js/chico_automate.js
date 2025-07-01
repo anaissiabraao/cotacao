@@ -659,7 +659,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <div class="opcao-rota">
                                     <div class="rota-etapa">
                                         <span class="etapa-icon">📦</span>
-                                        <span class="etapa">Coleta:</span> ${agenteColeta.origem || rota.base_origem || 'Cliente leva até base'}
+                                        <span class="etapa">Coleta:</span> ${agenteColeta.fornecedor || fornecedorColeta || 'Cliente leva até base'}
                                 </div>
                                     <div class="rota-etapa">
                                         <span class="etapa-icon">🚛</span>
