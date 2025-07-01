@@ -5,6 +5,38 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-07-01
+
+### Adicionado
+- Script `fix_and_run.py` para correção automática e execução da aplicação
+- Script `test_app.py` para testes em desenvolvimento
+- Fallback robusto para frete fracionado quando não há rotas com agentes
+- Tratamento completo de erros HTTP 520
+- Resposta estruturada sempre retornada, mesmo sem rotas disponíveis
+- Orientações informativas para usuário quando sistema não encontra rotas
+
+### Corrigido
+- **CRÍTICO**: Erro HTTP 520 no cálculo de frete fracionado eliminado
+- Problemas de indentação na função `geocode`
+- Exibição incorreta do nome da rota ao invés do agente na seção "All In - Coleta"
+- Geocodificação mais robusta com múltiplos fallbacks
+- Coordenadas sempre retornadas (nunca None)
+
+### Melhorado
+- Sistema de fallback para quando não há agentes disponíveis
+- Interface mais informativa com sugestões claras ao usuário
+- Tratamento de exceções mais robusto em todo o sistema
+- Logs mais detalhados para debugging
+- Experiência do usuário mais consistente
+- Performance na inicialização da aplicação
+
+### Técnico
+- Fallbacks em cascata: Cache → API → Estados → Brasília
+- Sanitização de dados JSON mais robusta
+- Validação de entrada melhorada
+- Estrutura de resposta padronizada
+- Compatibilidade com mobile mantida
+
 ## [1.1.0] - 2025-01-20
 
 ### Adicionado
