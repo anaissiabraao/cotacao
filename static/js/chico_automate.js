@@ -1,4 +1,4 @@
-// Funções para manipulação dos formulários e botões
+﻿// Funções para manipulação dos formulários e botões
 // Padronização completa de todos os fluxos: dedicado, aéreo, fracionado, exportação
 // Versão corrigida com melhorias de funcionalidade e depuração
 
@@ -598,10 +598,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Verificar se há dados válidos
         if (data && typeof data === 'object') {
-            // Pegar as rotas do ranking - pode vir em diferentes estruturas
-            const cotacoes = data.cotacoes_ranking || data.ranking_completo || data.rotas || [];
+            // 🔧 CORREÇÃO: Acessar a estrutura correta dos dados
+            const rankingFracionado = data.ranking_fracionado || {};
+            const cotacoes = rankingFracionado.ranking_opcoes || data.cotacoes_ranking || data.ranking_completo || data.rotas || [];
             const rotasAgentes = data.rotas_agentes || {};
             
+            console.log('[ALL IN FRAC] Ranking fracionado:', rankingFracionado);
             console.log('[ALL IN FRAC] Cotações encontradas:', cotacoes.length);
             console.log('[ALL IN FRAC] Estrutura rotas_agentes:', rotasAgentes);
             
@@ -610,6 +612,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const rotasComAgentes = cotacoes.filter(r => {
                     // Verificar se é rota com transferência + entrega
                     return r.tipo_rota === 'transferencia_entrega' || 
+                           r.tipo_rota === 'coleta_transferencia_entrega' ||
                            (r.transferencia && r.agente_entrega) ||
                            (r.resumo && r.resumo.includes('+'));
                 }).slice(0, 3);
@@ -617,6 +620,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const rotasDiretas = cotacoes.filter(r => {
                     // Verificar se é rota direta
                     return r.tipo_rota === 'direta' || 
+                           r.tipo_rota === 'agente_direto' ||
                            r.agente_direto ||
                            (r.resumo && !r.resumo.includes('+'));
                 });
@@ -636,11 +640,16 @@ document.addEventListener('DOMContentLoaded', function() {
                         const agenteEntrega = rota.agente_entrega || {};
                         const agenteColeta = rota.agente_coleta || {};
                         
+                        // 🔧 CORREÇÃO: Acessar dados do custo total da opção
+                        const custoTotal = rota.custo_total || rota.total || 0;
+                        const prazoTotal = rota.prazo_estimado || rota.prazo_total || 'N/A';
+                        
                         // Extrair informações do resumo se necessário
                         let fornecedorTransf = transferencia.fornecedor || '';
                         let fornecedorEntrega = agenteEntrega.fornecedor || '';
-                        let custoTransf = transferencia.custo || 0;
-                        let custoEntrega = agenteEntrega.custo || 0;
+                        let custoTransf = transferencia.total || transferencia.custo || 0;
+                        let custoEntrega = agenteEntrega.total || agenteEntrega.custo || 0;
+                        let custoColeta = agenteColeta.total || agenteColeta.custo || 0;
                         
                         // Se não tiver estrutura detalhada, tentar extrair do resumo
                         if (!fornecedorTransf && rota.resumo) {
@@ -660,7 +669,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                                                     <div class="rota-etapa">
                                     <span class="etapa-icon">📦</span>
                                     <span class="etapa">Coleta:</span> ${agenteColeta.fornecedor || 'Cliente leva até base'}
-                                    <span class="etapa-valor">R$ ${(agenteColeta.custo || 0).toFixed(2)}</span>
+                                        <span class="etapa-valor">R$ ${custoColeta.toFixed(2)}</span>
                             </div>
                                 <div class="rota-etapa">
                                     <span class="etapa-icon">🚛</span>
@@ -675,10 +684,10 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                                 <div class="opcao-footer">
                                     <div class="opcao-total">
-                                        <strong>Total: R$ ${(rota.total || 0).toFixed(2)}</strong>
+                                        <strong>Total: R$ ${custoTotal.toFixed(2)}</strong>
                                     </div>
                                     <div class="opcao-prazo">
-                                        ⏱️ ${rota.prazo_total || 'N/A'} dias úteis
+                                        ⏱️ ${prazoTotal} dias úteis
                                     </div>
                                 </div>
                             </div>
@@ -703,6 +712,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         
                         // Extrair nome do fornecedor
                         let fornecedor = agente.fornecedor || rota.fornecedor_direto || rota.resumo || 'N/A';
+                        const custoTotal = rota.custo_total || rota.total || 0;
+                        const prazoTotal = rota.prazo_estimado || rota.prazo_total || agente.prazo || 'N/A';
                         
                         html += `
                             <div class="agente-direto-card ${alerta ? 'com-alerta' : ''}">
@@ -718,11 +729,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <span>Destino:</span> ${agente.destino || rota.base_destino || 'N/A'}
                                     </div>
                                     <div class="info-linha">
-                                        <span>Prazo:</span> ${rota.prazo_total || agente.prazo || 'N/A'} dias
+                                        <span>Prazo:</span> ${prazoTotal} dias
                                     </div>
                                 </div>
                                 <div class="direto-valor">
-                                    <strong>R$ ${(rota.total || 0).toFixed(2)}</strong>
+                                    <strong>R$ ${custoTotal.toFixed(2)}</strong>
                                 </div>
                                 ${alerta ? '<div class="alerta-peso">Necessário validar com o agente</div>' : ''}
                             </div>
@@ -739,11 +750,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // Se não houver rotas com agentes mas houver outras
                 if (rotasComAgentes.length === 0 && cotacoes.length > 0) {
-                    // Mostrar todas as rotas disponíveis em formato simplificado
                     html += '<div class="opcoes-fracionado">';
                     
                     cotacoes.slice(0, 3).forEach((rota, index) => {
                         const destaque = index === 0 ? 'destaque' : '';
+                        const custoTotal = rota.custo_total || rota.total || 0;
+                        const prazoTotal = rota.prazo_estimado || rota.prazo_total || 'N/A';
                         
                         html += `
                             <div class="opcao-fracionado ${destaque}">
@@ -752,21 +764,21 @@ document.addEventListener('DOMContentLoaded', function() {
                                 </div>
                                 <div class="opcao-info">
                                     <div class="info-linha">
-                                        <span>Rota:</span> ${rota.resumo || 'N/A'}
+                                        <span>Rota:</span> ${rota.resumo || rota.tipo_servico || 'N/A'}
                                     </div>
                                     <div class="info-linha">
-                                        <span>Origem:</span> ${rota.base_origem || data.origem || 'N/A'}
+                                        <span>Origem:</span> ${rota.base_origem || data.origem || rankingFracionado.origem || 'N/A'}
                                     </div>
                                     <div class="info-linha">
-                                        <span>Destino:</span> ${rota.base_destino || data.destino || 'N/A'}
+                                        <span>Destino:</span> ${rota.base_destino || data.destino || rankingFracionado.destino || 'N/A'}
                                     </div>
                                     <div class="info-linha">
-                                        <span>Prazo:</span> ${rota.prazo_total || 'N/A'} dias
+                                        <span>Prazo:</span> ${prazoTotal} dias
                                     </div>
                                 </div>
                                 <div class="opcao-footer">
                                     <div class="opcao-total">
-                                        <strong>Total: R$ ${(rota.total || 0).toFixed(2)}</strong>
+                                        <strong>Total: R$ ${custoTotal.toFixed(2)}</strong>
                                     </div>
                                 </div>
                             </div>
@@ -833,7 +845,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     border: 1px solid #dee2e6;
                     border-radius: 8px;
                     padding: 15px;
-                    background: #f8f9fa;
+                    background: #fff;
                     transition: all 0.3s ease;
                 }
                 
@@ -980,6 +992,29 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 .opcao-info {
                     margin: 10px 0;
+                }
+                
+                .alert {
+                    padding: 15px;
+                    margin-bottom: 20px;
+                    border: 1px solid transparent;
+                    border-radius: 4px;
+                }
+                
+                .alert-warning {
+                    color: #856404;
+                    background-color: #fff3cd;
+                    border-color: #ffeaa7;
+                }
+                
+                .alert-info {
+                    color: #0c5460;
+                    background-color: #d1ecf1;
+                    border-color: #bee5eb;
+                }
+                
+                .text-muted {
+                    color: #6c757d !important;
                 }
             `;
             document.head.appendChild(style);
@@ -1336,145 +1371,99 @@ document.addEventListener('DOMContentLoaded', function() {
 
         console.log('[FRACIONADO] Dados recebidos:', data);
         
-        // Usar o HTML formatado do backend se disponível
-        if (data.html) {
-            container.innerHTML = data.html;
-            console.log('[FRACIONADO] HTML formatado aplicado com sucesso');
+        // 🆕 VERIFICAR SE HÁ RANKING FRACIONADO (NOVO FORMATO)
+        if (data.ranking_fracionado) {
+            console.log('[FRACIONADO] Usando novo formato de ranking');
+            exibirRankingFracionado(data.ranking_fracionado, container);
             return;
         }
 
-        // Fallback para estrutura manual se não houver HTML formatado
-        let html = '<h3>Resultados do Frete Fracionado</h3>';
-        
-        if (data.cotacoes_ranking && data.cotacoes_ranking.length > 0) {
-            html += '<h4>Rotas com Agentes Encontradas</h4>';
-            html += '<table class="results"><thead><tr><th>Posição</th><th>Rota</th><th>Custo Total</th><th>Prazo</th></tr></thead><tbody>';
-            
-            data.cotacoes_ranking.slice(0, 10).forEach((rota, index) => {
-                const posicao = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}º`;
-                html += `
-                    <tr>
-                        <td>${posicao}</td>
-                        <td>${rota.resumo || 'N/A'}</td>
-                        <td><strong>R$ ${(rota.total || 0).toFixed(2)}</strong></td>
-                        <td>${rota.prazo_total || 'N/A'} dias</td>
-                              </tr>
-                        `;
-                    });
-            
-            html += '</tbody></table>';
-        } else {
-            html += '<div class="error">Nenhuma rota com agentes encontrada para esta origem/destino.</div>';
-        }
-        
-        container.innerHTML = html;
+        // Fallback para formato antigo (caso necessário)
+        console.log('[FRACIONADO] Usando formato legacy');
+        exibirFormatoLegacyFracionado(data, container);
     }
 
-    function exibirResultadoDedicado(data) {
-        const container = document.getElementById('resultados-dedicado');
-        const analiseContainer = document.getElementById('analise-dedicado');
-        const mapaSection = document.getElementById('mapa-section-dedicado');
-        const mapContainer = document.getElementById('map-dedicado');
-        
-        if (!container) {
-            console.error('[DEDICADO] Container resultados-dedicado não encontrado');
-            return;
-        }
-
-        console.log('[DEDICADO] Dados recebidos:', data);
-
-        // Criar layout similar ao All In com mais detalhes
+    // 🆕 NOVA FUNÇÃO PARA EXIBIR RANKING NO FORMATO DEDICADO
+    function exibirRankingFracionado(ranking, container) {
         let html = `
             <div class="success">
-                <h3><i class="fa-solid fa-truck"></i> Cotação de Frete Dedicado Calculada - ${data.analise?.id_historico || 'N/A'}</h3>
+                <h3><i class="fa-solid fa-boxes"></i> Cotação de Frete Fracionado Calculada - ${ranking.id_calculo}</h3>
                 
                 <div class="analise-container">
-                    <div class="analise-title">🚛 Melhor Opção: ${Object.keys(data.custos || {})[0] || 'CARRETA'}</div>
-                    <div class="analise-item" style="font-size: 1.3rem; font-weight: bold; color: #0a6ed1; background: #e8f4fd; padding: 12px; border-radius: 8px; text-align: center;">
-                        💰 <strong>CUSTO TOTAL: R$ ${Object.values(data.custos || {})[0]?.toFixed(2) || '0.00'}</strong>
+                    <div class="analise-title">📦 Melhor Opção: ${ranking.melhor_opcao ? ranking.melhor_opcao.tipo_servico : 'N/A'}</div>
+                    <div class="analise-item" style="font-size: 1.3rem; font-weight: bold; color: #28a745; background: #d4edda; padding: 12px; border-radius: 8px; text-align: center;">
+                        💰 <strong>CUSTO TOTAL: R$ ${ranking.melhor_opcao ? ranking.melhor_opcao.custo_total.toFixed(2) : '0.00'}</strong>
                     </div>
-                    <div class="analise-item"><strong>Distância:</strong> ${data.analise?.distancia || data.distancia || 'N/A'} km</div>
-                    <div class="analise-item"><strong>Tempo Estimado:</strong> ${data.analise?.tempo_estimado || 'N/A'}</div>
-                    ${data.analise?.pedagio_real ? `<div class="analise-item"><strong>Pedágios:</strong> R$ ${data.analise.pedagio_real.toFixed(2)}</div>` : ''}
-                    ${data.analise?.consumo_combustivel ? `<div class="analise-item"><strong>Consumo Estimado:</strong> ${data.analise.consumo_combustivel.toFixed(1)}L</div>` : ''}
+                    <div class="analise-item"><strong>Peso Cubado:</strong> ${ranking.peso_cubado}kg (${ranking.peso_usado_tipo})</div>
+                    ${ranking.valor_nf ? `<div class="analise-item"><strong>Valor NF:</strong> R$ ${ranking.valor_nf.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>` : ''}
                 </div>
 
                 <!-- Informações da Rota -->
                 <div class="analise-container">
                     <div class="analise-title">
                         📍 Informações da Rota
-                        <button class="btn-secondary" onclick="toggleDetails('detalhes_rota_dedicado')" style="float: right; margin-left: 10px; font-size: 0.8rem; padding: 4px 8px; background: #6f42c1;">
+                        <button class="btn-secondary" onclick="toggleDetails('detalhes_rota_fracionado')" style="float: right; margin-left: 10px; font-size: 0.8rem; padding: 4px 8px; background: #28a745;">
                             Ver Detalhes
                         </button>
                     </div>
-                    <div class="analise-item"><strong>Origem:</strong> ${data.analise?.origem || 'N/A'}</div>
-                    <div class="analise-item"><strong>Destino:</strong> ${data.analise?.destino || 'N/A'}</div>
-                    <div class="analise-item"><strong>Tipo de Frete:</strong> Dedicado</div>
+                    <div class="analise-item"><strong>Origem:</strong> ${ranking.origem}</div>
+                    <div class="analise-item"><strong>Destino:</strong> ${ranking.destino}</div>
+                    <div class="analise-item"><strong>Tipo de Frete:</strong> Fracionado</div>
                     
                     <!-- Detalhes da Rota -->
-                    <div id="detalhes_rota_dedicado" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
-                        <strong style="color: #6f42c1;">🚛 Detalhamento do Frete Dedicado:</strong><br><br>
+                    <div id="detalhes_rota_fracionado" style="display: none; margin-top: 15px; padding: 15px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 5px;">
+                        <strong style="color: #28a745;">📦 Detalhamento do Frete Fracionado:</strong><br><br>
                         <div style="margin-bottom: 10px;">
                             <strong>📦 Características do Serviço:</strong><br>
-                            • <strong>Modalidade:</strong> Frete dedicado/exclusivo<br>
-                            • <strong>Distância Total:</strong> ${data.analise?.distancia || data.distancia || 'N/A'} km<br>
-                            • <strong>Duração:</strong> ${data.analise?.tempo_estimado || 'N/A'}<br>
-                            • <strong>Tipo de Rota:</strong> Porta-a-porta
+                            • <strong>Modalidade:</strong> Frete fracionado com agentes<br>
+                            • <strong>Peso Real:</strong> ${ranking.peso}kg<br>
+                            • <strong>Cubagem:</strong> ${ranking.cubagem}m³<br>
+                            • <strong>Peso Cubado:</strong> ${ranking.peso_cubado}kg (${ranking.peso_usado_tipo})<br>
+                            • <strong>Consumo Estimado:</strong> ${ranking.consumo_estimado}L<br>
+                            • <strong>Emissão CO2:</strong> ${ranking.emissao_co2}kg
                         </div>
                         <div style="margin-bottom: 10px;">
-                            <strong>💰 Composição de Custos:</strong><br>
-                            • <strong>Frete Base:</strong> Conforme tabela por distância<br>
-                            ${data.analise?.pedagio_real ? `• <strong>Pedágios:</strong> R$ ${data.analise.pedagio_real.toFixed(2)}<br>` : ''}
-                            ${data.analise?.consumo_combustivel ? `• <strong>Combustível Estimado:</strong> ${data.analise.consumo_combustivel.toFixed(1)}L<br>` : ''}
-                            ${data.analise?.emissao_co2 ? `• <strong>Emissão CO2:</strong> ${data.analise.emissao_co2.toFixed(1)}kg<br>` : ''}
+                            <strong>🚚 Tipos de Rota:</strong><br>
+                            • <strong>Transferência Direta:</strong> Sem agentes intermediários<br>
+                            • <strong>Agente Direto:</strong> Porta-a-porta direto<br>
+                            • <strong>Coleta + Transferência:</strong> Agente coleta + transferência<br>
+                            • <strong>Transferência + Entrega:</strong> Transferência + agente entrega<br>
+                            • <strong>Rota Completa:</strong> Coleta + transferência + entrega
                         </div>
                         <div>
                             <strong>⚙️ Processamento:</strong><br>
-                            • Cálculo baseado em <strong>tabela de faixas de distância</strong><br>
-                            • Pedágios calculados com <strong>APIs reais</strong> quando disponível<br>
-                            • Custos ajustados conforme <strong>tipo de veículo</strong><br>
-                            • Análise de <strong>consumo e emissões</strong> incluída
+                            • Busca em <strong>base unificada de agentes</strong><br>
+                            • Cálculo baseado em <strong>peso cubado</strong> (maior entre peso real e cubagem × 300)<br>
+                            • Consideração de <strong>GRIS e pedágios</strong> quando aplicável<br>
+                            • Ranking por <strong>menor custo total</strong>
                         </div>
                     </div>
                 </div>
         `;
         
-        // Exibir tabela de custos por tipo de veículo
-        if (data.custos) {
+        // 🎯 TABELA DE RANKING (FORMATO DEDICADO) COM DETALHES EXPANDÍVEIS
+        if (ranking.ranking_opcoes && ranking.ranking_opcoes.length > 0) {
                 html += `
                 <div class="analise-container">
-                    <div class="analise-title">📊 Opções de Veículos Disponíveis</div>
+                    <div class="analise-title">📊 Opções de Frete Fracionado Disponíveis</div>
                     <table class="result-table" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
                         <thead style="background: #f8f9fa;">
                             <tr>
                                 <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Posição</th>
-                                <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Tipo de Veículo</th>
+                                <th style="padding: 12px; text-align: left; border: 1px solid #dee2e6;">Tipo de Serviço</th>
                                 <th style="padding: 12px; text-align: right; border: 1px solid #dee2e6;">Custo Total</th>
                                 <th style="padding: 12px; text-align: center; border: 1px solid #dee2e6;">Capacidade</th>
+                                <th style="padding: 12px; text-align: center; border: 1px solid #dee2e6;">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
             `;
             
-            // Ordenar veículos por preço
-            const veiculosOrdenados = Object.entries(data.custos).sort(([,a], [,b]) => a - b);
-            
-            veiculosOrdenados.forEach(([tipo, valor], index) => {
-                const capacidades = {
-                    'FIORINO': { peso: '500kg', volume: '1.2m³', descricao: 'Utilitário pequeno' },
-                    'VAN': { peso: '1.5t', volume: '6m³', descricao: 'Van/Kombi' },
-                    '3/4': { peso: '3.5t', volume: '12m³', descricao: 'Caminhão 3/4' },
-                    'TOCO': { peso: '7t', volume: '40m³', descricao: 'Caminhão toco' },
-                    'TRUCK': { peso: '12t', volume: '70m³', descricao: 'Caminhão truck' },
-                    'CARRETA': { peso: '28t', volume: '110m³', descricao: 'Carreta/bitrem' }
-                };
-                
-                const capacidade = capacidades[tipo] || { peso: 'N/A', volume: 'N/A', descricao: 'Veículo' };
-                
+            ranking.ranking_opcoes.forEach((opcao, index) => {
                 let posicaoIcon, rowStyle;
                 if (index === 0) {
                     posicaoIcon = "🥇";
-                    rowStyle = "background: #fff3cd; border-left: 4px solid #ffc107;";
+                    rowStyle = "background: #d4edda; border-left: 4px solid #28a745;";
                 } else if (index === 1) {
                     posicaoIcon = "🥈";
                     rowStyle = "background: #f8f9fa; border-left: 4px solid #6c757d;";
@@ -1490,19 +1479,146 @@ document.addEventListener('DOMContentLoaded', function() {
                     <tr style="${rowStyle}">
                         <td style="padding: 12px; border: 1px solid #dee2e6; font-weight: bold; font-size: 1.1em;">${posicaoIcon}</td>
                         <td style="padding: 12px; border: 1px solid #dee2e6;">
-                            <strong>${tipo}</strong><br>
-                            <small style="color: #6c757d;">${capacidade.descricao}</small>
+                            <strong>${opcao.tipo_servico}</strong><br>
+                            <small style="color: #6c757d;">${opcao.descricao}</small><br>
+                            <small style="color: #007bff; font-weight: bold;">Fornecedor: ${opcao.fornecedor}</small>
                         </td>
-                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; color: #0a6ed1; font-size: 1.1em;">
-                            R$ ${valor.toFixed(2)}
+                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; color: #28a745; font-size: 1.1em;">
+                            R$ ${opcao.custo_total.toFixed(2)}
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
-                            <strong>Peso:</strong> ${capacidade.peso}<br>
-                            <strong>Volume:</strong> ${capacidade.volume}
+                            <strong>Peso:</strong> ${opcao.capacidade.peso_max}<br>
+                            <strong>Volume:</strong> ${opcao.capacidade.volume_max}<br>
+                            <span style="color: #007bff;">📅 ${opcao.prazo} dias</span>
+                        </td>
+                        <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
+                            <button class="btn btn-info btn-sm" onclick="toggleDetalhesOpcao(${index})" style="background: #17a2b8; border: none; color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem;">
+                                <span id="btn-text-${index}">👁️ Ver Detalhes</span>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                
+                // 🆕 LINHA EXPANSÍVEL COM DETALHES
+                html += `
+                    <tr id="detalhes-row-${index}" style="display: none;">
+                        <td colspan="5" style="padding: 0; border: 1px solid #dee2e6;">
+                            <div style="background: #f8f9fa; padding: 20px; margin: 0;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                    
+                                    <!-- Informações dos Agentes -->
+                                    <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;">
+                                        <h5 style="color: #28a745; margin-bottom: 15px; font-size: 1rem;">
+                                            🚚 Informações dos Agentes
+                                        </h5>
+                `;
+                
+                // Exibir informações dos agentes baseado no tipo de rota
+                const detalhes = opcao.detalhes_expandidos || {};
+                const agentes = detalhes.agentes_info || {};
+                const rota_info = detalhes.rota_info || {};
+                
+                if (agentes.agente_coleta && agentes.agente_coleta !== 'N/A') {
+                    html += `
+                        <div onclick="exibirCustosAgente('coleta', ${index})" style="margin-bottom: 10px; padding: 8px; background: #e8f5e8; border-radius: 4px; cursor: pointer; transition: background 0.3s;" onmouseover="this.style.background='#d4ecda'" onmouseout="this.style.background='#e8f5e8'">
+                            <strong>🚛 Agente de Coleta:</strong> ${agentes.agente_coleta}<br>
+                            ${agentes.base_origem !== 'N/A' ? `<small>Base Destino: ${agentes.base_origem}</small>` : ''}
+                            <br><small style="color: #007bff;">👆 Clique para ver custos específicos</small>
+                        </div>
+                    `;
+                }
+                
+                if (agentes.transferencia && agentes.transferencia !== 'N/A') {
+                    html += `
+                        <div onclick="exibirCustosAgente('transferencia', ${index})" style="margin-bottom: 10px; padding: 8px; background: #e3f2fd; border-radius: 4px; cursor: pointer; transition: background 0.3s;" onmouseover="this.style.background='#bbdefb'" onmouseout="this.style.background='#e3f2fd'">
+                            <strong>🚚 Transferência:</strong> ${agentes.transferencia}<br>
+                            ${agentes.base_origem !== 'N/A' && agentes.base_destino !== 'N/A' ? 
+                              `<small>Rota: ${agentes.base_origem} → ${agentes.base_destino}</small>` : ''}
+                            <br><small style="color: #007bff;">👆 Clique para ver custos específicos</small>
+                        </div>
+                    `;
+                }
+                
+                if (agentes.agente_entrega && agentes.agente_entrega !== 'N/A') {
+                    html += `
+                        <div onclick="exibirCustosAgente('entrega', ${index})" style="margin-bottom: 10px; padding: 8px; background: #fff3e0; border-radius: 4px; cursor: pointer; transition: background 0.3s;" onmouseover="this.style.background='#ffe0b2'" onmouseout="this.style.background='#fff3e0'">
+                            <strong>🚛 Agente de Entrega:</strong> ${agentes.agente_entrega}<br>
+                            ${agentes.base_destino !== 'N/A' ? `<small>Base Origem: ${agentes.base_destino}</small>` : ''}
+                            <br><small style="color: #007bff;">👆 Clique para ver custos específicos</small>
+                        </div>
+                    `;
+                }
+                
+                html += `
+                                        <div style="margin-top: 10px; padding: 8px; background: #f0f0f0; border-radius: 4px;">
+                                            <strong>⚖️ Peso Utilizado:</strong> ${rota_info.peso_cubado || opcao.peso_usado}kg<br>
+                                            <small>Tipo: ${rota_info.tipo_peso_usado || opcao.peso_usado_tipo} 
+                                            (Real: ${rota_info.peso_real || 'N/A'}kg, Cubado: ${(rota_info.cubagem || 0) * 300}kg)</small>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Detalhamento de Custos -->
+                                    <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;">
+                                        <h5 style="color: #007bff; margin-bottom: 15px; font-size: 1rem;">
+                                            💰 Detalhamento de Custos
+                                        </h5>
+                                        <div id="custos-container-${index}">
+                `;
+                
+                // Exibir breakdown de custos
+                const custos = detalhes.custos_detalhados || {};
+                
+                html += `
+                                        <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                <span>💼 Custo Base Frete:</span>
+                                                <span><strong>R$ ${(custos.custo_base_frete || 0).toFixed(2)}</strong></span>
+                                            </div>
+                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                <span>🛣️ Pedágio:</span>
+                                                <span>R$ ${(custos.pedagio || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                <span>📊 GRIS:</span>
+                                                <span>R$ ${(custos.gris || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                <span>🛡️ Seguro:</span>
+                                                <span>R$ ${(custos.seguro || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                <span>💳 ICMS:</span>
+                                                <span>R$ ${(custos.icms || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                <span>📋 Outros:</span>
+                                                <span>R$ ${(custos.outros || 0).toFixed(2)}</span>
+                                            </div>
+                                            <div style="display: flex; justify-content: space-between; padding: 8px 0; margin-top: 10px; background: #e8f5e8; border-radius: 4px; font-weight: bold; font-size: 1rem;">
+                                                <span>💰 TOTAL:</span>
+                                                <span style="color: #28a745;">R$ ${opcao.custo_total.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                `;
+                
+                if (detalhes.observacoes) {
+                    html += `
+                                        <div style="margin-top: 15px; padding: 10px; background: #fffbf0; border-left: 4px solid #ffc107; border-radius: 4px;">
+                                            <strong>📝 Observações:</strong><br>
+                                            <small>${detalhes.observacoes}</small>
+                                        </div>
+                    `;
+                }
+                
+                html += `
+                                    </div>
+                                </div>
+                            </div>
                         </td>
                               </tr>
-                `;
-            });
+                        `;
+                    });
             
             html += `
                         </tbody>
@@ -1510,13 +1626,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div style="margin-top: 10px; font-size: 0.85rem; color: #666; text-align: center;">
                         <strong>Legenda:</strong> 
                         🥇 Melhor preço | 🥈 2º melhor | 🥉 3º melhor | 
-                        🚛 Frete Dedicado
+                        📦 Frete Fracionado | 👁️ Clique em "Ver Detalhes" para mais informações
                     </div>
                 </div>
             `;
         }
         
-            html += `
+        html += `
             </div>
             
             <style>
@@ -1565,21 +1681,419 @@ document.addEventListener('DOMContentLoaded', function() {
             .btn-secondary:hover {
                 background: #5a6268;
             }
-            </style>
             
-            <script>
-            function toggleDetails(elementId) {
-                var element = document.getElementById(elementId);
-                if (element.style.display === "none" || element.style.display === "") {
-                    element.style.display = "block";
-                } else {
-                    element.style.display = "none";
-                }
+            .btn-info:hover {
+                background: #138496 !important;
+                transform: translateY(-1px);
+                transition: all 0.2s;
             }
-            </script>
+            </style>
         `;
         
         container.innerHTML = html;
+        
+        // ✅ ARMAZENAR RANKING PARA ACESSO GLOBAL (NOVO)
+        window.ultimoRankingFracionado = ranking;
+        
+        console.log('[FRACIONADO] Ranking exibido no formato dedicado com sucesso');
+    }
+
+    // 🆕 FUNÇÃO PARA EXPANDIR/COLAPSAR DETALHES DE CADA OPÇÃO
+    window.toggleDetalhesOpcao = function(index) {
+        const detalhesRow = document.getElementById(`detalhes-row-${index}`);
+        const btnText = document.getElementById(`btn-text-${index}`);
+        
+        if (detalhesRow.style.display === 'none' || detalhesRow.style.display === '') {
+            detalhesRow.style.display = 'table-row';
+            btnText.innerHTML = '🙈 Ocultar Detalhes';
+        } else {
+            detalhesRow.style.display = 'none';
+            btnText.innerHTML = '👁️ Ver Detalhes';
+        }
+    }
+
+    // 🆕 FUNÇÃO PARA EXIBIR CUSTOS ESPECÍFICOS DE CADA AGENTE
+    window.exibirCustosAgente = function(tipoAgente, opcaoIndex) {
+        console.log(`[AGENTE-CLICK] Clicado em ${tipoAgente} da opção ${opcaoIndex}`);
+        
+        // Buscar dados da opção selecionada
+        const rankingData = window.ultimoRankingFracionado;
+        if (!rankingData || !rankingData.ranking_opcoes || !rankingData.ranking_opcoes[opcaoIndex]) {
+            console.error('[AGENTE-CLICK] Dados da opção não encontrados');
+            return;
+        }
+        
+        const opcao = rankingData.ranking_opcoes[opcaoIndex];
+        const detalhes = opcao.detalhes_expandidos || {};
+        const agentes = detalhes.agentes_info || {};
+        const rota_info = detalhes.rota_info || {};
+        
+        // Preparar informações específicas do agente clicado
+        let agenteInfo = {};
+        let custoEspecifico = 0;
+        let nomeAgente = '';
+        let alertaPeso = '';
+        let pesoMaximo = null;
+        let excedePeso = false;
+        
+        // ✅ BUSCAR DADOS DE PESO MÁXIMO DO AGENTE (NOVO)
+        const dadosAgentesExpandidos = detalhes.dados_agentes || {};
+        
+        switch(tipoAgente) {
+            case 'coleta':
+                nomeAgente = agentes.agente_coleta || 'N/A';
+                const dadosColeta = dadosAgentesExpandidos.agente_coleta || opcao.detalhes?.agente_coleta || {};
+                pesoMaximo = dadosColeta.peso_maximo;
+                alertaPeso = dadosColeta.alerta_peso;
+                excedePeso = dadosColeta.excede_peso;
+                agenteInfo = {
+                    tipo: 'Agente de Coleta',
+                    fornecedor: agentes.agente_coleta,
+                    base: agentes.base_origem,
+                    funcao: 'Coleta na origem e transporte até a base'
+                };
+                custoEspecifico = detalhes.custos_detalhados?.custo_base_frete * 0.3 || 0; // 30% do custo base
+                break;
+            case 'transferencia':
+                nomeAgente = agentes.transferencia || 'N/A';
+                const dadosTransferencia = dadosAgentesExpandidos.transferencia || opcao.detalhes?.transferencia || {};
+                pesoMaximo = dadosTransferencia.peso_maximo;
+                alertaPeso = dadosTransferencia.alerta_peso;
+                excedePeso = dadosTransferencia.excede_peso;
+                agenteInfo = {
+                    tipo: 'Transferência',
+                    fornecedor: agentes.transferencia,
+                    rota: `${agentes.base_origem} → ${agentes.base_destino}`,
+                    funcao: 'Transporte entre bases'
+                };
+                custoEspecifico = detalhes.custos_detalhados?.custo_base_frete * 0.5 || 0; // 50% do custo base
+                break;
+            case 'entrega':
+                nomeAgente = agentes.agente_entrega || 'N/A';
+                const dadosEntrega = dadosAgentesExpandidos.agente_entrega || opcao.detalhes?.agente_entrega || {};
+                pesoMaximo = dadosEntrega.peso_maximo;
+                alertaPeso = dadosEntrega.alerta_peso;
+                excedePeso = dadosEntrega.excede_peso;
+                agenteInfo = {
+                    tipo: 'Agente de Entrega',
+                    fornecedor: agentes.agente_entrega,
+                    base: agentes.base_destino,
+                    funcao: 'Coleta na base e entrega no destino'
+                };
+                custoEspecifico = detalhes.custos_detalhados?.custo_base_frete * 0.2 || 0; // 20% do custo base
+                break;
+        }
+        
+        // Montar HTML com informações específicas do agente
+        // ✅ GERAR ALERTA DE PESO SE NECESSÁRIO (NOVO)
+        let alertaPesoHtml = '';
+        if (alertaPeso || excedePeso) {
+            const corAlerta = excedePeso ? '#dc3545' : '#ffc107'; // Vermelho se excede, amarelo se aviso
+            const iconeAlerta = excedePeso ? '🚨' : '⚠️';
+            const backgroundAlerta = excedePeso ? '#f8d7da' : '#fff3cd';
+            
+            alertaPesoHtml = `
+                <div style="background: ${backgroundAlerta}; border: 2px solid ${corAlerta}; padding: 12px; border-radius: 8px; margin-bottom: 15px; animation: pulse 1s infinite;">
+                    <h6 style="color: ${corAlerta}; margin: 0 0 8px 0; font-weight: bold;">
+                        ${iconeAlerta} ALERTA DE PESO MÁXIMO
+                    </h6>
+                    <div style="color: ${corAlerta}; font-size: 0.9rem; font-weight: 600;">
+                        ${alertaPeso || `Peso cubado (${rota_info.peso_cubado || 'N/A'}kg) pode exceder limite do agente`}
+                    </div>
+                    ${pesoMaximo ? `
+                    <div style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.5); border-radius: 4px; font-size: 0.85rem;">
+                        <strong>Peso Máximo do Agente:</strong> ${pesoMaximo}kg<br>
+                        <strong>Peso da Carga:</strong> ${rota_info.peso_cubado || 'N/A'}kg (${rota_info.tipo_peso_usado || 'N/A'})<br>
+                        <strong>Situação:</strong> ${excedePeso ? 'EXCEDE O LIMITE' : 'Dentro do limite'}
+                    </div>
+                    ` : ''}
+                </div>
+                
+                <style>
+                @keyframes pulse {
+                    0% { transform: scale(1); }
+                    50% { transform: scale(1.02); }
+                    100% { transform: scale(1); }
+                }
+                </style>
+            `;
+        }
+
+        const custosHtml = `
+            ${alertaPesoHtml}
+            
+            <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; border: 2px solid #28a745; margin-bottom: 10px;">
+                <h6 style="color: #28a745; margin-bottom: 10px; font-weight: bold;">
+                    📊 ${agenteInfo.tipo}: ${nomeAgente}
+                </h6>
+                <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #28a745;">
+                        <span><strong>Fornecedor:</strong></span>
+                        <span><strong>${agenteInfo.fornecedor}</strong></span>
+                    </div>
+                    ${agenteInfo.base ? `
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #28a745;">
+                        <span>📍 Base:</span>
+                        <span>${agenteInfo.base}</span>
+                    </div>
+                    ` : ''}
+                    ${agenteInfo.rota ? `
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #28a745;">
+                        <span>🛣️ Rota:</span>
+                        <span>${agenteInfo.rota}</span>
+                    </div>
+                    ` : ''}
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #28a745;">
+                        <span>⚙️ Função:</span>
+                        <span style="font-size: 0.8rem;">${agenteInfo.funcao}</span>
+                    </div>
+                    ${pesoMaximo ? `
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #28a745;">
+                        <span>⚖️ Peso Máximo:</span>
+                        <span style="font-weight: bold; color: ${excedePeso ? '#dc3545' : '#28a745'};">${pesoMaximo}kg</span>
+                    </div>
+                    ` : ''}
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #28a745;">
+                        <span>📦 Peso da Carga:</span>
+                        <span style="font-weight: bold;">${rota_info.peso_cubado || 'N/A'}kg (${rota_info.tipo_peso_usado || 'N/A'})</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 8px 0; margin-top: 8px; background: #d4edda; border-radius: 4px; font-weight: bold;">
+                        <span>💰 Custo Estimado:</span>
+                        <span style="color: #28a745;">R$ ${custoEspecifico.toFixed(2)}</span>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 0.8rem; color: #6c757d;">
+                    <strong>💡 Informação:</strong> Este é o custo estimado específico deste ${agenteInfo.tipo.toLowerCase()}. 
+                    O valor total da cotação inclui todos os serviços da rota.
+                    ${pesoMaximo ? `<br><strong>Capacidade:</strong> Este agente suporta até ${pesoMaximo}kg.` : ''}
+                </div>
+            </div>
+            
+            <!-- Custos Gerais da Cotação -->
+            <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                    <span>💼 Custo Base Frete:</span>
+                    <span><strong>R$ ${(detalhes.custos_detalhados?.custo_base_frete || 0).toFixed(2)}</strong></span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                    <span>🛣️ Pedágio:</span>
+                    <span>R$ ${(detalhes.custos_detalhados?.pedagio || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                    <span>📊 GRIS:</span>
+                    <span>R$ ${(detalhes.custos_detalhados?.gris || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                    <span>🛡️ Seguro:</span>
+                    <span>R$ ${(detalhes.custos_detalhados?.seguro || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                    <span>💳 ICMS:</span>
+                    <span>R$ ${(detalhes.custos_detalhados?.icms || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                    <span>📋 Outros:</span>
+                    <span>R$ ${(detalhes.custos_detalhados?.outros || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; margin-top: 10px; background: #e8f5e8; border-radius: 4px; font-weight: bold; font-size: 1rem;">
+                    <span>💰 TOTAL GERAL:</span>
+                    <span style="color: #28a745;">R$ ${opcao.custo_total.toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+        
+        // Atualizar o container de custos
+        const custosContainer = document.getElementById(`custos-container-${opcaoIndex}`);
+        if (custosContainer) {
+            custosContainer.innerHTML = custosHtml;
+            
+            // Animação de destaque
+            custosContainer.style.transition = 'all 0.3s ease';
+            custosContainer.style.transform = 'scale(1.02)';
+            setTimeout(() => {
+                custosContainer.style.transform = 'scale(1)';
+            }, 300);
+        }
+        
+        // Armazenar dados para referência
+        window.ultimoAgenteClicado = {
+            tipo: tipoAgente,
+            opcaoIndex: opcaoIndex,
+            agente: agenteInfo,
+            custo: custoEspecifico,
+            peso_maximo: pesoMaximo,
+            alerta_peso: alertaPeso,
+            excede_peso: excedePeso
+        };
+        
+        console.log('[AGENTE-CLICK] Custos específicos exibidos:', agenteInfo);
+        console.log('[AGENTE-CLICK] Dados de peso:', { pesoMaximo, alertaPeso, excedePeso, pesoCubado: rota_info.peso_cubado });
+    }
+
+    // 📦 FUNÇÃO PARA FORMATO ANTIGO (LEGACY) 
+    function exibirFormatoLegacyFracionado(data, container) {
+        // ... manter código legacy caso necessário para compatibilidade ...
+        let html = '<h3>📦 Resultados do Frete Fracionado (Formato Legacy)</h3>';
+        
+        // Verificar se há opções detalhadas (nossa estrutura)
+        const opcoes = data.opcoes_detalhadas || [];
+        const resultado_base = data.resultado_base || {};
+        
+        // Informações da rota
+        const origem = resultado_base.origem || data.analise?.origem || 'N/A';
+        const uf_origem = resultado_base.uf_origem || 'N/A';
+        const destino = resultado_base.destino || data.analise?.destino || 'N/A';
+        const uf_destino = resultado_base.uf_destino || 'N/A';
+        const peso = resultado_base.peso || data.analise?.peso || 0;
+        const cubagem = resultado_base.cubagem || data.analise?.cubagem || 0;
+        const peso_cubado = resultado_base.peso_cubado || data.peso_cubado || Math.max(peso, cubagem * 300);
+        const valor_nf = resultado_base.valor_nf || data.analise?.valor_nf;
+
+        html += `
+            <div class="info-rota-fracionado">
+                <p><strong>Rota:</strong> ${origem}/${uf_origem} → ${destino}/${uf_destino}</p>
+                <p><strong>Peso:</strong> ${peso}kg | <strong>Cubagem:</strong> ${cubagem}m³ | <strong>Peso Cubado:</strong> ${peso_cubado}kg</p>
+                ${valor_nf ? `<p><strong>Valor NF:</strong> R$ ${valor_nf.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>` : ''}
+            </div>
+            <p class="no-results">⚠️ Formato legacy - considere atualizar o backend</p>
+        `;
+        
+        container.innerHTML = html;
+        console.log('[FRACIONADO] Formato legacy exibido');
+    }
+
+    function exibirResultadoDedicado(data) {
+        const container = document.getElementById('resultados-dedicado');
+        const analiseContainer = document.getElementById('analise-dedicado');
+        const mapaSection = document.getElementById('mapa-section-dedicado');
+        const mapContainer = document.getElementById('map-dedicado');
+        
+        if (!container) {
+            console.error('[DEDICADO] Container resultados-dedicado não encontrado');
+            return;
+        }
+
+        console.log('[DEDICADO] Dados recebidos:', data);
+
+        // Verificar se temos dados de ranking (novo formato All In)
+        if (data.ranking_dedicado && data.ranking_dedicado.ranking_opcoes) {
+            exibirResultadoAllInDedicado(data);
+            return;
+        }
+
+        // Formato antigo - exibir seção All In customizada
+        const allInSection = container.querySelector('.all-in-section');
+        if (allInSection) {
+            allInSection.style.display = 'block';
+            
+            // Preparar dados para o formato All In
+            const veiculosOrdenados = Object.entries(data.custos || {}).sort(([,a], [,b]) => a - b);
+            const melhorOpcao = veiculosOrdenados[0];
+            const totalOpcoes = veiculosOrdenados.length;
+            
+            // Atualizar estatísticas
+            document.getElementById('total-opcoes-dedicado').textContent = totalOpcoes;
+            document.getElementById('melhor-opcao-dedicado').textContent = melhorOpcao ? melhorOpcao[0] : '-';
+            
+            // Calcular economia (diferença entre pior e melhor)
+            if (veiculosOrdenados.length > 1) {
+                const piorPreco = veiculosOrdenados[veiculosOrdenados.length - 1][1];
+                const melhorPreco = melhorOpcao[1];
+                const economia = ((piorPreco - melhorPreco) / piorPreco * 100).toFixed(1);
+                document.getElementById('economia-dedicado').textContent = `${economia}%`;
+            } else {
+                document.getElementById('economia-dedicado').textContent = '-';
+            }
+            
+            // Criar lista de ranking
+            const rankingList = document.getElementById('ranking-list-dedicado');
+            let rankingHtml = '';
+            
+            veiculosOrdenados.forEach(([tipo, valor], index) => {
+                const capacidades = {
+                    'FIORINO': { peso: '500kg', volume: '1.2m³', icon: '🚐', descricao: 'Utilitário pequeno' },
+                    'VAN': { peso: '1.5t', volume: '6m³', icon: '🚐', descricao: 'Van/Kombi' },
+                    '3/4': { peso: '3.5t', volume: '12m³', icon: '🚚', descricao: 'Caminhão 3/4' },
+                    'TOCO': { peso: '7t', volume: '40m³', icon: '🚛', descricao: 'Caminhão toco' },
+                    'TRUCK': { peso: '12t', volume: '70m³', icon: '🚛', descricao: 'Caminhão truck' },
+                    'CARRETA': { peso: '28t', volume: '110m³', icon: '🚛', descricao: 'Carreta/bitrem' }
+                };
+                
+                const veiculo = capacidades[tipo] || { peso: 'N/A', volume: 'N/A', icon: '🚛', descricao: 'Veículo' };
+                
+                let medalha = '';
+                let destaque = '';
+                if (index === 0) {
+                    medalha = '🥇';
+                    destaque = 'style="background: linear-gradient(135deg, #fff3cd, #ffeaa7); border: 2px solid #ffc107;"';
+                } else if (index === 1) {
+                    medalha = '🥈';
+                    destaque = 'style="background: linear-gradient(135deg, #f8f9fa, #e9ecef); border: 2px solid #6c757d;"';
+                } else if (index === 2) {
+                    medalha = '🥉';
+                    destaque = 'style="background: linear-gradient(135deg, #fff3cd, #ffeaa7); border: 2px solid #fd7e14;"';
+                }
+                
+                rankingHtml += `
+                    <div class="ranking-item" data-veiculo="${tipo}" onclick="exibirDetalhesVeiculoDedicado('${tipo}', ${valor}, '${veiculo.descricao}', '${veiculo.peso}', '${veiculo.volume}')" ${destaque}>
+                        <div class="ranking-header">
+                            <span class="ranking-position">${medalha} ${index + 1}º</span>
+                            <span class="ranking-price">R$ ${valor.toFixed(2)}</span>
+                        </div>
+                        <div class="ranking-info">
+                            <div class="veiculo-info">
+                                <span class="veiculo-icon">${veiculo.icon}</span>
+                                <div class="veiculo-details">
+                                    <div class="veiculo-name">${tipo}</div>
+                                    <div class="veiculo-desc">${veiculo.descricao}</div>
+                                </div>
+                            </div>
+                            <div class="capacidade-info">
+                                <div>📦 ${veiculo.peso}</div>
+                                <div>📏 ${veiculo.volume}</div>
+                            </div>
+                    </div>
+                </div>
+            `;
+            });
+            
+            rankingList.innerHTML = rankingHtml;
+            
+            // Selecionar automaticamente a melhor opção
+            if (melhorOpcao) {
+                const melhorVeiculo = capacidades[melhorOpcao[0]] || { descricao: 'Veículo', peso: 'N/A', volume: 'N/A' };
+                exibirDetalhesVeiculoDedicado(melhorOpcao[0], melhorOpcao[1], melhorVeiculo.descricao, melhorVeiculo.peso, melhorVeiculo.volume);
+            }
+        }
+        
+        // Mostrar análise se disponível
+        if (data.analise && analiseContainer) {
+            let analiseHtml = `
+                <div class="analise-container">
+                    <div class="analise-title">📍 Informações da Rota</div>
+                    <div class="analise-item"><strong>Origem:</strong> ${data.analise.origem || 'N/A'}</div>
+                    <div class="analise-item"><strong>Destino:</strong> ${data.analise.destino || 'N/A'}</div>
+                    <div class="analise-item"><strong>Distância:</strong> ${data.analise.distancia || data.distancia || 'N/A'} km</div>
+                    <div class="analise-item"><strong>Tempo estimado:</strong> ${data.analise.tempo_estimado || 'N/A'}</div>
+                    ${data.analise.pedagio_real ? `<div class="analise-item"><strong>Pedágios:</strong> R$ ${data.analise.pedagio_real.toFixed(2)}</div>` : ''}
+                    ${data.analise.consumo_combustivel ? `<div class="analise-item"><strong>Consumo:</strong> ${data.analise.consumo_combustivel.toFixed(1)}L</div>` : ''}
+                    ${data.analise.emissao_co2 ? `<div class="analise-item"><strong>Emissão CO2:</strong> ${data.analise.emissao_co2.toFixed(1)}kg</div>` : ''}
+                </div>
+            `;
+            analiseContainer.innerHTML = analiseHtml;
+        }
+        
+        // Definir capacidades para uso nas funções
+        window.capacidadesDedicado = {
+            'FIORINO': { peso: '500kg', volume: '1.2m³', icon: '🚐', descricao: 'Utilitário pequeno' },
+            'VAN': { peso: '1.5t', volume: '6m³', icon: '🚐', descricao: 'Van/Kombi' },
+            '3/4': { peso: '3.5t', volume: '12m³', icon: '🚚', descricao: 'Caminhão 3/4' },
+            'TOCO': { peso: '7t', volume: '40m³', icon: '🚛', descricao: 'Caminhão toco' },
+            'TRUCK': { peso: '12t', volume: '70m³', icon: '🚛', descricao: 'Caminhão truck' },
+            'CARRETA': { peso: '28t', volume: '110m³', icon: '🚛', descricao: 'Carreta/bitrem' }
+        };
+        
+        container.innerHTML = container.innerHTML;
 
         // Exibir análise da rota se disponível
         if (data.analise && analiseContainer) {
@@ -1702,6 +2216,177 @@ document.addEventListener('DOMContentLoaded', function() {
                 mapaSection.style.display = 'none';
             }
         }
+    }
+
+    // Função para exibir detalhes do veículo dedicado
+    function exibirDetalhesVeiculoDedicado(tipo, valor, descricao, peso, volume) {
+        const detailsContainer = document.getElementById('details-content-dedicado');
+        if (!detailsContainer) return;
+        
+        // Destacar item selecionado
+        document.querySelectorAll('#ranking-list-dedicado .ranking-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+        document.querySelector(`[data-veiculo="${tipo}"]`).classList.add('selected');
+        
+        const capacidades = window.capacidadesDedicado || {};
+        const veiculo = capacidades[tipo] || { icon: '🚛', descricao: 'Veículo', peso: 'N/A', volume: 'N/A' };
+        
+        const detailsHtml = `
+            <div class="vehicle-details">
+                <div class="vehicle-header">
+                    <div class="vehicle-icon-large">${veiculo.icon}</div>
+                    <div class="vehicle-title">
+                        <h4>${tipo}</h4>
+                        <p>${descricao}</p>
+                    </div>
+                    <div class="vehicle-price">
+                        <span class="price-label">Preço Total</span>
+                        <span class="price-value">R$ ${valor.toFixed(2)}</span>
+                    </div>
+                </div>
+                
+                <div class="vehicle-specs">
+                    <h5><i class="fa-solid fa-cogs"></i> Especificações Técnicas</h5>
+                    <div class="specs-grid">
+                        <div class="spec-item">
+                            <span class="spec-icon">⚖️</span>
+                            <div class="spec-info">
+                                <span class="spec-label">Capacidade de Peso</span>
+                                <span class="spec-value">${peso}</span>
+                            </div>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-icon">📦</span>
+                            <div class="spec-info">
+                                <span class="spec-label">Volume Útil</span>
+                                <span class="spec-value">${volume}</span>
+                            </div>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-icon">🚛</span>
+                            <div class="spec-info">
+                                <span class="spec-label">Tipo de Veículo</span>
+                                <span class="spec-value">${descricao}</span>
+                            </div>
+                        </div>
+                        <div class="spec-item">
+                            <span class="spec-icon">🛣️</span>
+                            <div class="spec-info">
+                                <span class="spec-label">Modalidade</span>
+                                <span class="spec-value">Frete Dedicado</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="vehicle-advantages">
+                    <h5><i class="fa-solid fa-star"></i> Vantagens</h5>
+                    <div class="advantages-list">
+                        ${getVehicleAdvantages(tipo)}
+                    </div>
+                </div>
+                
+                <div class="vehicle-cost-breakdown">
+                    <h5><i class="fa-solid fa-calculator"></i> Composição do Custo</h5>
+                    <div class="cost-items">
+                        <div class="cost-item">
+                            <span class="cost-label">🚛 Frete Base</span>
+                            <span class="cost-value">R$ ${(valor * 0.7).toFixed(2)}</span>
+                        </div>
+                        <div class="cost-item">
+                            <span class="cost-label">⛽ Combustível</span>
+                            <span class="cost-value">R$ ${(valor * 0.15).toFixed(2)}</span>
+                        </div>
+                        <div class="cost-item">
+                            <span class="cost-label">🛣️ Pedágios</span>
+                            <span class="cost-value">R$ ${(valor * 0.08).toFixed(2)}</span>
+                        </div>
+                        <div class="cost-item">
+                            <span class="cost-label">📋 Outros</span>
+                            <span class="cost-value">R$ ${(valor * 0.07).toFixed(2)}</span>
+                        </div>
+                        <div class="cost-total">
+                            <span class="cost-label"><strong>💰 Total</strong></span>
+                            <span class="cost-value"><strong>R$ ${valor.toFixed(2)}</strong></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="vehicle-actions">
+                    <button class="btn-primary" onclick="selecionarVeiculoDedicado('${tipo}', ${valor})">
+                        <i class="fa-solid fa-check"></i> Selecionar Este Veículo
+                    </button>
+                    <button class="btn-secondary" onclick="exportarCotacaoDedicado('${tipo}', ${valor})">
+                        <i class="fa-solid fa-download"></i> Exportar Cotação
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        detailsContainer.innerHTML = detailsHtml;
+        
+        // Animação de entrada
+        detailsContainer.style.opacity = '0';
+        setTimeout(() => {
+            detailsContainer.style.transition = 'opacity 0.3s ease';
+            detailsContainer.style.opacity = '1';
+        }, 50);
+    }
+
+    // Função para obter vantagens específicas do veículo
+    function getVehicleAdvantages(tipo) {
+        const advantages = {
+            'FIORINO': [
+                '💰 Menor custo para cargas pequenas',
+                '🏃 Agilidade em entregas urbanas',
+                '🚗 Acesso facilitado a locais restritos',
+                '⚡ Rapidez na coleta e entrega'
+            ],
+            'VAN': [
+                '📦 Ideal para volumes médios',
+                '🚗 Flexibilidade urbana',
+                '💰 Custo-benefício equilibrado',
+                '🔒 Proteção da carga'
+            ],
+            '3/4': [
+                '⚖️ Boa capacidade de peso',
+                '📏 Volume adequado para diversos tipos de carga',
+                '🛣️ Versatilidade em diferentes rotas',
+                '💰 Preço competitivo'
+            ],
+            'TOCO': [
+                '🏋️ Alta capacidade de peso',
+                '📦 Grande volume útil',
+                '🛣️ Ideal para médias distâncias',
+                '⚙️ Robustez e confiabilidade'
+            ],
+            'TRUCK': [
+                '💪 Excelente capacidade de carga',
+                '🚛 Otimizado para longas distâncias',
+                '📦 Grande volume disponível',
+                '⚡ Eficiência no transporte'
+            ],
+            'CARRETA': [
+                '🚛 Máxima capacidade de transporte',
+                '💰 Melhor custo por tonelada',
+                '🛣️ Ideal para longas distâncias',
+                '📦 Volume superior para cargas grandes'
+            ]
+        };
+        
+        const vehicleAdvantages = advantages[tipo] || ['✅ Solução de transporte confiável'];
+        return vehicleAdvantages.map(adv => `<div class="advantage-item">${adv}</div>`).join('');
+    }
+
+    // Função para selecionar veículo (placeholder)
+    function selecionarVeiculoDedicado(tipo, valor) {
+        alert(`Veículo ${tipo} selecionado!\nValor: R$ ${valor.toFixed(2)}\n\nEm breve: integração com sistema de pedidos.`);
+    }
+
+    // Função para exportar cotação (placeholder)
+    function exportarCotacaoDedicado(tipo, valor) {
+        alert(`Exportando cotação do veículo ${tipo}...\nValor: R$ ${valor.toFixed(2)}\n\nEm breve: geração de PDF automático.`);
     }
 
     function exibirResultadoAereo(data) {
