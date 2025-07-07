@@ -390,6 +390,29 @@ def logout():
     
     return redirect(url_for('login'))
 
+# Health check endpoint para Render
+@app.route("/health")
+def health_check():
+    """Endpoint de health check para verificar se a aplicação está funcionando."""
+    try:
+        # Verificar se a aplicação está funcionando
+        status = {
+            "status": "healthy",
+            "timestamp": pd.Timestamp.now().isoformat(),
+            "version": "1.0.0",
+            "services": {
+                "database": "online" if len(df_unificado) > 0 else "offline",
+                "records": len(df_unificado)
+            }
+        }
+        return jsonify(status), 200
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy", 
+            "error": str(e),
+            "timestamp": pd.Timestamp.now().isoformat()
+        }), 503
+
 # Inicializar variáveis globais
 HISTORICO_PESQUISAS = []
 CONTADOR_DEDICADO = 1
