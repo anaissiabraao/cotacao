@@ -194,9 +194,32 @@ def create_app(config_name=None):
     
     return app
 
+# Criar instância do app para Gunicorn
+app = None
+
+try:
+    if main_app:
+        # Usar a aplicação principal se disponível
+        app = main_app
+        print("[APP] ✅ Usando aplicação principal para deploy")
+    else:
+        # Criar app básico como fallback
+        app = create_app()
+        print("[APP] ✅ Usando app criado via factory")
+except Exception as app_error:
+    print(f"[APP] ❌ Erro ao criar app: {app_error}")
+    # Criar app mínimo como último recurso
+    app = Flask(__name__)
+    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key')
+    
+    @app.route('/')
+    def error_page():
+        return f"Erro na aplicação: {app_error}", 500
+
 if __name__ == '__main__':
     try:
-        app = create_app()
+        if not app:
+            app = create_app()
         port = int(os.environ.get('PORT', 5000))
         print(f"[SERVER] 🚀 Iniciando servidor na porta {port}")
         app.run(host='0.0.0.0', port=port, debug=True)
