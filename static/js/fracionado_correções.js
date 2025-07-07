@@ -47,7 +47,7 @@ window.exibirCustosAgente = function(tipoAgente, opcaoIndex) {
                 base: agentes.base_origem,
                 funcao: 'Coleta na origem e transporte até a base'
             };
-            custoEspecifico = detalhes.custos_detalhados?.custo_base_frete * 0.3 || 0; // 30% do custo base
+            custoEspecifico = detalhes.custos_detalhados?.custo_coleta || (detalhes.custos_detalhados?.custo_base_frete * 0.3) || 0; // ✅ Custo real da coleta com fallback
             break;
         case 'transferencia':
             nomeAgente = agentes.transferencia || 'N/A';
@@ -57,7 +57,7 @@ window.exibirCustosAgente = function(tipoAgente, opcaoIndex) {
                 rota: `${agentes.base_origem} → ${agentes.base_destino}`,
                 funcao: 'Transporte entre bases'
             };
-            custoEspecifico = detalhes.custos_detalhados?.custo_base_frete * 0.5 || 0; // 50% do custo base
+            custoEspecifico = detalhes.custos_detalhados?.custo_transferencia || (detalhes.custos_detalhados?.custo_base_frete * 0.5) || 0; // ✅ Custo real da transferência com fallback
             break;
         case 'entrega':
             nomeAgente = agentes.agente_entrega || 'N/A';
@@ -67,7 +67,7 @@ window.exibirCustosAgente = function(tipoAgente, opcaoIndex) {
                 base: agentes.base_destino,
                 funcao: 'Coleta na base e entrega no destino'
             };
-            custoEspecifico = detalhes.custos_detalhados?.custo_base_frete * 0.2 || 0; // 20% do custo base
+            custoEspecifico = detalhes.custos_detalhados?.custo_entrega || (detalhes.custos_detalhados?.custo_base_frete * 0.2) || 0; // ✅ Custo real da entrega com fallback
             break;
     }
     
@@ -112,7 +112,19 @@ window.exibirCustosAgente = function(tipoAgente, opcaoIndex) {
         <!-- Custos Gerais da Cotação -->
         <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
             <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                <span>💼 Custo Base Frete:</span>
+                <span>🚛 Coleta:</span>
+                <span>R$ ${(detalhes.custos_detalhados?.custo_coleta || (detalhes.custos_detalhados?.custo_base_frete * 0.3) || 0).toFixed(2)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                <span>🚚 Transferência:</span>
+                <span>R$ ${(detalhes.custos_detalhados?.custo_transferencia || (detalhes.custos_detalhados?.custo_base_frete * 0.5) || 0).toFixed(2)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                <span>🚛 Entrega:</span>
+                <span>R$ ${(detalhes.custos_detalhados?.custo_entrega || (detalhes.custos_detalhados?.custo_base_frete * 0.2) || 0).toFixed(2)}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc; background: #f0f0f0; font-weight: bold;">
+                <span>💼 Subtotal Frete:</span>
                 <span><strong>R$ ${(detalhes.custos_detalhados?.custo_base_frete || 0).toFixed(2)}</strong></span>
             </div>
             <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
