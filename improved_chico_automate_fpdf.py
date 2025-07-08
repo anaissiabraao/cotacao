@@ -1088,7 +1088,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         for _, agente in agentes_diretos.iterrows():
             try:
-                opcao = processar_linha_fracionado(agente, peso_cubado, valor_nf, "AGENTE DIRETO")
+                # Calcular peso cubado específico para este agente direto
+                peso_cubado_agente = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente.get('Tipo', 'Agente'), agente.get('Fornecedor'))
+                opcao = processar_linha_fracionado(agente, peso_cubado_agente, valor_nf, "AGENTE DIRETO")
                 if opcao:
                     rota = {
                         'tipo_rota': 'agente_direto',
@@ -1446,9 +1448,11 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                         
                         print(f"[AGENTES] Processando rota alternativa: {fornecedor_transf} ({rota_alternativa}) + {fornecedor_ent}")
                         
-                        # Calcular custos
-                        custo_transferencia = calcular_custo_agente(transf, peso_cubado, valor_nf)
-                        custo_entrega = calcular_custo_agente(agente_ent, peso_cubado, valor_nf)
+                        # Calcular custos usando peso cubado específico por tipo
+                        peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transf.get('Tipo', 'Transferência'), transf.get('Fornecedor'))
+                        peso_cubado_ent = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_ent.get('Tipo', 'Agente'), agente_ent.get('Fornecedor'))
+                        custo_transferencia = calcular_custo_agente(transf, peso_cubado_transf, valor_nf)
+                        custo_entrega = calcular_custo_agente(agente_ent, peso_cubado_ent, valor_nf)
                         
                         if custo_transferencia and custo_entrega:
                             total = custo_transferencia['total'] + custo_entrega['total']
@@ -1507,20 +1511,23 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 fornecedor_col = agente_col.get('Fornecedor', 'N/A')
                 base_origem = agente_col.get('Base Origem') or agente_col.get('Base Destino')
                 print(f"[AGENTES] Processando agente: {fornecedor_col} (Base: {base_origem})")
-                custo_coleta = calcular_custo_agente(agente_col, peso_cubado, valor_nf)
+                peso_cubado_col = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_col.get('Tipo', 'Agente'), agente_col.get('Fornecedor'))
+                custo_coleta = calcular_custo_agente(agente_col, peso_cubado_col, valor_nf)
                 if custo_coleta:
                     for _, transf in transferencias_origem_destino.iterrows():
                         try:
                             fornecedor_transf = transf.get('Fornecedor', 'N/A')
                             print(f"[AGENTES] Processando transferência: {fornecedor_transf}")
-                            custo_transferencia = calcular_custo_agente(transf, peso_cubado, valor_nf)
+                            peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transf.get('Tipo', 'Transferência'), transf.get('Fornecedor'))
+                            custo_transferencia = calcular_custo_agente(transf, peso_cubado_transf, valor_nf)
                             if custo_transferencia:
                                 if not agentes_entrega.empty:
                                     print(f"[AGENTES] ✅ Criando rotas completas com agente de entrega")
                                     for _, agente_ent in agentes_entrega.iterrows():
                                         fornecedor_ent = agente_ent.get('Fornecedor', 'N/A')
                                         print(f"[AGENTES] -> Adicionando agente entrega: {fornecedor_ent}")
-                                        custo_entrega = calcular_custo_agente(agente_ent, peso_cubado, valor_nf)
+                                        peso_cubado_ent = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_ent.get('Tipo', 'Agente'), agente_ent.get('Fornecedor'))
+                                        custo_entrega = calcular_custo_agente(agente_ent, peso_cubado_ent, valor_nf)
                                         if custo_entrega:
                                             total = custo_coleta['total'] + custo_transferencia['total'] + custo_entrega['total']
                                             prazo_total = max(
@@ -1606,9 +1613,12 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             
                             print(f"[AGENTES] Processando rota: {fornecedor_col} → {fornecedor_transf} → {fornecedor_ent}")
                             
-                            custo_coleta = calcular_custo_agente(agente_col, peso_cubado, valor_nf)
-                            custo_transferencia = calcular_custo_agente(transf, peso_cubado, valor_nf)
-                            custo_entrega = calcular_custo_agente(agente_ent, peso_cubado, valor_nf)
+                            peso_cubado_col = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_col.get('Tipo', 'Agente'), agente_col.get('Fornecedor'))
+                            peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transf.get('Tipo', 'Transferência'), transf.get('Fornecedor'))
+                            peso_cubado_ent = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_ent.get('Tipo', 'Agente'), agente_ent.get('Fornecedor'))
+                            custo_coleta = calcular_custo_agente(agente_col, peso_cubado_col, valor_nf)
+                            custo_transferencia = calcular_custo_agente(transf, peso_cubado_transf, valor_nf)
+                            custo_entrega = calcular_custo_agente(agente_ent, peso_cubado_ent, valor_nf)
                             
                             if custo_coleta and custo_transferencia and custo_entrega:
                                 total = custo_coleta['total'] + custo_transferencia['total'] + custo_entrega['total']
@@ -4256,7 +4266,7 @@ def calcular_pedagios_google_routes(origem, destino, peso_veiculo=1000):
 def calcular_pedagios_fallback_brasil(distancia_km, tipo_veiculo="CARRETA"):
     """
     Fallback para cálculo de pedágios baseado em estimativas brasileiras
-    Usando dados médios de pedágios por km no Brasil
+    Usando dados médios de pedágio por km no Brasil
     """
     try:
         # Valores médios de pedágio por km no Brasil (2024)
@@ -4745,6 +4755,41 @@ def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_
         import traceback
         traceback.print_exc()
         return None
+
+def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=None):
+    """
+    Calcula peso cubado aplicando fatores específicos por tipo de serviço:
+    - Agentes (tipo 'Agente'): cubagem × 250
+    - Transferências JEM e Concept: cubagem × 166  
+    - Outros tipos: cubagem × 300 (padrão)
+    """
+    try:
+        peso_real = float(peso_real)
+        cubagem = float(cubagem) if cubagem else 0
+        
+        if cubagem <= 0:
+            return peso_real
+            
+        # Aplicar fator específico baseado no tipo
+        if tipo_linha == 'Agente':
+            fator_cubagem = 250  # kg/m³ para agentes
+            tipo_calculo = "Agente (250kg/m³)"
+        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper()):
+            fator_cubagem = 166  # kg/m³ para JEM e Concept  
+            tipo_calculo = f"Transferência {fornecedor} (166kg/m³)"
+        else:
+            fator_cubagem = 300  # kg/m³ padrão
+            tipo_calculo = "Padrão (300kg/m³)"
+            
+        peso_cubado = cubagem * fator_cubagem
+        peso_final = max(peso_real, peso_cubado)
+        
+        print(f"[PESO_CUBADO] {tipo_calculo}: {peso_real}kg vs {peso_cubado}kg = {peso_final}kg")
+        return peso_final
+        
+    except Exception as e:
+        print(f"[PESO_CUBADO] Erro no cálculo: {e}")
+        return float(peso_real) if peso_real else 0
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
