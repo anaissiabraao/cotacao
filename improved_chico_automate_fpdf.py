@@ -211,6 +211,22 @@ def normalizar_cidade(cidade):
         "ITAJAÍ": "ITAJAI",
         "ITAJAY": "ITAJAI",
         "ITJ": "ITAJAI",
+        "CAXIAS DO SUL": "CAXIAS DO SUL",
+        "CAXIAS": "CAXIAS DO SUL",
+        "CXS": "CAXIAS DO SUL",
+        "CXJ": "CAXIAS DO SUL",
+        "CAXIASDOSUL": "CAXIAS DO SUL",
+        "CAXIAS-RS": "CAXIAS DO SUL",
+        "CAXIAS DO SUL-RS": "CAXIAS DO SUL",
+        "JARAGUA DO SUL": "JARAGUA DO SUL",
+        "JARAGUÁ DO SUL": "JARAGUA DO SUL",
+        "JARAGUA": "JARAGUA DO SUL",
+        "JGS": "JARAGUA DO SUL",
+        "JARAGUADOSUL": "JARAGUA DO SUL",
+        "JARAGUA-SC": "JARAGUA DO SUL",
+        "JARAGUA DO SUL-SC": "JARAGUA DO SUL",
+        "JARAGUÁ-SC": "JARAGUA DO SUL",
+        "JARAGUÁ DO SUL-SC": "JARAGUA DO SUL"
     }
     
     cidade_upper = cidade.upper()
@@ -1083,11 +1099,21 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             """Gera chave única para controle de duplicatas"""
             return f"{agente_col_forn}+{transf_forn}+{agente_ent_forn}"
         
-        # 1. BUSCAR SERVIÇOS DIRETOS (PORTA-A-PORTA) - APENAS CIDADES EXATAS
+        # 1. BUSCAR SERVIÇOS DIRETOS (PORTA-A-PORTA)
+        # Primeiro tentar cidades exatas
         servicos_diretos = df_diretos[
             (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
             (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
         ]
+        
+        # Se não encontrar, tentar cidades na mesma UF
+        if servicos_diretos.empty:
+            print(f"[DIRETOS] 🔍 Busca expandida de serviços diretos em {uf_origem} → {uf_destino}...")
+            servicos_diretos = df_diretos[
+                (df_diretos['UF Origem'] == uf_origem) &
+                (df_diretos['UF Destino'] == uf_destino)
+            ]
+            print(f"[DIRETOS] Busca expandida encontrou: {len(servicos_diretos)} serviços")
         
         for _, servico in servicos_diretos.iterrows():
             try:
@@ -1142,6 +1168,15 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)
         ]
         
+        # Se não encontrar agentes na cidade exata, buscar na mesma UF
+        if agentes_coleta.empty:
+            print(f"[AGENTES] 🔍 Busca expandida de agentes de coleta em {uf_origem}...")
+            agentes_coleta = df_agentes[
+                (df_agentes['UF'] == uf_origem) &
+                (df_agentes['Tipo'] == 'Agente')
+            ]
+            print(f"[AGENTES] Busca expandida encontrou: {len(agentes_coleta)} agentes")
+        
         # Agentes de entrega (origem = cidade destino EXATA + validação por UF)
         agentes_entrega = df_agentes[
             df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
@@ -1150,11 +1185,20 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # 🔧 BUSCA EXPANDIDA DE AGENTES DE ENTREGA (MELHORADO)
         if agentes_entrega.empty:
             print(f"[AGENTES] 🔍 Busca expandida de agentes de entrega em {destino_norm}...")
-            # Buscar por cidades que contenham parte do nome
+            # Primeiro tentar cidades que contenham parte do nome
             agentes_entrega = df_agentes[
                 df_agentes['Origem'].apply(lambda x: destino_norm in normalizar_cidade_nome(str(x)).upper() if x else False)
             ]
-            print(f"[AGENTES] Busca expandida encontrou: {len(agentes_entrega)} agentes")
+            print(f"[AGENTES] Busca expandida por nome encontrou: {len(agentes_entrega)} agentes")
+            
+            # Se ainda não encontrar, buscar na mesma UF
+            if agentes_entrega.empty:
+                print(f"[AGENTES] 🔍 Busca expandida de agentes de entrega em {uf_destino}...")
+                agentes_entrega = df_agentes[
+                    (df_agentes['UF'] == uf_destino) &
+                    (df_agentes['Tipo'] == 'Agente')
+                ]
+                print(f"[AGENTES] Busca expandida por UF encontrou: {len(agentes_entrega)} agentes")
         
         # Validação adicional por UF para agentes de entrega
         if not agentes_entrega.empty:
@@ -1175,10 +1219,20 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             print(f"[AGENTES] ✅ Agentes de entrega encontrados: {len(agentes_entrega)}")
 
         # 🔧 BUSCAR TRANSFERÊNCIAS DIRETAS CIDADE → CIDADE (PRIORIDADE MÁXIMA)
+        # Primeiro tentar cidades exatas
         transferencias_origem_destino = df_transferencias[
             (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
             (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
         ]
+        
+        # Se não encontrar, tentar cidades na mesma UF
+        if transferencias_origem_destino.empty:
+            print(f"[TRANSFERENCIAS] 🔍 Busca expandida de transferências em {uf_origem} → {uf_destino}...")
+            transferencias_origem_destino = df_transferencias[
+                (df_transferencias['UF Origem'] == uf_origem) &
+                (df_transferencias['UF Destino'] == uf_destino)
+            ]
+            print(f"[TRANSFERENCIAS] Busca expandida encontrou: {len(transferencias_origem_destino)} transferências")
         
         print(f"[TRANSFERENCIAS] 🎯 Busca direta {origem} → {destino}: {len(transferencias_origem_destino)} encontradas")
         if not transferencias_origem_destino.empty:
@@ -1852,27 +1906,23 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         # 🔧 CALCULAR GRIS (CORRIGIDO)
         gris_valor = 0.0
         try:
-        if valor_nf and valor_nf > 0:
+            if valor_nf and valor_nf > 0:
                 gris_exc = linha.get('Gris Exc')
                 gris_min = linha.get('Gris Min', 0)
-                
                 if gris_exc is not None and not pd.isna(gris_exc):
                     gris_exc = float(gris_exc)
                     # CORREÇÃO: Gris Exc na planilha sempre está em formato percentual
                     # Exemplo: 0.1 = 0.1%, 0.17 = 0.17%, 3.5 = 3.5%
                     gris_percentual = gris_exc / 100
                     gris_calculado = valor_nf * gris_percentual
-                    
                     if gris_min is not None and not pd.isna(gris_min):
                         gris_min = float(gris_min)
-                    gris_valor = max(gris_calculado, gris_min)
+                        gris_valor = max(gris_calculado, gris_min)
                     else:
                         gris_valor = gris_calculado
-                    
                     # Verificar se o resultado é NaN
                     if pd.isna(gris_valor) or math.isnan(gris_valor):
                         gris_valor = 0.0
-                    
                     print(f"[GRIS] {fornecedor}: {gris_exc}% de R$ {valor_nf:,.2f} = R$ {gris_valor:.2f} (mín: R$ {gris_min:.2f})")
         except (ValueError, TypeError):
             gris_valor = 0.0
@@ -2017,58 +2067,49 @@ def calcular_frete_aereo_base_unificada(origem, uf_origem, destino, uf_destino, 
         # Buscar rotas aéreas correspondentes
         opcoes_aereas = []
         
+
         for _, linha in df_aereo.iterrows():
             origem_base = normalizar_cidade_nome(str(linha.get('Origem', '')))
             destino_base = normalizar_cidade_nome(str(linha.get('Destino', '')))
-            
             # Verificar se a rota corresponde
             if origem_base == origem_norm and destino_base == destino_norm:
-                # try removido: não havia except/finally
-                    # Processar dados da linha
-                    fornecedor = linha.get('Fornecedor', 'N/A')
-                    prazo_raw = int(linha.get('Prazo', 1))
-                    # Para modal aéreo: prazo 0 = 1 dia
-                    prazo = 1 if prazo_raw == 0 else prazo_raw
-                    
-                    # Calcular custo baseado no peso
-                    peso_float = float(peso)
-                    
-                    # Valores da planilha
-                    valor_minimo = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
-                    excedente = float(linha.get('EXCEDENTE', 0))
-                    
-                    # Calcular custo total
-
-                    if peso_float <= 10:
-                        custo_base = valor_minimo
-                    else:
-                        peso_excedente = peso_float - 10
-                        custo_base = valor_minimo + (peso_excedente * excedente)
-
-                    # GRIS para aéreo (se informado) - CORRIGIDO
-                    gris_valor = 0.0
-                    try:
+                # Processar dados da linha
+                fornecedor = linha.get('Fornecedor', 'N/A')
+                prazo_raw = int(linha.get('Prazo', 1))
+                # Para modal aéreo: prazo 0 = 1 dia
+                prazo = 1 if prazo_raw == 0 else prazo_raw
+                # Calcular custo baseado no peso
+                peso_float = float(peso)
+                # Valores da planilha
+                valor_minimo = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
+                excedente = float(linha.get('EXCEDENTE', 0))
+                # Calcular custo total
+                if peso_float <= 10:
+                    custo_base = valor_minimo
+                else:
+                    peso_excedente = peso_float - 10
+                    custo_base = valor_minimo + (peso_excedente * excedente)
+                # GRIS para aéreo (se informado) - CORRIGIDO
+                gris_valor = 0.0
+                try:
                     if valor_nf and valor_nf > 0:
-                            gris_exc = linha.get('Gris Exc')
-                            gris_min = linha.get('Gris Min', 0)
-                            
-                            if gris_exc is not None and not pd.isna(gris_exc):
-                                gris_exc = float(gris_exc)
-                                # CORREÇÃO: Gris Exc na planilha sempre está em formato percentual
-                                gris_percentual = gris_exc / 100
-                                gris_calculado = valor_nf * gris_percentual
-                                
-                                if gris_min is not None and not pd.isna(gris_min):
-                                    gris_min = float(gris_min)
-                                    gris_valor = max(gris_calculado, gris_min)
-                                else:
-                                    gris_valor = gris_calculado
-                                
-                                # Verificar se o resultado é NaN
-                                if pd.isna(gris_valor) or math.isnan(gris_valor):
-                                    gris_valor = 0.0
-                    except (ValueError, TypeError):
-                        gris_valor = 0.0
+                        gris_exc = linha.get('Gris Exc')
+                        gris_min = linha.get('Gris Min', 0)
+                        if gris_exc is not None and not pd.isna(gris_exc):
+                            gris_exc = float(gris_exc)
+                            # CORREÇÃO: Gris Exc na planilha sempre está em formato percentual
+                            gris_percentual = gris_exc / 100
+                            gris_calculado = valor_nf * gris_percentual
+                            if gris_min is not None and not pd.isna(gris_min):
+                                gris_min = float(gris_min)
+                                gris_valor = max(gris_calculado, gris_min)
+                            else:
+                                gris_valor = gris_calculado
+                            # Verificar se o resultado é NaN
+                            if pd.isna(gris_valor) or math.isnan(gris_valor):
+                                gris_valor = 0.0
+                except (ValueError, TypeError):
+                    gris_valor = 0.0
 
                     # Pedágio para aéreo (normalmente zero) - CORRIGIDO
                     pedagio = 0.0
@@ -3757,19 +3798,19 @@ def gerar_pdf():
         pdf.cell(0, 8, "INFORMACOES BASICAS", 0, 1, "L", True)
         pdf.ln(2)
         pdf.set_font("Arial", "", 11)
-        
+
         # ID e Tipo
         id_historico = analise.get('id_historico', 'N/A')
         tipo_analise = analise.get('tipo', dados_cotacao.get('tipo', 'N/A'))
         pdf.cell(0, 6, limpar_texto_pdf(f"ID: {id_historico}"), 0, 1)
         pdf.cell(0, 6, limpar_texto_pdf(f"Tipo: {tipo_analise}"), 0, 1)
-        
+
         # Origem e Destino
         origem = dados_cotacao.get('origem', analise.get('origem', 'N/A'))
         destino = dados_cotacao.get('destino', analise.get('destino', 'N/A'))
         pdf.cell(0, 6, limpar_texto_pdf(f"Origem: {origem}"), 0, 1)
         pdf.cell(0, 6, limpar_texto_pdf(f"Destino: {destino}"), 0, 1)
-        
+
         # Peso e Cubagem
         peso = dados_cotacao.get('peso', analise.get('peso', 'N/A'))
         cubagem = dados_cotacao.get('cubagem', analise.get('cubagem', 'N/A'))
@@ -3777,8 +3818,7 @@ def gerar_pdf():
             pdf.cell(0, 6, limpar_texto_pdf(f"Peso: {peso} kg"), 0, 1)
         if cubagem != 'N/A':
             pdf.cell(0, 6, limpar_texto_pdf(f"Cubagem: {cubagem} m3"), 0, 1)
-            
-            pdf.ln(5)
+        pdf.ln(5)
             
         # Resultados das cotações
         rotas_agentes = dados_cotacao.get('rotas_agentes', {})

@@ -38,7 +38,9 @@ COORDS_CACHE = {
     "BOA VISTA-RR": [2.8235, -60.6758],
     "MACAPA-AP": [0.0389, -51.0664],
     "RIO BRANCO-AC": [-9.9754, -67.8249],
-    "PORTO VELHO-RO": [-8.7612, -63.9004]
+    "PORTO VELHO-RO": [-8.7612, -63.9004],
+    "CAXIAS DO SUL-RS": [-29.1685, -51.1796],
+    "JARAGUA DO SUL-SC": [-26.4851, -49.0668]
 }
 
 def get_coords_from_cache(cidade, uf):

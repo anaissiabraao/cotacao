@@ -29,9 +29,10 @@ MAPEAMENTO_BASES = {
     "JOI": "Joinville",
     "CFC": "Chapecó",
     "ITJ": "Itajaí",
+    "JGS": "Jaraguá do Sul",  # Adicionado
     # Rio Grande do Sul
     "POA": "Porto Alegre",
-    "CXJ": "Caxias do Sul",
+    "CXJ": "Caxias do Sul",  # Adicionado
     # Espírito Santo
     "VIX": "Vitória",
     # Bahia
@@ -623,7 +624,8 @@ def obter_mapeamento_bases_completo():
         "CGB": "Cuiabá",
         "CGR": "Campo Grande",
         "MAO": "Manaus",
-        "ITJ": "Itajaí"
+        "ITJ": "Itajaí",
+        "JGS": "Jaraguá do Sul"
     }
     
     return mapeamento_expandido
