@@ -1418,13 +1418,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             • <strong>Modalidade:</strong> Frete fracionado com agentes<br>
                             • <strong>Peso Real:</strong> ${ranking.peso}kg<br>
                             • <strong>Cubagem:</strong> ${ranking.cubagem}m³<br>
-                            • <strong>Peso Cubado:</strong> ${ranking.peso_cubado}kg (${ranking.peso_usado_tipo})<br>
-                            • <strong>Consumo Estimado:</strong> ${ranking.consumo_estimado}L<br>
-                            • <strong>Emissão CO2:</strong> ${ranking.emissao_co2}kg
+                            • <strong>Peso Cubado:</strong> ${ranking.peso_cubado}kg (${ranking.peso_usado_tipo})<br
                         </div>
                         <div style="margin-bottom: 10px;">
                             <strong>🚚 Tipos de Rota:</strong><br>
-                            • <strong>Transferência Direta:</strong> Sem agentes intermediários<br>
                             • <strong>Agente Direto:</strong> Porta-a-porta direto<br>
                             • <strong>Coleta + Transferência:</strong> Agente coleta + transferência<br>
                             • <strong>Transferência + Entrega:</strong> Transferência + agente entrega<br>
@@ -1493,7 +1490,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
                             <button class="btn btn-info btn-sm" onclick="toggleDetalhesOpcao(${index})" style="background: #17a2b8; border: none; color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem;">
-                                <span id="btn-text-${index}">👁️ Ver Detalhes</span>
+                                <span id="btn-text-${index}">🔎 Ver Detalhes</span>
                             </button>
                         </td>
                     </tr>
@@ -1626,7 +1623,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div style="margin-top: 10px; font-size: 0.85rem; color: #666; text-align: center;">
                         <strong>Legenda:</strong> 
                         🥇 Melhor preço | 🥈 2º melhor | 🥉 3º melhor | 
-                        📦 Frete Fracionado | 👁️ Clique em "Ver Detalhes" para mais informações
+                        📦 Frete Fracionado | 🔎 Clique em "Ver Detalhes" para mais informações
                     </div>
                 </div>
             `;
@@ -1705,10 +1702,10 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (detalhesRow.style.display === 'none' || detalhesRow.style.display === '') {
             detalhesRow.style.display = 'table-row';
-            btnText.innerHTML = '🙈 Ocultar Detalhes';
+            btnText.innerHTML = '🔙 Ocultar Detalhes';
         } else {
             detalhesRow.style.display = 'none';
-            btnText.innerHTML = '👁️ Ver Detalhes';
+            btnText.innerHTML = '🔎 Ver Detalhes';
         }
     }
 
@@ -1763,7 +1760,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 agenteInfo = {
                     tipo: 'Transferência',
                     fornecedor: agentes.transferencia,
-                    rota: `${agentes.base_origem || 'SANTOS'} → ${agentes.base_destino || 'CURITIBA'}`,
+                    rota: `${agentes.base_origem} → ${agentes.base_destino}`,
                     funcao: 'Transporte entre bases'
                 };
                 custoEspecifico = detalhes.custos_detalhados?.custo_transferencia || (detalhes.custos_detalhados?.custo_base_frete * 0.5) || 0; // ✅ Custo real da transferência com fallback
@@ -3383,7 +3380,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (sections && button) {
             if (sections.style.display === 'none' || sections.style.display === '') {
                 sections.style.display = 'block';
-                button.innerHTML = '📊 Ocultar Informações Técnicas';
+                button.innerHTML = '🔙 Ocultar Informações Técnicas';
                 button.style.background = '#6c757d';
             } else {
                 sections.style.display = 'none';

@@ -1590,17 +1590,17 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'observacao': f"Cliente deve entregar a mercadoria em {origem}"
                             },
                             'transferencia': custo_transferencia,
-                                                            'agente_entrega': {
-                                    'fornecedor': 'Cliente retira no destino',
-                                    'custo': 0,
+                            'agente_entrega': {
+                                'fornecedor': 'Cliente retira no destino',
+                                'custo': 0,
                                     'total': 0,
                                     'pedagio': 0,
                                     'gris': 0,
                                     'seguro': 0,
                                     'prazo': 0,
                                     'sem_agente': True,
-                                    'observacao': f"Cliente deve retirar a mercadoria em {destino}"
-                                }
+                                'observacao': f"Cliente deve retirar a mercadoria em {destino}"
+                            }
                         }
                         rotas_encontradas.append(rota)
                 except Exception as e:
@@ -1617,7 +1617,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         else:
             print(f"[PRIORIZAÇÃO] ⚠️ Apenas {len(rotas_parciais)} rotas PARCIAIS disponíveis")
             rotas_encontradas = rotas_parciais
-        
+
         # Ordenar por menor custo
         rotas_encontradas.sort(key=lambda x: x['total'])
         
@@ -1852,7 +1852,7 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         # 🔧 CALCULAR GRIS (CORRIGIDO)
         gris_valor = 0.0
         try:
-            if valor_nf and valor_nf > 0:
+        if valor_nf and valor_nf > 0:
                 gris_exc = linha.get('Gris Exc')
                 gris_min = linha.get('Gris Min', 0)
                 
@@ -1865,7 +1865,7 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     
                     if gris_min is not None and not pd.isna(gris_min):
                         gris_min = float(gris_min)
-                        gris_valor = max(gris_calculado, gris_min)
+                    gris_valor = max(gris_calculado, gris_min)
                     else:
                         gris_valor = gris_calculado
                     
@@ -2048,7 +2048,7 @@ def calcular_frete_aereo_base_unificada(origem, uf_origem, destino, uf_destino, 
                     # GRIS para aéreo (se informado) - CORRIGIDO
                     gris_valor = 0.0
                     try:
-                        if valor_nf and valor_nf > 0:
+                    if valor_nf and valor_nf > 0:
                             gris_exc = linha.get('Gris Exc')
                             gris_min = linha.get('Gris Min', 0)
                             
