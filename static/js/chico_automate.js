@@ -1385,6 +1385,20 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 🆕 NOVA FUNÇÃO PARA EXIBIR RANKING NO FORMATO DEDICADO
     function exibirRankingFracionado(ranking, container) {
+        // Armazenar dados para exportação
+        window.ultimaAnalise = ranking;
+        window.ultimosDados = {
+            origem: ranking.origem,
+            destino: ranking.destino,
+            peso: ranking.peso,
+            cubagem: ranking.cubagem,
+            valor_nf: ranking.valor_nf,
+            tipo: "Fracionado",
+            rotas_agentes: {
+                cotacoes_ranking: ranking.ranking_opcoes
+            }
+        };
+
         let html = `
             <div class="success">
                 <h3><i class="fa-solid fa-boxes"></i> Cotação de Frete Fracionado Calculada - ${ranking.id_calculo}</h3>
@@ -1396,6 +1410,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <div class="analise-item"><strong>Peso Cubado:</strong> ${ranking.peso_cubado}kg (${ranking.peso_usado_tipo})</div>
                     ${ranking.valor_nf ? `<div class="analise-item"><strong>Valor NF:</strong> R$ ${ranking.valor_nf.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>` : ''}
+                </div>
+
+                <!-- Botões de Exportação -->
+                <div class="export-buttons" style="margin: 10px 0; text-align: right;">
+                    <button onclick="exportarPDF({analise: window.ultimaAnalise, dados: window.ultimosDados})" class="btn btn-info">
+                        <i class="fas fa-file-pdf"></i> Exportar PDF
+                    </button>
+                    <button onclick="exportarExcel({tipo: 'Fracionado', dados: window.ultimosDados})" class="btn btn-info">
+                        <i class="fas fa-file-excel"></i> Exportar Excel
+                    </button>
                 </div>
 
                 <!-- Informações da Rota -->
@@ -3389,4 +3413,67 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
     };
+
+    // Funções de exportação
+    async function exportarPDF(dados) {
+        try {
+            const response = await fetch('/gerar-pdf', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(dados)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // Criar um link temporário para download
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `relatorio_frete_${new Date().toISOString().slice(0,10)}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+
+        } catch (error) {
+            console.error('Erro ao exportar PDF:', error);
+            showError('Erro ao gerar PDF. Por favor, tente novamente.');
+        }
+    }
+
+    async function exportarExcel(dados) {
+        try {
+            const response = await fetch('/exportar-excel', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(dados)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            // Criar um link temporário para download
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `dados_frete_${new Date().toISOString().slice(0,10)}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+
+        } catch (error) {
+            console.error('Erro ao exportar Excel:', error);
+            showError('Erro ao gerar Excel. Por favor, tente novamente.');
+        }
+    }
 });
