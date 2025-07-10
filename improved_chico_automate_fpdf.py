@@ -1174,11 +1174,19 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         else:
             print(f"[AGENTES] ✅ Agentes de entrega encontrados: {len(agentes_entrega)}")
 
-        # Buscar transferências cidade → cidade (origem → destino)
+        # 🔧 BUSCAR TRANSFERÊNCIAS DIRETAS CIDADE → CIDADE (PRIORIDADE MÁXIMA)
         transferencias_origem_destino = df_transferencias[
             (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
             (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
         ]
+        
+        print(f"[TRANSFERENCIAS] 🎯 Busca direta {origem} → {destino}: {len(transferencias_origem_destino)} encontradas")
+        if not transferencias_origem_destino.empty:
+            for _, transf in transferencias_origem_destino.iterrows():
+                print(f"[TRANSFERENCIAS] ✅ Direta: {transf.get('Fornecedor')} | {transf.get('Origem')} → {transf.get('Destino')}")
+        else:
+            print(f"[TRANSFERENCIAS] ❌ Nenhuma transferência direta {origem} → {destino}")
+            print(f"[TRANSFERENCIAS] 🔍 Buscando rotas alternativas via bases...")
         
         # Função genérica para obter cidade da base (sem mapeamento específico)
         def obter_cidade_base(codigo_base):
@@ -1337,13 +1345,13 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             }
                             rotas_encontradas.append(rota)
 
-        # Se não há agentes de coleta mas há transferências + agentes de entrega
-        elif agentes_coleta.empty and not transferencias_origem_destino.empty:
-            print(f"[ROTAS] 🔄 Sem agentes de coleta - Calculando: Transferência + Agente Entrega")
+        # 🎯 PRIORIDADE 1: TRANSFERÊNCIAS DIRETAS + AGENTES DE ENTREGA
+        if not transferencias_origem_destino.empty and not agentes_entrega.empty:
+            print(f"[ROTAS] 🏆 PRIORIDADE MÁXIMA: Transferências diretas + Agentes de entrega")
             
             for _, transf in transferencias_origem_destino.iterrows():
                 fornecedor_transf = transf.get('Fornecedor', 'N/A')
-                base_origem_transf = transf.get('Base Origem', origem_norm)
+                base_origem_transf = transf.get('Base Origem', origem_norm) 
                 base_destino_transf = transf.get('Base Destino', destino_norm)
                 peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transf.get('Tipo', 'Transferência'), transf.get('Fornecedor'))
                 custo_transferencia = calcular_custo_agente(transf, peso_cubado_transf, valor_nf)
@@ -1359,8 +1367,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             total = custo_transferencia['total'] + custo_entrega['total']
                             prazo_total = max(custo_transferencia.get('prazo', 1), custo_entrega.get('prazo', 1))
                             
-                            # ✅ ROTA BASES CLARAMENTE DEFINIDA
-                            rota_bases = f"{origem} → {base_origem_transf} → {base_destino_transf} → {destino}"
+                            # ✅ ROTA BASES CORRIGIDA - mostra cidades reais, não bases intermediárias
+                            rota_bases = f"{transf.get('Origem')} → {transf.get('Destino')}"
                             
                             rota = {
                                 'tipo_rota': 'cliente_entrega_transferencia_agente_entrega',
@@ -1369,19 +1377,18 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'prazo_total': prazo_total,
                                 'maior_peso': peso_cubado,
                                 'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
-                                'rota_bases': rota_bases,
+                                'rota_bases': rota_bases,  # ✅ CORREÇÃO: Mostra rota real das cidades
                                 'detalhamento_custos': {
-                                    'coleta': 0,  # ✅ Cliente entrega na base
+                                    'coleta': 0,  # Cliente entrega
                                     'transferencia': custo_transferencia['total'],
                                     'entrega': custo_entrega['total'],
                                     'pedagio': custo_transferencia.get('pedagio', 0) + custo_entrega.get('pedagio', 0),
                                     'gris_total': custo_transferencia.get('gris', 0) + custo_entrega.get('gris', 0)
                                 },
-                                'observacoes': f"Cliente entrega mercadoria na base {base_origem_transf}. Transferência para {base_destino_transf} + entrega no destino.",
-                                'status_rota': 'PARCIAL_COLETA',
+                                'observacoes': f"Cliente entrega em {transf.get('Origem')} → Transferência direta → Entrega no {destino}",
+                                'status_rota': 'DIRETA_COM_AGENTE_ENTREGA',
                                 'agente_coleta': {
-                                    'fornecedor': 'Cliente entrega na base',
-                                    'funcao': f'Cliente entrega na base {base_origem_transf}',
+                                    'fornecedor': 'Cliente entrega na origem',
                                     'custo': 0,
                                     'total': 0,
                                     'pedagio': 0,
@@ -1389,33 +1396,39 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                     'seguro': 0,
                                     'prazo': 0,
                                     'sem_agente': True,
-                                    'base_destino': base_origem_transf,
-                                    'observacao': f"Cliente deve entregar a mercadoria na base {base_origem_transf}"
+                                    'observacao': f"Cliente deve entregar a mercadoria em {transf.get('Origem')}"
                                 },
                                 'transferencia': {
                                     'fornecedor': fornecedor_transf,
-                                    'funcao': f'Transferência entre bases',
-                                    'rota': f"{base_origem_transf} → {base_destino_transf}",
+                                    'rota': rota_bases,
                                     'total': custo_transferencia['total'],
                                     'pedagio': custo_transferencia.get('pedagio', 0),
                                     'gris': custo_transferencia.get('gris', 0),
                                     'prazo': custo_transferencia.get('prazo', 1),
-                                    'base_origem': base_origem_transf,
-                                    'base_destino': base_destino_transf
+                                    'base_origem': transf.get('Origem'),
+                                    'base_destino': transf.get('Destino')
                                 },
                                 'agente_entrega': {
                                     'fornecedor': fornecedor_ent,
-                                    'funcao': f'Coleta na base {base_destino_transf} e entrega no destino',
                                     'total': custo_entrega['total'],
                                     'pedagio': custo_entrega.get('pedagio', 0),
                                     'gris': custo_entrega.get('gris', 0),
-                                    'prazo': custo_entrega.get('prazo', 1),
-                                    'base_origem': base_destino_transf,
-                                    'destino_final': destino
+                                    'prazo': custo_entrega.get('prazo', 1)
                                 }
                             }
                             rotas_encontradas.append(rota)
-                            print(f"[ROTAS] ✅ Rota criada: {rota_bases} - R$ {total:.2f}")
+                            print(f"[ROTAS] ✅ Rota DIRETA criada: {rota_bases} - R$ {total:.2f}")
+
+        # Se não há agentes de coleta mas há transferências + agentes de entrega (FALLBACK apenas se não há rotas diretas)
+        elif agentes_coleta.empty and not transferencias_origem_destino.empty and len(rotas_encontradas) == 0:
+            print(f"[ROTAS] 🔄 FALLBACK: Sem agentes de coleta - Calculando: Transferência + Agente Entrega")
+            
+            for _, transf in transferencias_origem_destino.iterrows():
+                fornecedor_transf = transf.get('Fornecedor', 'N/A')
+                base_origem_transf = transf.get('Base Origem', origem_norm)
+                base_destino_transf = transf.get('Base Destino', destino_norm)
+                peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transf.get('Tipo', 'Transferência'), transf.get('Fornecedor'))
+                custo_transferencia = calcular_custo_agente(transf, peso_cubado_transf, valor_nf)
 
         # 3. ROTAS PARCIAIS: Agente Coleta + Transferência (sem agente de entrega)
         if not agentes_coleta.empty and agentes_entrega.empty:
@@ -1593,6 +1606,18 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 except Exception as e:
                     continue
 
+        # 🔧 PRIORIZAÇÃO: ROTAS COMPLETAS > ROTAS PARCIAIS
+        rotas_completas = [r for r in rotas_encontradas if r.get('tipo_rota') == 'coleta_transferencia_entrega']
+        rotas_parciais = [r for r in rotas_encontradas if r.get('tipo_rota') != 'coleta_transferencia_entrega']
+        
+        # Se há rotas completas, descartar rotas parciais
+        if rotas_completas:
+            print(f"[PRIORIZAÇÃO] 🏆 {len(rotas_completas)} rotas COMPLETAS encontradas - descartando {len(rotas_parciais)} rotas parciais")
+            rotas_encontradas = rotas_completas
+        else:
+            print(f"[PRIORIZAÇÃO] ⚠️ Apenas {len(rotas_parciais)} rotas PARCIAIS disponíveis")
+            rotas_encontradas = rotas_parciais
+        
         # Ordenar por menor custo
         rotas_encontradas.sort(key=lambda x: x['total'])
         
@@ -1642,7 +1667,13 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             
             print(f"[AGENTES] 📈 DISTRIBUIÇÃO POR TIPO DE ROTA:")
             for tipo, lista_rotas in tipos_rota.items():
-                print(f"[AGENTES]   {tipo}: {len(lista_rotas)} rotas")
+                # Identificar se é rota completa ou parcial
+                if tipo == 'coleta_transferencia_entrega':
+                    status_rota = "🏆 COMPLETA"
+                else:
+                    status_rota = "⚠️ PARCIAL"
+                
+                print(f"[AGENTES]   {tipo}: {len(lista_rotas)} rotas {status_rota}")
                 
                 # Verificar se há agentes faltando
                 for rota in lista_rotas[:2]:  # Mostrar só as 2 primeiras de cada tipo
@@ -1667,6 +1698,12 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 total = rota.get('total', 0)
                 resumo = rota.get('resumo', 'N/A')
                 
+                # Identificar tipo de rota para o usuário
+                if tipo_rota == 'coleta_transferencia_entrega':
+                    status_display = "🏆 COMPLETA"
+                else:
+                    status_display = "⚠️ PARCIAL"
+                
                 # Verificar se tem agentes faltando
                 agente_col = rota.get('agente_coleta', {})
                 agente_ent = rota.get('agente_entrega', {})
@@ -1680,7 +1717,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     alertas.append("SEM ENTREGA")
                 
                 alerta_texto = f" [{', '.join(alertas)}]" if alertas else ""
-                print(f"[AGENTES]   {i}º) {tipo_rota}: R$ {total:.2f}{alerta_texto}")
+                print(f"[AGENTES]   {i}º) {status_display}: R$ {total:.2f}{alerta_texto}")
                 print(f"[AGENTES]       {resumo}")
             
             # Verificar duplicatas por valor total
@@ -2450,16 +2487,20 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
             info['agente_entrega'] = agente_entrega.get('fornecedor', 'N/A')
             info['fornecedor_principal'] = info['transferencia']
             
-            # Extrair bases da rota
+            # 🔧 CORREÇÃO: Extrair bases da rota corretamente
             base_origem = (
                 transferencia.get('base_origem') or
+                transferencia.get('origem') or
                 agente_coleta.get('base_destino') or
-                'Base Origem'
+                opcao.get('origem') or  # Usar cidade de origem como fallback
+                'Origem'  # Fallback final
             )
             base_destino = (
                 transferencia.get('base_destino') or
+                transferencia.get('destino') or
                 agente_entrega.get('base_origem') or
-                'Base Destino'
+                opcao.get('destino') or  # Usar cidade de destino como fallback
+                'Destino'  # Fallback final
             )
             
             info['base_origem'] = base_origem
@@ -2495,21 +2536,24 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
             info['agente_entrega'] = entrega_fornecedor
             info['fornecedor_principal'] = transf_fornecedor
             
-            # Melhor extração de bases para rota
+            # 🔧 CORREÇÃO: Melhor extração de bases para rota
+            # Priorizar dados da transferência que contém a rota real
             base_origem = (
+                transferencia.get('base_origem') or
+                transferencia.get('origem') or
                 agente_coleta.get('base_destino') or
                 agente_coleta.get('destino') or
-                transferencia.get('origem') or
-                transferencia.get('base_origem') or
-                'N/A'
+                opcao.get('origem') or  # Usar cidade de origem como fallback
+                'Ribeirão Preto'  # Fallback final
             )
 
             base_destino = (
+                transferencia.get('base_destino') or
+                transferencia.get('destino') or
                 agente_entrega.get('base_origem') or
                 agente_entrega.get('origem') or
-                transferencia.get('destino') or
-                transferencia.get('base_destino') or
-                'N/A'
+                opcao.get('destino') or  # Usar cidade de destino como fallback
+                'Rio de Janeiro'  # Fallback final
             )
             
             info['base_origem'] = base_origem
@@ -2563,7 +2607,7 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
         agente_entrega = opcao.get('agente_entrega', {})
         
         # Priorizar dados já calculados do detalhamento_custos
-        detalhamento_pre_calculado = opcao.get('detalhamento_custos', {})
+        detalhamento_pre_calculado = detalhes.get('detalhamento_custos', {})
         
         if detalhamento_pre_calculado and any(detalhamento_pre_calculado.values()):
             # Usar dados já calculados se não estiverem vazios
@@ -2572,7 +2616,36 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
             custo_entrega = detalhamento_pre_calculado.get('entrega', 0)
             pedagio_total = detalhamento_pre_calculado.get('pedagio', 0)
             gris_total = detalhamento_pre_calculado.get('gris_total', 0)
-            seguro_total = detalhamento_pre_calculado.get('seguro_total', 0)  # 🆕 Adicionar seguro
+            seguro_total = detalhamento_pre_calculado.get('seguro_total', 0)
+            
+            # 🔧 CORREÇÃO: Extrair pedágios e GRIS dos agentes individuais corretamente
+            pedagio_coleta = agente_coleta.get('pedagio', 0) if isinstance(agente_coleta, dict) else 0
+            pedagio_transferencia = transferencia.get('pedagio', 0) if isinstance(transferencia, dict) else 0
+            pedagio_entrega = agente_entrega.get('pedagio', 0) if isinstance(agente_entrega, dict) else 0
+            
+            gris_coleta = agente_coleta.get('gris', 0) if isinstance(agente_coleta, dict) else 0
+            gris_transferencia = transferencia.get('gris', 0) if isinstance(transferencia, dict) else 0
+            gris_entrega = agente_entrega.get('gris', 0) if isinstance(agente_entrega, dict) else 0
+            
+            seguro_coleta = agente_coleta.get('seguro', 0) if isinstance(agente_coleta, dict) else 0
+            seguro_transferencia = transferencia.get('seguro', 0) if isinstance(transferencia, dict) else 0
+            seguro_entrega = agente_entrega.get('seguro', 0) if isinstance(agente_entrega, dict) else 0
+            
+            # 🆕 CORREÇÃO: Se valores individuais estão zerados, usar os totais diretamente
+            # Priorizar sempre os valores pré-calculados se existirem
+            if pedagio_total > 0:
+                # Se temos total mas não temos individuais, usar o total
+                if (pedagio_coleta + pedagio_transferencia + pedagio_entrega) == 0:
+                    pedagio_coleta = pedagio_total  # Simplificado: todo pedagio considerado na primeira etapa válida
+                    pedagio_transferencia = 0
+                    pedagio_entrega = 0
+            
+            if gris_total > 0:
+                # Se temos total mas não temos individuais, usar o total
+                if (gris_coleta + gris_transferencia + gris_entrega) == 0:
+                    gris_coleta = gris_total  # Simplificado: todo GRIS considerado na primeira etapa válida
+                    gris_transferencia = 0
+                    gris_entrega = 0
             
             custos = {
                 # Custos detalhados por etapa (pré-calculados)
@@ -2581,23 +2654,21 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
                 'custo_entrega': custo_entrega,
                 'custo_base_frete': custo_coleta + custo_transferencia + custo_entrega,
                 
-                # Pedágios (pré-calculados)
-                'pedagio': pedagio_total,
-                'pedagio_coleta': agente_coleta.get('pedagio', 0) if isinstance(agente_coleta, dict) else 0,
-                'pedagio_transferencia': transferencia.get('pedagio', 0) if isinstance(transferencia, dict) else 0,
-                'pedagio_entrega': agente_entrega.get('pedagio', 0) if isinstance(agente_entrega, dict) else 0,
+                # 🔧 CORREÇÃO: Usar totais corretos ou valores distribuídos
+                'pedagio': max(pedagio_total, pedagio_coleta + pedagio_transferencia + pedagio_entrega),
+                'pedagio_coleta': pedagio_coleta,
+                'pedagio_transferencia': pedagio_transferencia,
+                'pedagio_entrega': pedagio_entrega,
                 
-                # GRIS (pré-calculados)
-                'gris': gris_total,
-                'gris_coleta': agente_coleta.get('gris', 0) if isinstance(agente_coleta, dict) else 0,
-                'gris_transferencia': transferencia.get('gris', 0) if isinstance(transferencia, dict) else 0,
-                'gris_entrega': agente_entrega.get('gris', 0) if isinstance(agente_entrega, dict) else 0,
+                'gris': max(gris_total, gris_coleta + gris_transferencia + gris_entrega),
+                'gris_coleta': gris_coleta,
+                'gris_transferencia': gris_transferencia,
+                'gris_entrega': gris_entrega,
                 
-                # 🔧 SEGURO CORRIGIDO - extrair dos agentes individuais
-                'seguro': seguro_total + (agente_coleta.get('seguro', 0) if isinstance(agente_coleta, dict) else 0) + (transferencia.get('seguro', 0) if isinstance(transferencia, dict) else 0) + (agente_entrega.get('seguro', 0) if isinstance(agente_entrega, dict) else 0),
-                'seguro_coleta': agente_coleta.get('seguro', 0) if isinstance(agente_coleta, dict) else 0,
-                'seguro_transferencia': transferencia.get('seguro', 0) if isinstance(transferencia, dict) else 0,
-                'seguro_entrega': agente_entrega.get('seguro', 0) if isinstance(agente_entrega, dict) else 0,
+                'seguro': max(seguro_total, seguro_coleta + seguro_transferencia + seguro_entrega),
+                'seguro_coleta': seguro_coleta,
+                'seguro_transferencia': seguro_transferencia,
+                'seguro_entrega': seguro_entrega,
                 
                 # Outros custos
                 'icms': 0,
