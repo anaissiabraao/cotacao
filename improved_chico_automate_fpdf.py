@@ -546,11 +546,11 @@ def geocode(municipio, uf):
         from utils.coords_cache import COORDS_CACHE
         chave_cache = f"{cidade_norm}-{uf_norm}"
         
-        # Debug removido
+        print(f"[geocode] Buscando coordenadas para: {chave_cache}")
         
         if chave_cache in COORDS_CACHE:
             coords = COORDS_CACHE[chave_cache]
-            # Debug removido
+            print(f"[geocode] ✅ Encontrado no cache: {coords}")
             return coords
         
         # Se não encontrou no cache, tentar a API do OpenStreetMap
@@ -573,7 +573,7 @@ def geocode(municipio, uf):
                 lat = float(data[0]["lat"])
                 lon = float(data[0]["lon"])
                 coords = [lat, lon]
-                # Debug removido
+                print(f"[geocode] ✅ Encontrado via API: {coords}")
                 return coords
         except Exception as api_error:
             print(f"[geocode] Erro na API: {str(api_error)}")
@@ -1060,6 +1060,86 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         traceback.print_exc()
         return None
 
+def obter_municipios_com_base(uf):
+    """
+    Obtém municípios que possuem base no estado especificado
+    Analisa a base de dados para encontrar cidades com agentes ou transferências
+    """
+    try:
+        print(f"[MUNICIPIOS_BASE] 🔍 Buscando municípios com base em {uf}...")
+        
+        # Carregar base de dados
+        df_base = carregar_base_unificada()
+        if df_base is None:
+            return []
+        
+        # Normalizar UF
+        uf_norm = normalizar_uf(uf)
+        
+        # Coletar cidades únicas que têm base no estado
+        cidades_com_base = set()
+        
+        # 1. Buscar nas origens e destinos onde UF corresponde
+        # Filtrar registros do estado
+        df_estado = df_base[
+            (df_base['UF'] == uf_norm) |
+            (df_base['UF'].str.contains(uf_norm, case=False, na=False))
+        ]
+        
+        # Adicionar cidades de origem
+        for cidade in df_estado['Origem'].dropna().unique():
+            cidade_norm = normalizar_cidade_nome(str(cidade))
+            if cidade_norm:
+                cidades_com_base.add(cidade_norm)
+        
+        # Adicionar cidades de destino
+        for cidade in df_estado['Destino'].dropna().unique():
+            cidade_norm = normalizar_cidade_nome(str(cidade))
+            if cidade_norm:
+                cidades_com_base.add(cidade_norm)
+        
+        # Adicionar bases
+        for base in df_estado['Base Origem'].dropna().unique():
+            base_norm = normalizar_cidade_nome(str(base))
+            if base_norm and len(base_norm) > 3:  # Evitar códigos muito curtos
+                cidades_com_base.add(base_norm)
+        
+        for base in df_estado['Base Destino'].dropna().unique():
+            base_norm = normalizar_cidade_nome(str(base))
+            if base_norm and len(base_norm) > 3:
+                cidades_com_base.add(base_norm)
+        
+        # 2. Adicionar principais cidades conhecidas do estado
+        cidades_principais = {
+            'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'PELOTAS', 'CANOAS', 'SANTA MARIA', 
+                   'GRAVATAI', 'NOVO HAMBURGO', 'SAO LEOPOLDO', 'RIO GRANDE', 'PASSO FUNDO'],
+            'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'SAO JOSE', 'CHAPECO',
+                   'ITAJAI', 'JARAGUA DO SUL', 'CRICIUMA', 'NAVEGANTES', 'LAGES'],
+            'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'PONTA GROSSA', 'CASCAVEL',
+                   'SAO JOSE DOS PINHAIS', 'FOZ DO IGUACU', 'COLOMBO', 'GUARAPUAVA', 'PARANAGUA']
+        }
+        
+        if uf_norm in cidades_principais:
+            for cidade in cidades_principais[uf_norm]:
+                cidades_com_base.add(cidade)
+        
+        # Converter para lista de dicionários
+        municipios = []
+        for cidade in sorted(cidades_com_base):
+            if cidade and len(cidade) > 2:  # Filtrar entradas vazias ou muito curtas
+                municipios.append({
+                    'nome': cidade,
+                    'uf': uf_norm,
+                    'tem_base': True
+                })
+        
+        print(f"[MUNICIPIOS_BASE] ✅ Encontrados {len(municipios)} municípios com base em {uf}")
+        return municipios[:20]  # Limitar a 20 municípios para não sobrecarregar
+        
+    except Exception as e:
+        print(f"[MUNICIPIOS_BASE] ❌ Erro ao obter municípios: {e}")
+        return []
+
 def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, valor_nf=None, cubagem=None):
     """
     Calcula frete com sistema de agentes - APENAS rotas completas válidas
@@ -1178,88 +1258,230 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 continue
         
         # 2. BUSCAR ROTAS COM AGENTES + TRANSFERÊNCIAS
-        # Agentes de coleta (origem = cidade origem EXATA)
+        # Agentes de coleta - BUSCA GLOBAL E INTELIGENTE
         agentes_coleta = df_agentes[
             df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)
         ]
         
-        # Se não encontrar agentes na cidade exata, buscar na mesma UF com busca flexível
+        # Se não encontrar agentes na cidade exata, usar estratégia global
         if agentes_coleta.empty:
-            print(f"[AGENTES] 🔍 Busca expandida de agentes de coleta em {uf_origem}...")
-            # Primeiro buscar agentes na mesma UF com tipo Agente
-            agentes_coleta = df_agentes[
-                (df_agentes['UF'] == uf_origem) &
-                (df_agentes['Tipo'] == 'Agente')
-            ]
+            print(f"[AGENTES] 🔍 Busca global de agentes de coleta...")
             
-            # Se ainda vazio, buscar usando métodos mais flexíveis
-            if agentes_coleta.empty:
-                print(f"[AGENTES] 🔍 Busca avançada por agentes em {uf_origem}...")
-                # Buscar qualquer menção ao UF em qualquer campo
+            # ESTRATÉGIA 0.5: Buscar agentes em cidades próximas primeiro
+            print(f"[AGENTES] 🗺️ ESTRATÉGIA 0.5: Buscando agentes em cidades próximas a {origem_norm}...")
+            
+            # Mapa de cidades próximas para cidades pequenas
+            cidades_proximas_mapa = {
+                # RS - Cidades pequenas e suas cidades HUB mais próximas
+                'ARAMBARE': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI', 'NOVO HAMBURGO'],
+                'AGUDO': ['SANTA MARIA', 'SANTA CRUZ DO SUL'],
+                'ALEGRETE': ['URUGUAIANA', 'SANTANA DO LIVRAMENTO'],
+                
+                # SC - Cidades pequenas e suas cidades HUB mais próximas  
+                'AGRONOMICA': ['BLUMENAU', 'POMERODE', 'INDAIAL', 'RIO DO SUL'],
+                'AGUAS MORNAS': ['FLORIANOPOLIS', 'SAO JOSE', 'PALHOCA'],
+                'ALFREDO WAGNER': ['FLORIANOPOLIS', 'LAGES'],
+                
+                # Padrão para qualquer cidade pequena por estado
+                '_DEFAULT_RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'CANOAS', 'PELOTAS', 'SANTA MARIA'],
+                '_DEFAULT_SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO'],
+                '_DEFAULT_PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA']
+            }
+            
+            # Buscar cidades próximas
+            cidades_proximas = cidades_proximas_mapa.get(origem_norm, [])
+            if not cidades_proximas:
+                # Usar cidades padrão do estado
+                cidades_proximas = cidades_proximas_mapa.get(f'_DEFAULT_{uf_origem}', [])
+            
+            if cidades_proximas:
+                # Buscar agentes em qualquer uma das cidades próximas
                 agentes_coleta = df_agentes[
-                    ((df_agentes['UF'].str.contains(uf_origem, case=False, na=False)) |
-                     (df_agentes['Base Origem'].str.contains(uf_origem, case=False, na=False)) |
-                     (df_agentes['Origem'].str.contains(uf_origem, case=False, na=False)))
+                    df_agentes['Origem'].apply(
+                        lambda x: any(cidade in normalizar_cidade_nome(str(x)) for cidade in cidades_proximas)
+                    ) & (df_agentes['Tipo'] == 'Agente')
+                ]
+                
+                if not agentes_coleta.empty:
+                    print(f"[AGENTES] ✅ Encontrados {len(agentes_coleta)} agentes em cidades próximas: {cidades_proximas[:3]}")
+                else:
+                    print(f"[AGENTES] ⚠️ Nenhum agente encontrado nas cidades próximas")
+            
+            # Se ainda não encontrou, continuar com estratégias existentes
+            if agentes_coleta.empty:
+                # ESTRATÉGIA 1: Buscar QUALQUER agente no estado de origem
+                print(f"[AGENTES] 📍 ESTRATÉGIA 1: Buscando agentes em {uf_origem}...")
+                agentes_coleta = df_agentes[
+                    (df_agentes['UF'] == uf_origem) &
+                    (df_agentes['Tipo'] == 'Agente')
                 ]
             
-            print(f"[AGENTES] Busca expandida encontrou: {len(agentes_coleta)} agentes")
-            
-            # Se ainda não encontrou nada, procurar por qualquer agente disponível (menos restritivo)
+            # ESTRATÉGIA 2: Se ainda vazio, buscar agentes que mencionem o estado
             if agentes_coleta.empty:
-                print(f"[AGENTES] 🕐 Última tentativa - buscando todos os agentes disponíveis...")
-                agentes_coleta = df_agentes[df_agentes['Tipo'] == 'Agente'].head(5)  # Limitar a 5 resultados
-                print(f"[AGENTES] Selecionados {len(agentes_coleta)} agentes de coleta alternativos")
+                print(f"[AGENTES] 📍 ESTRATÉGIA 2: Busca flexível por {uf_origem}...")
+                agentes_coleta = df_agentes[
+                    (df_agentes['Base Origem'].str.contains(uf_origem, case=False, na=False) |
+                     df_agentes['Base Destino'].str.contains(uf_origem, case=False, na=False) |
+                     df_agentes['UF'].str.contains(uf_origem, case=False, na=False))
+                ]
+            
+            # ESTRATÉGIA 3: Buscar agentes em cidades HUB do estado
+            if agentes_coleta.empty or len(agentes_coleta) > 20:
+                print(f"[AGENTES] 📍 ESTRATÉGIA 3: Priorizando agentes em cidades HUB...")
+                
+                hubs_por_estado = {
+                    'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'PELOTAS', 'CANOAS', 'SANTA MARIA', 'NOVO HAMBURGO'],
+                    'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO', 'CRICIUMA'],
+                    'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA', 'FOZ DO IGUACU'],
+                    'SP': ['SAO PAULO', 'CAMPINAS', 'SANTOS', 'RIBEIRAO PRETO', 'GUARULHOS'],
+                    'RJ': ['RIO DE JANEIRO', 'NITEROI', 'NOVA IGUACU', 'DUQUE DE CAXIAS'],
+                    'MG': ['BELO HORIZONTE', 'UBERLANDIA', 'JUIZ DE FORA', 'CONTAGEM', 'BETIM']
+                }
+                
+                cidades_hub = hubs_por_estado.get(uf_origem, [])
+                
+                if cidades_hub:
+                    agentes_hub = df_agentes[
+                        df_agentes['Origem'].apply(
+                            lambda x: any(hub in normalizar_cidade_nome(str(x)) for hub in cidades_hub)
+                        )
+        ]
         
-        # Agentes de entrega (origem = cidade destino EXATA + validação por UF)
+                    if not agentes_hub.empty:
+                        agentes_coleta = agentes_hub
+                        print(f"[AGENTES] ✅ Priorizados {len(agentes_coleta)} agentes em cidades HUB")
+            
+            # Limitar resultados para não sobrecarregar
+            if len(agentes_coleta) > 10:
+                agentes_coleta = agentes_coleta.head(10)
+                print(f"[AGENTES] ⚠️ Limitado a 10 agentes de coleta")
+            
+            print(f"[AGENTES] ✅ Total de agentes de coleta encontrados: {len(agentes_coleta)}")
+        
+        # Agentes de entrega - BUSCA GLOBAL E INTELIGENTE
         agentes_entrega = df_agentes[
             df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
         ]
-        
-        # 🔧 BUSCA EXPANDIDA DE AGENTES DE ENTREGA (MELHORADO E MAIS FLEXÍVEL)
-        if agentes_entrega.empty:
-            print(f"[AGENTES] 🔍 Busca expandida de agentes de entrega em {destino_norm}...")
-            # Primeiro tentar cidades que contenham parte do nome
-            agentes_entrega = df_agentes[
-                df_agentes['Origem'].apply(lambda x: destino_norm in normalizar_cidade_nome(str(x)).upper() if x else False)
-            ]
-            print(f"[AGENTES] Busca expandida por nome encontrou: {len(agentes_entrega)} agentes")
             
-            # Se ainda não encontrar, buscar na mesma UF com tipo Agente
+        # Se não encontrar agentes na cidade exata, usar estratégia global
+        if agentes_entrega.empty:
+            print(f"[AGENTES] 🔍 Busca global de agentes de entrega...")
+            
+            # ESTRATÉGIA 0.5: Buscar agentes em cidades próximas primeiro
+            print(f"[AGENTES] 🗺️ ESTRATÉGIA 0.5: Buscando agentes em cidades próximas a {destino_norm}...")
+            
+            # Usar o mesmo mapa de cidades próximas
+            cidades_proximas_mapa = {
+                # RS - Cidades pequenas e suas cidades HUB mais próximas
+                'ARAMBARE': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI', 'NOVO HAMBURGO'],
+                'AGUDO': ['SANTA MARIA', 'SANTA CRUZ DO SUL'],
+                'ALEGRETE': ['URUGUAIANA', 'SANTANA DO LIVRAMENTO'],
+                
+                # SC - Cidades pequenas e suas cidades HUB mais próximas  
+                'AGRONOMICA': ['BLUMENAU', 'POMERODE', 'INDAIAL', 'RIO DO SUL'],
+                'AGUAS MORNAS': ['FLORIANOPOLIS', 'SAO JOSE', 'PALHOCA'],
+                'ALFREDO WAGNER': ['FLORIANOPOLIS', 'LAGES'],
+                
+                # Padrão para qualquer cidade pequena por estado
+                '_DEFAULT_RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'CANOAS', 'PELOTAS', 'SANTA MARIA'],
+                '_DEFAULT_SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO'],
+                '_DEFAULT_PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA']
+            }
+            
+            # Buscar cidades próximas
+            cidades_proximas = cidades_proximas_mapa.get(destino_norm, [])
+            if not cidades_proximas:
+                # Usar cidades padrão do estado
+                cidades_proximas = cidades_proximas_mapa.get(f'_DEFAULT_{uf_destino}', [])
+            
+            if cidades_proximas:
+                # Buscar agentes em qualquer uma das cidades próximas
+                agentes_entrega = df_agentes[
+                    df_agentes['Origem'].apply(
+                        lambda x: any(cidade in normalizar_cidade_nome(str(x)) for cidade in cidades_proximas)
+                    ) & (df_agentes['Tipo'] == 'Agente')
+                ]
+                
+                if not agentes_entrega.empty:
+                    print(f"[AGENTES] ✅ Encontrados {len(agentes_entrega)} agentes em cidades próximas: {cidades_proximas[:3]}")
+                else:
+                    print(f"[AGENTES] ⚠️ Nenhum agente encontrado nas cidades próximas")
+            
+            # Se ainda não encontrou, continuar com estratégias existentes
             if agentes_entrega.empty:
-                print(f"[AGENTES] 🔍 Busca expandida de agentes de entrega em {uf_destino}...")
+                # ESTRATÉGIA 1: Buscar QUALQUER agente no estado de destino
+                print(f"[AGENTES] 📍 ESTRATÉGIA 1: Buscando agentes em {uf_destino}...")
                 agentes_entrega = df_agentes[
                     (df_agentes['UF'] == uf_destino) &
                     (df_agentes['Tipo'] == 'Agente')
                 ]
                 
-                # Se ainda vazio, buscar usando métodos mais flexíveis
+                # ESTRATÉGIA 2: Se ainda vazio, buscar agentes que mencionem o estado
                 if agentes_entrega.empty:
-                    print(f"[AGENTES] 🔍 Busca avançada por agentes em {uf_destino}...")
-                    # Buscar qualquer menção ao UF em qualquer campo
+                    print(f"[AGENTES] 📍 ESTRATÉGIA 2: Busca flexível por {uf_destino}...")
                     agentes_entrega = df_agentes[
-                        ((df_agentes['UF'].str.contains(uf_destino, case=False, na=False)) |
-                         (df_agentes['Base Destino'].str.contains(uf_destino, case=False, na=False)) |
-                         (df_agentes['Destino'].str.contains(uf_destino, case=False, na=False)))
+                        (df_agentes['Base Origem'].str.contains(uf_destino, case=False, na=False) |
+                         df_agentes['Base Destino'].str.contains(uf_destino, case=False, na=False) |
+                         df_agentes['UF'].str.contains(uf_destino, case=False, na=False))
                     ]
+            
+            # ESTRATÉGIA 3: Buscar agentes em cidades HUB do estado
+            if agentes_entrega.empty or len(agentes_entrega) > 20:
+                print(f"[AGENTES] 📍 ESTRATÉGIA 3: Priorizando agentes em cidades HUB...")
                 
-                print(f"[AGENTES] Busca expandida por UF encontrou: {len(agentes_entrega)} agentes")
+                hubs_por_estado = {
+                    'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'PELOTAS', 'CANOAS', 'SANTA MARIA', 'NOVO HAMBURGO'],
+                    'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO', 'CRICIUMA'],
+                    'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA', 'FOZ DO IGUACU'],
+                    'SP': ['SAO PAULO', 'CAMPINAS', 'SANTOS', 'RIBEIRAO PRETO', 'GUARULHOS'],
+                    'RJ': ['RIO DE JANEIRO', 'NITEROI', 'NOVA IGUACU', 'DUQUE DE CAXIAS'],
+                    'MG': ['BELO HORIZONTE', 'UBERLANDIA', 'JUIZ DE FORA', 'CONTAGEM', 'BETIM']
+                }
                 
-                # Se ainda não encontrou nada, procurar por qualquer agente disponível (menos restritivo)
-                if agentes_entrega.empty:
-                    print(f"[AGENTES] 🕐 Última tentativa - buscando todos os agentes disponíveis...")
-                    agentes_entrega = df_agentes[df_agentes['Tipo'] == 'Agente'].head(5)  # Limitar a 5 resultados
-                    print(f"[AGENTES] Selecionados {len(agentes_entrega)} agentes de entrega alternativos")
-        
-        # Validação adicional por UF para agentes de entrega
-        if not agentes_entrega.empty:
-            agentes_entrega_validados = agentes_entrega[
-                agentes_entrega['UF'].apply(lambda x: str(x).upper() == uf_destino.upper())
-            ]
-            if len(agentes_entrega_validados) > 0:
-                agentes_entrega = agentes_entrega_validados
-                print(f"[AGENTES] ✅ Agentes validados por UF {uf_destino}: {len(agentes_entrega)}")
-            else:
-                print(f"[AGENTES] ⚠️ Nenhum agente validado por UF {uf_destino}, mantendo todos: {len(agentes_entrega)}")
+                cidades_hub = hubs_por_estado.get(uf_destino, [])
+                
+                if cidades_hub:
+                    agentes_hub = df_agentes[
+                        df_agentes['Origem'].apply(
+                            lambda x: any(hub in normalizar_cidade_nome(str(x)) for hub in cidades_hub)
+                        )
+                    ]
+                    
+                    if not agentes_hub.empty:
+                        agentes_entrega = agentes_hub
+                        print(f"[AGENTES] ✅ Priorizados {len(agentes_entrega)} agentes em cidades HUB")
+            
+            # ESTRATÉGIA 4: Se ainda não tem agentes suficientes, expandir busca
+            if len(agentes_entrega) < 3:
+                print(f"[AGENTES] 📍 ESTRATÉGIA 4: Expandindo busca para estados vizinhos...")
+                
+                # Mapa de estados vizinhos
+                estados_vizinhos = {
+                    'RS': ['SC'],
+                    'SC': ['RS', 'PR'],
+                    'PR': ['SC', 'SP', 'MS'],
+                    'SP': ['PR', 'MG', 'RJ', 'MS'],
+                    'RJ': ['SP', 'MG', 'ES'],
+                    'MG': ['SP', 'RJ', 'ES', 'BA', 'GO']
+                }
+                
+                vizinhos = estados_vizinhos.get(uf_destino, [])
+                for estado_viz in vizinhos[:1]:  # Pegar apenas o vizinho mais próximo
+                    agentes_viz = df_agentes[
+                        (df_agentes['UF'] == estado_viz) &
+                        (df_agentes['Tipo'] == 'Agente')
+                    ].head(5)  # Limitar a 5 agentes
+                    
+                    if not agentes_viz.empty:
+                        print(f"[AGENTES] ✅ Adicionados {len(agentes_viz)} agentes de {estado_viz}")
+                        agentes_entrega = pd.concat([agentes_entrega, agentes_viz])
+            
+            # Limitar resultados para não sobrecarregar
+            if len(agentes_entrega) > 10:
+                agentes_entrega = agentes_entrega.head(10)
+                print(f"[AGENTES] ⚠️ Limitado a 10 agentes de entrega")
+            
+            print(f"[AGENTES] ✅ Total de agentes de entrega encontrados: {len(agentes_entrega)}")
 
         # AVISO: Verificar se há agentes de entrega, mas continuar com rotas parciais
         if agentes_entrega.empty:
@@ -1275,10 +1497,164 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
         ]
         
-        # Se não encontrar, tentar cidades na mesma UF
+        # Se não encontrar, tentar estratégias mais abrangentes
         if transferencias_origem_destino.empty:
-            print(f"[TRANSFERENCIAS] 🔍 Busca expandida de transferências em {uf_origem} → {uf_destino}...")
-            # Verificando as colunas disponíveis para UF
+            print(f"[TRANSFERENCIAS] 🔍 Busca inteligente por rotas disponíveis...")
+            
+            # ESTRATÉGIA 1: Buscar TODAS as transferências que saem da origem para o estado destino
+            print(f"[TRANSFERENCIAS] 📍 ESTRATÉGIA 1: Buscando transferências {origem_norm} → qualquer cidade em {uf_destino}...")
+            transf_origem_para_uf = df_transferencias[
+                (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
+                ((df_transferencias['UF'] == f"{uf_origem}-{uf_destino}") |
+                 (df_transferencias['UF'].str.contains(uf_destino, case=False, na=False)) |
+                 (df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)))
+            ]
+            
+            if not transf_origem_para_uf.empty:
+                print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transf_origem_para_uf)} transferências de {origem_norm} para {uf_destino}")
+                transferencias_origem_destino = transf_origem_para_uf
+            
+            # ESTRATÉGIA 2: Buscar transferências de qualquer cidade em RS para o destino específico
+            if transferencias_origem_destino.empty:
+                print(f"[TRANSFERENCIAS] 📍 ESTRATÉGIA 2: Buscando transferências de qualquer cidade em {uf_origem} → {destino_norm}...")
+                transf_uf_para_destino = df_transferencias[
+                    ((df_transferencias['UF'] == f"{uf_origem}-{uf_destino}") |
+                     (df_transferencias['UF'].str.startswith(uf_origem, na=False)) |
+                     (df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False))) &
+                    (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
+                ]
+                
+                if not transf_uf_para_destino.empty:
+                    print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transf_uf_para_destino)} transferências de {uf_origem} para {destino_norm}")
+                    transferencias_origem_destino = transf_uf_para_destino
+            
+            # ESTRATÉGIA 3: Buscar QUALQUER transferência entre os estados
+            if transferencias_origem_destino.empty:
+                print(f"[TRANSFERENCIAS] 📍 ESTRATÉGIA 3: Buscando QUALQUER transferência {uf_origem} → {uf_destino}...")
+                
+                # Múltiplas tentativas com diferentes padrões
+                patterns_uf = [
+                    f"{uf_origem}-{uf_destino}",
+                    f"{uf_origem}/{uf_destino}",
+                    f"{uf_origem} {uf_destino}",
+                    f"{uf_origem}{uf_destino}"
+                ]
+                
+                for pattern in patterns_uf:
+                    transf_entre_ufs = df_transferencias[
+                        df_transferencias['UF'].str.contains(pattern, case=False, na=False) |
+                        (df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False) & 
+                         df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False))
+                    ]
+                    
+                    if not transf_entre_ufs.empty:
+                        print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transf_entre_ufs)} transferências com padrão '{pattern}'")
+                        transferencias_origem_destino = transf_entre_ufs
+                        break
+            
+            # ESTRATÉGIA 4: Buscar cidades HUB principais de cada estado
+            if transferencias_origem_destino.empty:
+                print(f"[TRANSFERENCIAS] 📍 ESTRATÉGIA 4: Buscando via cidades HUB...")
+                
+                # Definir HUBs principais por estado
+                hubs_por_estado = {
+                    'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'PELOTAS', 'SANTA MARIA', 'PASSO FUNDO'],
+                    'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO', 'CRICIUMA'],
+                    'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA'],
+                    'SP': ['SAO PAULO', 'CAMPINAS', 'SANTOS', 'RIBEIRAO PRETO', 'SAO JOSE DOS CAMPOS'],
+                    'RJ': ['RIO DE JANEIRO', 'NITEROI', 'NOVA IGUACU', 'DUQUE DE CAXIAS'],
+                    'MG': ['BELO HORIZONTE', 'UBERLANDIA', 'JUIZ DE FORA', 'CONTAGEM']
+                }
+                
+                # Buscar transferências via HUBs
+                hubs_origem = hubs_por_estado.get(uf_origem, [])
+                hubs_destino = hubs_por_estado.get(uf_destino, [])
+                
+                for hub_orig in hubs_origem[:3]:  # Limitar a 3 principais HUBs
+                    for hub_dest in hubs_destino[:3]:
+                        transf_hub = df_transferencias[
+                            (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == hub_orig)) &
+                            (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == hub_dest))
+                        ]
+                        
+                        if not transf_hub.empty:
+                            print(f"[TRANSFERENCIAS] ✅ Rota via HUBs: {hub_orig} → {hub_dest} ({len(transf_hub)} opções)")
+                            transferencias_origem_destino = pd.concat([transferencias_origem_destino, transf_hub])
+                            if len(transferencias_origem_destino) >= 3:
+                                break
+                    
+                    if len(transferencias_origem_destino) >= 3:
+                        break
+            
+            # ESTRATÉGIA 4.5: CONECTAR CIDADES PEQUENAS VIA HUBs PRÓXIMOS
+            if transferencias_origem_destino.empty:
+                print(f"[TRANSFERENCIAS] 🚀 ESTRATÉGIA 4.5: Conectando cidades pequenas via HUBs próximos...")
+                
+                # Mapa de cidades pequenas e seus HUBs mais próximos
+                cidades_pequenas_hubs = {
+                    # RS - Cidades pequenas e seus HUBs
+                    'ARAMBARE': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI'],
+                    'AGUDO': ['SANTA MARIA', 'SANTA CRUZ DO SUL'],
+                    'ALEGRETE': ['URUGUAIANA', 'SANTANA DO LIVRAMENTO'],
+                    'ALVORADA': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI'],
+                    
+                    # SC - Cidades pequenas e seus HUBs
+                    'AGRONOMICA': ['BLUMENAU', 'POMERODE', 'RIO DO SUL'],
+                    'AGUAS MORNAS': ['FLORIANOPOLIS', 'SAO JOSE', 'PALHOCA'],
+                    'ALFREDO WAGNER': ['FLORIANOPOLIS', 'LAGES'],
+                    'ANGELINA': ['FLORIANOPOLIS', 'SAO JOSE'],
+                    
+                    # PR - Cidades pequenas e seus HUBs
+                    'ADRIANOPOLIS': ['CURITIBA', 'PINHAIS'],
+                    'AGUDOS DO SUL': ['CURITIBA', 'SAO JOSE DOS PINHAIS'],
+                    'ALMIRANTE TAMANDARE': ['CURITIBA', 'COLOMBO']
+                }
+                
+                # Buscar HUBs próximos para origem e destino
+                hubs_proximos_origem = cidades_pequenas_hubs.get(origem_norm, [])
+                hubs_proximos_destino = cidades_pequenas_hubs.get(destino_norm, [])
+                
+                # Se não encontrou HUBs específicos, usar HUBs do estado
+                if not hubs_proximos_origem:
+                    hubs_proximos_origem = hubs_por_estado.get(uf_origem, [])[:3]
+                if not hubs_proximos_destino:
+                    hubs_proximos_destino = hubs_por_estado.get(uf_destino, [])[:3]
+                
+                print(f"[TRANSFERENCIAS] 🗺️ Origem {origem_norm}: HUBs próximos → {hubs_proximos_origem}")
+                print(f"[TRANSFERENCIAS] 🗺️ Destino {destino_norm}: HUBs próximos → {hubs_proximos_destino}")
+                
+                # Buscar transferências entre os HUBs próximos
+                for hub_orig in hubs_proximos_origem:
+                    for hub_dest in hubs_proximos_destino:
+                        # Buscar transferências HUB → HUB
+                        transf_entre_hubs = df_transferencias[
+                            (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == hub_orig)) &
+                            (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == hub_dest))
+                        ]
+                        
+                        if not transf_entre_hubs.empty:
+                            print(f"[TRANSFERENCIAS] 🎯 ENCONTRADA rota: {origem_norm} → {hub_orig} → {hub_dest} → {destino_norm}")
+                            print(f"[TRANSFERENCIAS] ✅ Transferência {hub_orig} → {hub_dest}: {len(transf_entre_hubs)} opções")
+                            
+                            # Adicionar metadados sobre a rota completa
+                            for idx in transf_entre_hubs.index:
+                                # Criar cópia para não alterar o dataframe original
+                                transferencias_origem_destino = pd.concat([transferencias_origem_destino, transf_entre_hubs.loc[[idx]]])
+                            
+                            # Se encontrou suficientes, parar
+                            if len(transferencias_origem_destino) >= 3:
+                                break
+                    
+                    if len(transferencias_origem_destino) >= 3:
+                        break
+                
+                # Relatório final da estratégia 4.5
+                if not transferencias_origem_destino.empty:
+                    print(f"[TRANSFERENCIAS] ✅ ESTRATÉGIA 4.5 encontrou {len(transferencias_origem_destino)} rotas via HUBs")
+                else:
+                    print(f"[TRANSFERENCIAS] ❌ ESTRATÉGIA 4.5 não encontrou rotas via HUBs próximos")
+            
+            # ESTRATÉGIA 5: Busca final genérica - qualquer transferência entre os estados
             if 'UF Origem' in df_transferencias.columns and 'UF Destino' in df_transferencias.columns:
                 transferencias_origem_destino = df_transferencias[
                     (df_transferencias['UF Origem'] == uf_origem) &
@@ -1306,20 +1682,21 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 if transferencias_origem_destino.empty and 'UF' in df_transferencias.columns:
                     # Tentar usar a coluna UF com diferentes padrões
                     print(f"[TRANSFERENCIAS] 🔄 Tentando busca avançada na coluna UF...")
-                    # Verificar vários padrões comuns: "PR-MG", "PR/MG", etc
+                        # Verificar vários padrões comuns: "RS-SC", "RS/SC", etc
                     patterns = [f"{uf_origem}{sep}{uf_destino}" for sep in ["-", "/", " ", ""]]
                     mask = df_transferencias['UF'].apply(
                         lambda x: any(pattern.lower() in str(x).lower() for pattern in patterns)
                     )
                     transferencias_origem_destino = df_transferencias[mask]
                     
-                    # Se ainda não encontrar, verificar UF invertida (ex: "MG-PR" em vez de "PR-MG")
+                        # Se ainda não encontrar, verificar UF invertida (ex: "SC-RS" em vez de "RS-SC")
                     if transferencias_origem_destino.empty:
                         patterns_inv = [f"{uf_destino}{sep}{uf_origem}" for sep in ["-", "/", " ", ""]]
                         mask = df_transferencias['UF'].apply(
                             lambda x: any(pattern.lower() in str(x).lower() for pattern in patterns_inv)
                         )
                         transferencias_origem_destino = df_transferencias[mask]
+            
             print(f"[TRANSFERENCIAS] Busca expandida encontrou: {len(transferencias_origem_destino)} transferências")
         
         print(f"[TRANSFERENCIAS] 🎯 Busca direta {origem} → {destino}: {len(transferencias_origem_destino)} encontradas")
@@ -1329,24 +1706,323 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         else:
             print(f"[TRANSFERENCIAS] ❌ Nenhuma transferência direta {origem} → {destino}")
             print(f"[TRANSFERENCIAS] 🔍 Buscando rotas alternativas via bases...")
+            
+            # Mapa de proximidade geográfica entre estados (apenas adjacentes diretos)
+            # Limitado apenas a estados realmente próximos
+            proximidade_estados = {
+                'RS': ['SC'],  # RS só faz fronteira com SC
+                'SC': ['RS', 'PR'],  # SC faz fronteira com RS e PR
+                'PR': ['SC', 'SP', 'MS'],  # PR faz fronteira com SC, SP e MS
+                'SP': ['PR', 'MG', 'RJ', 'MS'],
+                'RJ': ['SP', 'MG', 'ES'],
+                'MG': ['SP', 'RJ', 'ES', 'BA', 'GO', 'MS', 'DF'],
+                'MS': ['PR', 'SP', 'MG', 'GO', 'MT'],
+                'ES': ['RJ', 'MG', 'BA'],
+                'BA': ['ES', 'MG', 'GO', 'TO', 'PI', 'PE', 'AL', 'SE'],
+                # Remover estados distantes do Sul
+            }
+            
+            # Função para calcular nível de proximidade entre estados
+            def calcular_proximidade_estados(estado1, estado2):
+                if not estado1 or not estado2:
+                    return 999  # Estados inválidos = baixa prioridade
+                    
+                estado1 = estado1.upper()
+                estado2 = estado2.upper()
+                
+                if estado1 == estado2:
+                    return 0  # Mesmo estado = máxima prioridade
+                elif estado1 in proximidade_estados and estado2 in proximidade_estados[estado1]:
+                    return 1  # Estado adjacente = alta prioridade
+                elif estado2 in proximidade_estados and estado1 in proximidade_estados[estado2]:
+                    return 1  # Estado adjacente = alta prioridade
+                else:
+                    # Verificar se há um estado intermediário conectando os dois
+                    for estado_intermediario in proximidade_estados.get(estado1, []):
+                        if estado2 in proximidade_estados.get(estado_intermediario, []):
+                            return 2  # Um estado de distância = prioridade média
+                    return 3  # Mais distante = baixa prioridade
+            
+            # MÉTODO 3: Buscar transferências via estados ADJACENTES apenas
+            print(f"[TRANSFERENCIAS] 🌍 MÉTODO 3: Buscando transferências via estados adjacentes...")
+            
+            # Para RS → SC, só considerar estados que fazem fronteira direta
+            estados_proximos = []
+            
+            # Se origem é RS e destino é SC, são adjacentes diretos
+            if uf_origem == 'RS' and uf_destino == 'SC':
+                print(f"[TRANSFERENCIAS] ✅ {uf_origem} e {uf_destino} são estados adjacentes")
+                # Não precisa de estado intermediário, mas vamos buscar rotas via cidades principais
+                # Focar em cidades de divisa ou principais
+                estados_proximos = []  # Sem estados intermediários necessários
+            
+            # Se origem é RS e destino não é adjacente, usar SC como intermediário
+            elif uf_origem == 'RS' and uf_destino in ['PR', 'SP']:
+                estados_proximos = [('SC', 1)]  # SC como intermediário
+            
+            # Para outros casos no Sul
+            elif uf_origem in ['RS', 'SC', 'PR'] and uf_destino in ['RS', 'SC', 'PR']:
+                # Verificar adjacência direta
+                if uf_destino in proximidade_estados.get(uf_origem, []):
+                    estados_proximos = []  # São adjacentes, não precisa intermediário
+                else:
+                    # Encontrar estado intermediário comum
+                    for estado_inter in ['SC', 'PR']:  # Apenas estados do Sul
+                        if (estado_inter in proximidade_estados.get(uf_origem, []) and 
+                            uf_destino in proximidade_estados.get(estado_inter, [])):
+                            estados_proximos.append((estado_inter, 1))
+                            break
+            
+            # Máximo de estados intermediários a tentar
+            max_estados_intermediarios = 2  # Reduzido para focar apenas em rotas diretas
+            estados_tentados = 0
+            max_transferencias = 5  # Limite reduzido
+            
+            # Buscar transferências via estados intermediários próximos
+            print(f"[TRANSFERENCIAS] 🔍 Buscando por estados intermediários: {[e[0] for e in estados_proximos[:max_estados_intermediarios]]}")
+            
+            for estado_intermediario, nivel_proximidade in estados_proximos:
+                if estados_tentados >= max_estados_intermediarios or len(transferencias_origem_destino) >= max_transferencias:
+                    break
+                
+                estados_tentados += 1
+                print(f"[TRANSFERENCIAS] 🔄 Tentando via estado {estado_intermediario} (proximidade: {nivel_proximidade})")
+                
+                # Tentar usar geolocalização para encontrar municípios com base no estado intermediário
+                try:
+                    municipios_intermediario = obter_municipios_com_base(estado_intermediario)
+                    print(f"[GEOLOC] 🌍 Analisando {len(municipios_intermediario)} municípios com base em {estado_intermediario}")
+                    
+                    # Se encontrou municípios com base, priorizá-los na busca
+                    if municipios_intermediario:
+                        transferencias_primeiro_trecho = pd.DataFrame()  # Começar com DF vazio
+                        
+                        # Ordenar municípios por algum critério (ex: tamanho da população)
+                        for municipio in municipios_intermediario:
+                            nome_municipio = municipio['nome']
+                            print(f"[GEOLOC] 📍 Verificando transferências via {nome_municipio}/{estado_intermediario}")
+                            
+                            # Buscar transferências que passam por esse município
+                            transf_via_municipio = df_transferencias[
+                                ((df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) |
+                                 (df_transferencias['Origem'].str.contains(uf_origem, case=False, na=False))) &
+                                ((df_transferencias['Base Destino'].str.contains(nome_municipio, case=False, na=False)) |
+                                 (df_transferencias['Destino'].str.contains(nome_municipio, case=False, na=False)))
+                            ]
+                            
+                            # Adicionar ao dataframe principal se encontrou
+                            if not transf_via_municipio.empty:
+                                print(f"[GEOLOC] ✅ Encontradas {len(transf_via_municipio)} transferências via {nome_municipio}")
+                                transferencias_primeiro_trecho = pd.concat([transferencias_primeiro_trecho, transf_via_municipio])
+                                
+                                # Se já encontrou transferências suficientes, parar
+                                if len(transferencias_primeiro_trecho) >= 3:
+                                    break
+                        
+                        # Se não encontrou nada via municípios, voltar à busca normal por estado
+                        if transferencias_primeiro_trecho.empty:
+                            print(f"[GEOLOC] ℹ️ Não encontrou transferências via municípios, voltando à busca por estado")
+                            transferencias_primeiro_trecho = df_transferencias[
+                                ((df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) |
+                                 (df_transferencias['Origem'].str.contains(uf_origem, case=False, na=False))) &
+                                ((df_transferencias['Base Destino'].str.contains(estado_intermediario, case=False, na=False)) |
+                                 (df_transferencias['Destino'].str.contains(estado_intermediario, case=False, na=False)))
+                            ]
+                    else:
+                        # Caso não tenha encontrado municípios com base, usar a busca normal por estado
+                        transferencias_primeiro_trecho = df_transferencias[
+                            ((df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) |
+                             (df_transferencias['Origem'].str.contains(uf_origem, case=False, na=False))) &
+                            ((df_transferencias['Base Destino'].str.contains(estado_intermediario, case=False, na=False)) |
+                             (df_transferencias['Destino'].str.contains(estado_intermediario, case=False, na=False)))
+                        ]
+                except Exception as e:
+                    print(f"[GEOLOC] ❌ Erro ao usar geolocaliização para primeiro trecho: {e}")
+                    # Em caso de erro, voltar à busca normal por estado
+                    transferencias_primeiro_trecho = df_transferencias[
+                        ((df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) |
+                         (df_transferencias['Origem'].str.contains(uf_origem, case=False, na=False))) &
+                        ((df_transferencias['Base Destino'].str.contains(estado_intermediario, case=False, na=False)) |
+                         (df_transferencias['Destino'].str.contains(estado_intermediario, case=False, na=False)))
+                    ]
+                
+                # Tentar usar geolocalização para encontrar municípios com base no estado intermediário para o segundo trecho
+                try:
+                    # Para o segundo trecho, já temos os municípios do estado intermediário
+                    # Agora também vamos verificar municípios de destino com base
+                    municipios_destino = obter_municipios_com_base(uf_destino)
+                    print(f"[GEOLOC] 🌍 Analisando {len(municipios_destino)} municípios com base em {uf_destino}")
+                    
+                    # Se encontrou municípios com base no destino, priorizamos eles
+                    if municipios_destino and 'municipios_intermediario' in locals() and municipios_intermediario:
+                        transferencias_segundo_trecho = pd.DataFrame()  # Começar com DF vazio
+                        
+                        # Tentar todas as combinações de municípios de origem e destino
+                        for mun_inter in municipios_intermediario[:5]:  # Limitar a 5 municípios de origem
+                            nome_mun_inter = mun_inter['nome']
+                            
+                            for mun_dest in municipios_destino[:5]:  # Limitar a 5 municípios de destino
+                                nome_mun_dest = mun_dest['nome']
+                                
+                                print(f"[GEOLOC] 📍 Verificando rota {nome_mun_inter}/{estado_intermediario} → {nome_mun_dest}/{uf_destino}")
+                                
+                                # Buscar transferências entre esses municípios
+                                transf_municipio_a_municipio = df_transferencias[
+                                    ((df_transferencias['Base Origem'].str.contains(nome_mun_inter, case=False, na=False)) |
+                                     (df_transferencias['Origem'].str.contains(nome_mun_inter, case=False, na=False))) &
+                                    ((df_transferencias['Base Destino'].str.contains(nome_mun_dest, case=False, na=False)) |
+                                     (df_transferencias['Destino'].str.contains(nome_mun_dest, case=False, na=False)))
+                                ]
+                                
+                                # Se encontrou, adicionar ao dataframe principal
+                                if not transf_municipio_a_municipio.empty:
+                                    print(f"[GEOLOC] ✅ Encontradas {len(transf_municipio_a_municipio)} transferências {nome_mun_inter} → {nome_mun_dest}")
+                                    transferencias_segundo_trecho = pd.concat([transferencias_segundo_trecho, transf_municipio_a_municipio])
+                                    
+                                    # Se já encontrou transferências suficientes, parar
+                                    if len(transferencias_segundo_trecho) >= 3:
+                                        break
+                            
+                            # Se já encontrou transferências suficientes, parar o loop externo também
+                            if len(transferencias_segundo_trecho) >= 3:
+                                break
+                    
+                    # Se não encontrou nada ou não temos municípios, voltar à busca normal por estado
+                    if 'transferencias_segundo_trecho' not in locals() or transferencias_segundo_trecho.empty:
+                        print(f"[GEOLOC] ℹ️ Não encontrou transferências via municípios no segundo trecho, voltando à busca por estado")
+                        transferencias_segundo_trecho = df_transferencias[
+                            ((df_transferencias['Base Origem'].str.contains(estado_intermediario, case=False, na=False)) |
+                             (df_transferencias['Origem'].str.contains(estado_intermediario, case=False, na=False))) &
+                            ((df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)) |
+                             (df_transferencias['Destino'].str.contains(uf_destino, case=False, na=False)))
+                        ]
+                except Exception as e:
+                    print(f"[GEOLOC] ❌ Erro ao usar geolocaliização para segundo trecho: {e}")
+                    # Em caso de erro, voltar à busca normal por estado
+                    transferencias_segundo_trecho = df_transferencias[
+                        ((df_transferencias['Base Origem'].str.contains(estado_intermediario, case=False, na=False)) |
+                         (df_transferencias['Origem'].str.contains(estado_intermediario, case=False, na=False))) &
+                        ((df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)) |
+                         (df_transferencias['Destino'].str.contains(uf_destino, case=False, na=False)))
+                    ]
+                
+                if not transferencias_primeiro_trecho.empty and not transferencias_segundo_trecho.empty:
+                    print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transferencias_primeiro_trecho)} transferências para {estado_intermediario} e {len(transferencias_segundo_trecho)} de {estado_intermediario} para {uf_destino}")
+                    
+                    # Marcar as transferências como 'via_intermediario' para identificar que são do MÉTODO 3
+                    for _, transf in transferencias_primeiro_trecho.iterrows():
+                        # Cria uma cópia da transferência e adiciona metadados
+                        transf_dict = transf.to_dict()
+                        transf_dict['via_estado_intermediario'] = estado_intermediario
+                        transf_dict['nivel_proximidade'] = nivel_proximidade
+                        transf_dict['metodo'] = '3_PROXIMIDADE_GEOGRAFICA'
+                        
+                        # Adiciona à lista de transferências
+                        transferencias_origem_destino = pd.concat([transferencias_origem_destino, pd.DataFrame([transf_dict])])
+                    
+                    # Também armazenar as transferências do segundo trecho (estado intermediário -> destino)
+                    # para uso posterior na construção da rota completa
+                    for _, transf2 in transf_intermediario_destino.iterrows():
+                        # Armazenar em uma lista separada para uso posterior
+                        if 'transferencias_segundo_trecho' not in locals():
+                            transferencias_segundo_trecho = []
+                        transferencias_segundo_trecho.append({
+                            'transferencia': transf2,
+                            'estado_intermediario': estado_intermediario,
+                            'nivel_proximidade': nivel_proximidade
+                        })
+                        
+                    # Se já temos transferências suficientes, podemos parar
+                    if len(transferencias_origem_destino) >= max_transferencias:
+                        print(f"[TRANSFERENCIAS] ✅ Limite de transferências atingido ({max_transferencias})")
+                        break
         
         # Função genérica para obter cidade da base (sem mapeamento específico)
         def obter_cidade_base(codigo_base):
             if len(str(codigo_base)) > 3:
                 return str(codigo_base)
             return str(codigo_base)
-
+            
+        # Mapa de proximidade geográfica entre estados (adjacentes + próximos)
+        # Usado para priorizar transferências entre estados vizinhos
+        ESTADOS_PROXIMOS = {
+            'RS': ['SC', 'PR'],
+            'SC': ['RS', 'PR'],
+            'PR': ['SC', 'SP', 'MS'],
+            'SP': ['RJ', 'MG', 'MS', 'PR'],
+            'RJ': ['SP', 'MG', 'ES'],
+            'ES': ['BA', 'MG', 'RJ'],
+            'MG': ['SP', 'GO', 'DF', 'BA', 'ES', 'RJ'],
+            'MS': ['SP', 'PR', 'MT', 'GO'],
+            'MT': ['MS', 'GO', 'RO'],
+            'GO': ['DF', 'MG', 'BA', 'TO', 'MT', 'MS'],
+            'DF': ['GO', 'MG'],
+            'BA': ['SE', 'AL', 'PE', 'MG', 'ES'],
+            'SE': ['BA', 'AL'],
+            'AL': ['SE', 'BA', 'PE'],
+            'PE': ['PB', 'CE', 'BA', 'AL'],
+            'PB': ['RN', 'CE', 'PE'],
+            'RN': ['CE', 'PB'],
+            'CE': ['PI', 'PE', 'PB', 'RN'],
+            'PI': ['CE', 'MA', 'BA'],
+            'MA': ['PA', 'PI'],
+            'TO': ['PA', 'MT', 'GO', 'BA'],
+            'PA': ['AP', 'MA', 'TO'],
+            'AP': ['PA'],
+            'AM': ['RR', 'RO', 'AC'],
+            'RR': ['AM'],
+            'AC': ['AM', 'RO'],
+            'RO': ['AM', 'MT', 'AC']
+        }
+        
+        # Função para calcular proximidade entre estados (0 = mesmo estado, 1 = vizinhos, 2 = segundo grau...)
+        def calcular_proximidade_estados(uf1, uf2):
+            if uf1 == uf2:
+                return 0
+            if uf1 in ESTADOS_PROXIMOS and uf2 in ESTADOS_PROXIMOS[uf1]:
+                return 1
+            # Verificar vizinhos de segundo grau
+            if uf1 in ESTADOS_PROXIMOS:
+                for estado_vizinho in ESTADOS_PROXIMOS[uf1]:
+                    if uf2 in ESTADOS_PROXIMOS.get(estado_vizinho, []):
+                        return 2
+            return 3  # Distantes
+        
         # Buscar transferências para bases dos agentes de entrega
+        # Priorizar agentes em estados vizinhos ou próximos ao estado de origem
+        if not agentes_entrega.empty:
+            # Adicionar campo de proximidade para ordenar agentes
+            agentes_list = []
+            for _, agente in agentes_entrega.iterrows():
+                uf_agente = agente.get('UF', '')
+                proximidade = calcular_proximidade_estados(uf_origem, uf_agente)
+                agentes_list.append((agente, proximidade))
+            
+            # Ordenar agentes por proximidade geográfica
+            agentes_list.sort(key=lambda x: x[1])
+            print(f"[AGENTES] 📍 Agentes ordenados por proximidade geográfica: {len(agentes_list)}")
+        else:
+            agentes_list = []
+            print(f"[AGENTES] ⚠️ Nenhum agente de entrega para ordenar por proximidade")
+        
+        # Percorrer agentes ordenados por proximidade - LIMITAR APENAS A ESTADOS PRÓXIMOS
         transferencias_para_bases = []
-        for _, agente_ent in agentes_entrega.iterrows():
+        for agente_ent, proximidade in agentes_list:
+            # FILTRAR: Só considerar agentes em estados próximos (proximidade <= 1)
+            if proximidade > 1:
+                print(f"[TRANSFERENCIAS] ⏭️ Ignorando agente {agente_ent.get('Fornecedor', 'N/A')} - estado muito distante (proximidade: {proximidade})")
+                continue
+                
+            print(f"[TRANSFERENCIAS] 🔍 Buscando transferências para base do agente {agente_ent.get('Fornecedor', 'N/A')} (proximidade: {proximidade})")
             fornecedor_ent = agente_ent.get('Fornecedor', 'N/A')
             base_agente = agente_ent.get('Base Origem') or agente_ent.get('Base Destino', '')
             
             if base_agente:
                 cidade_base = obter_cidade_base(str(base_agente))
-                cidade_base_norm = normalizar_cidade_nome(cidade_base)
+                cidade_base_norm = normalizar_cidade_nome(str(cidade_base))
                 
                 # Buscar transferências com fallback para colunas UF
+                print(f"[TRANSFERENCIAS] 🔍 Buscando transferência: {origem_norm} → {cidade_base_norm}")
                 transf_para_base = df_transferencias[
                     (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
                     (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == cidade_base_norm))
@@ -1409,6 +2085,13 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             'codigo_base': base_agente
                         })
 
+        # Declarar a variável para armazenar transferências do segundo trecho do MÉTODO 3
+        if 'transferencias_segundo_trecho' not in locals():
+            transferencias_segundo_trecho = []
+            print(f"[TRANSFERENCIAS] ℹ️ Não há transferências de segundo trecho do MÉTODO 3")
+        else:
+            print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transferencias_segundo_trecho)} transferências de segundo trecho para rotas via estados próximos")
+        
         # Se há agentes de coleta E transferências cidade→cidade, criar rotas
         if not agentes_coleta.empty and not transferencias_origem_destino.empty:
             for _, agente_col in agentes_coleta.iterrows():
@@ -2676,6 +3359,7 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
                 transferencia.get('base_destino') or
                 transferencia.get('destino') or
                 agente_entrega.get('base_origem') or
+                agente_entrega.get('origem') or
                 opcao.get('destino') or  # Usar cidade de destino como fallback
                 'Destino'  # Fallback final
             )
