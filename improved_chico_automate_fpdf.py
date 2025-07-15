@@ -1109,10 +1109,25 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # Se não encontrar, tentar cidades na mesma UF
         if servicos_diretos.empty:
             print(f"[DIRETOS] 🔍 Busca expandida de serviços diretos em {uf_origem} → {uf_destino}...")
-            servicos_diretos = df_diretos[
-                (df_diretos['UF Origem'] == uf_origem) &
-                (df_diretos['UF Destino'] == uf_destino)
-            ]
+            # Verificando as colunas disponíveis para UF
+            if 'UF Origem' in df_diretos.columns and 'UF Destino' in df_diretos.columns:
+                servicos_diretos = df_diretos[
+                    (df_diretos['UF Origem'] == uf_origem) &
+                    (df_diretos['UF Destino'] == uf_destino)
+                ]
+            else:
+                # Fallback usando a coluna UF e Base Origem/Base Destino para determinar UFs
+                servicos_diretos = df_diretos[
+                    (df_diretos['Base Origem'].str.contains(uf_origem, case=False, na=False)) &
+                    (df_diretos['Base Destino'].str.contains(uf_destino, case=False, na=False))
+                ]
+                if servicos_diretos.empty and 'UF' in df_diretos.columns:
+                    # Tentar usar apenas a coluna UF se disponível
+                    print(f"[DIRETOS] 🔄 Tentando busca alternativa usando coluna UF...")
+                    # A coluna UF geralmente contém pares de UF como "PR-SP"
+                    servicos_diretos = df_diretos[
+                        df_diretos['UF'].apply(lambda x: str(x).startswith(uf_origem) and str(x).endswith(uf_destino))
+                    ]
             print(f"[DIRETOS] Busca expandida encontrou: {len(servicos_diretos)} serviços")
         
         for _, servico in servicos_diretos.iterrows():
@@ -1168,21 +1183,39 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)
         ]
         
-        # Se não encontrar agentes na cidade exata, buscar na mesma UF
+        # Se não encontrar agentes na cidade exata, buscar na mesma UF com busca flexível
         if agentes_coleta.empty:
             print(f"[AGENTES] 🔍 Busca expandida de agentes de coleta em {uf_origem}...")
+            # Primeiro buscar agentes na mesma UF com tipo Agente
             agentes_coleta = df_agentes[
                 (df_agentes['UF'] == uf_origem) &
                 (df_agentes['Tipo'] == 'Agente')
             ]
+            
+            # Se ainda vazio, buscar usando métodos mais flexíveis
+            if agentes_coleta.empty:
+                print(f"[AGENTES] 🔍 Busca avançada por agentes em {uf_origem}...")
+                # Buscar qualquer menção ao UF em qualquer campo
+                agentes_coleta = df_agentes[
+                    ((df_agentes['UF'].str.contains(uf_origem, case=False, na=False)) |
+                     (df_agentes['Base Origem'].str.contains(uf_origem, case=False, na=False)) |
+                     (df_agentes['Origem'].str.contains(uf_origem, case=False, na=False)))
+                ]
+            
             print(f"[AGENTES] Busca expandida encontrou: {len(agentes_coleta)} agentes")
+            
+            # Se ainda não encontrou nada, procurar por qualquer agente disponível (menos restritivo)
+            if agentes_coleta.empty:
+                print(f"[AGENTES] 🕐 Última tentativa - buscando todos os agentes disponíveis...")
+                agentes_coleta = df_agentes[df_agentes['Tipo'] == 'Agente'].head(5)  # Limitar a 5 resultados
+                print(f"[AGENTES] Selecionados {len(agentes_coleta)} agentes de coleta alternativos")
         
         # Agentes de entrega (origem = cidade destino EXATA + validação por UF)
         agentes_entrega = df_agentes[
             df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
         ]
         
-        # 🔧 BUSCA EXPANDIDA DE AGENTES DE ENTREGA (MELHORADO)
+        # 🔧 BUSCA EXPANDIDA DE AGENTES DE ENTREGA (MELHORADO E MAIS FLEXÍVEL)
         if agentes_entrega.empty:
             print(f"[AGENTES] 🔍 Busca expandida de agentes de entrega em {destino_norm}...")
             # Primeiro tentar cidades que contenham parte do nome
@@ -1191,14 +1224,31 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             ]
             print(f"[AGENTES] Busca expandida por nome encontrou: {len(agentes_entrega)} agentes")
             
-            # Se ainda não encontrar, buscar na mesma UF
+            # Se ainda não encontrar, buscar na mesma UF com tipo Agente
             if agentes_entrega.empty:
                 print(f"[AGENTES] 🔍 Busca expandida de agentes de entrega em {uf_destino}...")
                 agentes_entrega = df_agentes[
                     (df_agentes['UF'] == uf_destino) &
                     (df_agentes['Tipo'] == 'Agente')
                 ]
+                
+                # Se ainda vazio, buscar usando métodos mais flexíveis
+                if agentes_entrega.empty:
+                    print(f"[AGENTES] 🔍 Busca avançada por agentes em {uf_destino}...")
+                    # Buscar qualquer menção ao UF em qualquer campo
+                    agentes_entrega = df_agentes[
+                        ((df_agentes['UF'].str.contains(uf_destino, case=False, na=False)) |
+                         (df_agentes['Base Destino'].str.contains(uf_destino, case=False, na=False)) |
+                         (df_agentes['Destino'].str.contains(uf_destino, case=False, na=False)))
+                    ]
+                
                 print(f"[AGENTES] Busca expandida por UF encontrou: {len(agentes_entrega)} agentes")
+                
+                # Se ainda não encontrou nada, procurar por qualquer agente disponível (menos restritivo)
+                if agentes_entrega.empty:
+                    print(f"[AGENTES] 🕐 Última tentativa - buscando todos os agentes disponíveis...")
+                    agentes_entrega = df_agentes[df_agentes['Tipo'] == 'Agente'].head(5)  # Limitar a 5 resultados
+                    print(f"[AGENTES] Selecionados {len(agentes_entrega)} agentes de entrega alternativos")
         
         # Validação adicional por UF para agentes de entrega
         if not agentes_entrega.empty:
@@ -1228,10 +1278,48 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # Se não encontrar, tentar cidades na mesma UF
         if transferencias_origem_destino.empty:
             print(f"[TRANSFERENCIAS] 🔍 Busca expandida de transferências em {uf_origem} → {uf_destino}...")
-            transferencias_origem_destino = df_transferencias[
-                (df_transferencias['UF Origem'] == uf_origem) &
-                (df_transferencias['UF Destino'] == uf_destino)
-            ]
+            # Verificando as colunas disponíveis para UF
+            if 'UF Origem' in df_transferencias.columns and 'UF Destino' in df_transferencias.columns:
+                transferencias_origem_destino = df_transferencias[
+                    (df_transferencias['UF Origem'] == uf_origem) &
+                    (df_transferencias['UF Destino'] == uf_destino)
+                ]
+            else:
+                # Fallback usando a coluna UF e Base Origem/Base Destino para determinar UFs
+                transferencias_origem_destino = df_transferencias[
+                    (df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) &
+                    (df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False))
+                ]
+                
+                # Se ainda vazio, tentar busca mais flexível por Base Origem OU Base Destino
+                if transferencias_origem_destino.empty:
+                    print(f"[TRANSFERENCIAS] 🔍 Tentando busca flexível por bases em {uf_origem} e {uf_destino}...")
+                    # Buscar qualquer transferência que mencione as UFs nas bases
+                    transferencias_origem_destino = df_transferencias[
+                        ((df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) |
+                         (df_transferencias['Origem'].str.contains(uf_origem, case=False, na=False))) &
+                        ((df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)) |
+                         (df_transferencias['Destino'].str.contains(uf_destino, case=False, na=False)))
+                    ]
+                
+                # Buscar na coluna UF com vários padrões
+                if transferencias_origem_destino.empty and 'UF' in df_transferencias.columns:
+                    # Tentar usar a coluna UF com diferentes padrões
+                    print(f"[TRANSFERENCIAS] 🔄 Tentando busca avançada na coluna UF...")
+                    # Verificar vários padrões comuns: "PR-MG", "PR/MG", etc
+                    patterns = [f"{uf_origem}{sep}{uf_destino}" for sep in ["-", "/", " ", ""]]
+                    mask = df_transferencias['UF'].apply(
+                        lambda x: any(pattern.lower() in str(x).lower() for pattern in patterns)
+                    )
+                    transferencias_origem_destino = df_transferencias[mask]
+                    
+                    # Se ainda não encontrar, verificar UF invertida (ex: "MG-PR" em vez de "PR-MG")
+                    if transferencias_origem_destino.empty:
+                        patterns_inv = [f"{uf_destino}{sep}{uf_origem}" for sep in ["-", "/", " ", ""]]
+                        mask = df_transferencias['UF'].apply(
+                            lambda x: any(pattern.lower() in str(x).lower() for pattern in patterns_inv)
+                        )
+                        transferencias_origem_destino = df_transferencias[mask]
             print(f"[TRANSFERENCIAS] Busca expandida encontrou: {len(transferencias_origem_destino)} transferências")
         
         print(f"[TRANSFERENCIAS] 🎯 Busca direta {origem} → {destino}: {len(transferencias_origem_destino)} encontradas")
@@ -1258,11 +1346,59 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 cidade_base = obter_cidade_base(str(base_agente))
                 cidade_base_norm = normalizar_cidade_nome(cidade_base)
                 
-                # Buscar transferências
+                # Buscar transferências com fallback para colunas UF
                 transf_para_base = df_transferencias[
                     (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
                     (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == cidade_base_norm))
                 ]
+                
+                # Se não encontrar, tentar busca expandida usando UF
+                if transf_para_base.empty:
+                    base_uf = agente_ent.get('UF', '')
+                    if base_uf:
+                        print(f"[TRANSFERENCIAS] 🔍 Busca expandida para base {cidade_base_norm} via UF {uf_origem} → {base_uf}...")
+                        # Verificando as colunas disponíveis para UF
+                        if 'UF Origem' in df_transferencias.columns and 'UF Destino' in df_transferencias.columns:
+                            transf_para_base = df_transferencias[
+                                (df_transferencias['UF Origem'] == uf_origem) &
+                                (df_transferencias['UF Destino'] == base_uf)
+                            ]
+                        else:
+                            # Fallback usando a coluna UF e Base Origem/Base Destino para determinar UFs
+                            transf_para_base = df_transferencias[
+                                (df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) &
+                                (df_transferencias['Base Destino'].str.contains(base_uf, case=False, na=False))
+                            ]
+                            
+                            # Se ainda vazio, tentar busca mais flexível por Base Origem OU Base Destino
+                            if transf_para_base.empty:
+                                print(f"[TRANSFERENCIAS] 🔍 Tentando busca flexível de bases entre {uf_origem} e {base_uf}...")
+                                # Buscar qualquer transferência que mencione as UFs nas bases ou nas cidades
+                                transf_para_base = df_transferencias[
+                                    ((df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) |
+                                     (df_transferencias['Origem'].str.contains(uf_origem, case=False, na=False))) &
+                                    ((df_transferencias['Base Destino'].str.contains(base_uf, case=False, na=False)) |
+                                     (df_transferencias['Destino'].str.contains(base_uf, case=False, na=False)))
+                                ]
+                            
+                            # Buscar na coluna UF com vários padrões
+                            if transf_para_base.empty and 'UF' in df_transferencias.columns:
+                                # Tentar usar a coluna UF com diferentes padrões
+                                print(f"[TRANSFERENCIAS] 🔄 Tentando busca avançada na coluna UF entre {uf_origem} e {base_uf}...")
+                                # Verificar vários padrões comuns: "PR-MG", "PR/MG", etc
+                                patterns = [f"{uf_origem}{sep}{base_uf}" for sep in ["-", "/", " ", ""]]
+                                mask = df_transferencias['UF'].apply(
+                                    lambda x: any(pattern.lower() in str(x).lower() for pattern in patterns)
+                                )
+                                transf_para_base = df_transferencias[mask]
+                                
+                                # Se ainda não encontrar, verificar UF invertida (ex: "MG-PR" em vez de "PR-MG")
+                                if transf_para_base.empty:
+                                    patterns_inv = [f"{base_uf}{sep}{uf_origem}" for sep in ["-", "/", " ", ""]]
+                                    mask = df_transferencias['UF'].apply(
+                                        lambda x: any(pattern.lower() in str(x).lower() for pattern in patterns_inv)
+                                    )
+                                    transf_para_base = df_transferencias[mask]
                 
                 if not transf_para_base.empty:
                     for _, transf in transf_para_base.iterrows():
