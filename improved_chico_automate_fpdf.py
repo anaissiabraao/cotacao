@@ -1143,8 +1143,25 @@ def obter_municipios_com_base(uf):
 def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, valor_nf=None, cubagem=None):
     """
     Calcula frete com sistema de agentes - APENAS rotas completas válidas
+    
+    Retorna:
+        dict: Contendo rotas encontradas e informações sobre agentes ausentes
+            - rotas: Lista de rotas encontradas
+            - total_opcoes: Número total de rotas
+            - origem/destino: Informações da origem/destino
+            - agentes_faltando: Dicionário com informações sobre agentes ausentes
+            - avisos: Lista de mensagens de aviso
     """
     try:
+        # Inicializar variáveis para rastrear agentes ausentes
+        agentes_faltando = {
+            'origem': False,
+            'destino': False,
+            'agentes_proximos_origem': [],
+            'agentes_proximos_destino': []
+        }
+        avisos = []  # Lista para armazenar mensagens de aviso
+        
         # Carregar base unificada
         df_base = carregar_base_unificada()
         if df_base is None:
@@ -1163,9 +1180,11 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         print(f"[AGENTES] Transferências carregadas: {len(df_transferencias)}")
         print(f"[AGENTES] Diretos carregados: {len(df_diretos)}")
         
-        # Normalizar cidades
+        # Normalizar cidades e UFs
         origem_norm = normalizar_cidade_nome(origem)
         destino_norm = normalizar_cidade_nome(destino)
+        uf_origem = normalizar_uf(uf_origem)
+        uf_destino = normalizar_uf(uf_destino)
         
         # Calcular peso cubado
         peso_real = float(peso)
@@ -1178,6 +1197,69 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         def gerar_chave_rota(agente_col_forn, transf_forn, agente_ent_forn):
             """Gera chave única para controle de duplicatas"""
             return f"{agente_col_forn}+{transf_forn}+{agente_ent_forn}"
+        
+        # Verificar se existem agentes na origem/destino exatos
+        agentes_origem = df_agentes[
+            (df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
+            (df_agentes['UF'] == uf_origem)
+        ]
+        
+        agentes_destino = df_agentes[
+            (df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)) &
+            (df_agentes['UF'] == uf_destino)
+        ]
+        
+        # Verificar se faltam agentes exatos e buscar próximos
+        if agentes_origem.empty:
+            agentes_faltando['origem'] = True
+            print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {origem_norm}/{uf_origem}")
+            avisos.append(f"Atenção: Nenhum agente encontrado em {origem_norm}/{uf_origem}")
+            
+            # Buscar agentes próximos
+            cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=50, limite=3)
+            if cidades_proximas:
+                agentes_faltando['agentes_proximos_origem'] = [
+                    {'cidade': cid, 'uf': uf, 'distancia_km': dist} 
+                    for cid, uf, dist in cidades_proximas
+                ]
+                cidades_str = ", ".join([f"{c[0]}/{c[1]} ({c[2]}km)" for c in cidades_proximas])
+                avisos.append(f"Agentes próximos disponíveis em: {cidades_str}")
+                print(f"[AGENTES] 🔍 Agentes próximos a {origem_norm}: {cidades_str}")
+        
+        if agentes_destino.empty:
+            agentes_faltando['destino'] = True
+            print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {destino_norm}/{uf_destino}")
+            avisos.append(f"Atenção: Nenhum agente encontrado em {destino_norm}/{uf_destino}")
+            
+            # Buscar agentes próximos
+            cidades_proximas = encontrar_municipios_proximos(destino, uf_destino, raio_km=50, limite=3)
+            if cidades_proximas:
+                agentes_faltando['agentes_proximos_destino'] = [
+                    {'cidade': cid, 'uf': uf, 'distancia_km': dist} 
+                    for cid, uf, dist in cidades_proximas
+                ]
+                cidades_str = ", ".join([f"{c[0]}/{c[1]} ({c[2]}km)" for c in cidades_proximas])
+                avisos.append(f"Agentes próximos disponíveis em: {cidades_str}")
+                print(f"[AGENTES] 🔍 Agentes próximos a {destino_norm}: {cidades_str}")
+        
+        # Verificar se não há agentes exatos e buscar os mais próximos
+        if agentes_origem.empty:
+            agentes_faltando['origem'] = True
+            print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {origem}/{uf_origem}")
+            # Buscar municípios próximos com agentes
+            agentes_faltando['agentes_proximos_origem'] = encontrar_municipios_proximos(
+                origem, uf_origem, raio_km=100, limite=3
+            )
+            print(f"[AGENTES] 🔍 Agentes próximos a {origem}: {agentes_faltando['agentes_proximos_origem']}")
+        
+        if agentes_destino.empty:
+            agentes_faltando['destino'] = True
+            print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {destino}/{uf_destino}")
+            # Buscar municípios próximos com agentes
+            agentes_faltando['agentes_proximos_destino'] = encontrar_municipios_proximos(
+                destino, uf_destino, raio_km=100, limite=3
+            )
+            print(f"[AGENTES] 🔍 Agentes próximos a {destino}: {agentes_faltando['agentes_proximos_destino']}")
         
         # 1. BUSCAR SERVIÇOS DIRETOS (PORTA-A-PORTA)
         # Primeiro tentar cidades exatas
@@ -1309,36 +1391,31 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             
             # Se ainda não encontrou, continuar com estratégias existentes
             if agentes_coleta.empty:
-                # ESTRATÉGIA 1: Buscar QUALQUER agente no estado de origem
-                print(f"[AGENTES] 📍 ESTRATÉGIA 1: Buscando agentes em {uf_origem}...")
+                # ESTRATÉGIA 1: Buscar agentes do estado, mas filtrar para só cidades próximas ou HUBs
+                print(f"[AGENTES] 📍 ESTRATÉGIA 1: Buscando agentes em {uf_origem} (apenas cidades válidas)...")
+                cidades_validas = set([origem_norm] + cidades_proximas)
                 agentes_coleta = df_agentes[
                     (df_agentes['UF'] == uf_origem) &
-                    (df_agentes['Tipo'] == 'Agente')
+                    (df_agentes['Tipo'] == 'Agente') &
+                    (df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) in cidades_validas))
                 ]
-            
-            # ESTRATÉGIA 2: Se ainda vazio, buscar agentes que mencionem o estado
-            if agentes_coleta.empty:
-                print(f"[AGENTES] 📍 ESTRATÉGIA 2: Busca flexível por {uf_origem}...")
-                agentes_coleta = df_agentes[
-                    (df_agentes['Base Origem'].str.contains(uf_origem, case=False, na=False) |
-                     df_agentes['Base Destino'].str.contains(uf_origem, case=False, na=False) |
-                     df_agentes['UF'].str.contains(uf_origem, case=False, na=False))
-                ]
+                
+                # ESTRATÉGIA 2: Se ainda vazio, buscar agentes que mencionem o estado
+                if agentes_coleta.empty:
+                    print(f"[AGENTES] 📍 ESTRATÉGIA 2: Busca flexível por {uf_origem}...")
+                    agentes_coleta = df_agentes[
+                        (df_agentes['Base Origem'].str.contains(uf_origem, case=False, na=False) |
+                         df_agentes['Base Destino'].str.contains(uf_origem, case=False, na=False) |
+                         df_agentes['UF'].str.contains(uf_origem, case=False, na=False))
+                    ]
             
             # ESTRATÉGIA 3: Buscar agentes em cidades HUB do estado
             if agentes_coleta.empty or len(agentes_coleta) > 20:
                 print(f"[AGENTES] 📍 ESTRATÉGIA 3: Priorizando agentes em cidades HUB...")
                 
-                hubs_por_estado = {
-                    'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'PELOTAS', 'CANOAS', 'SANTA MARIA', 'NOVO HAMBURGO'],
-                    'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO', 'CRICIUMA'],
-                    'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA', 'FOZ DO IGUACU'],
-                    'SP': ['SAO PAULO', 'CAMPINAS', 'SANTOS', 'RIBEIRAO PRETO', 'GUARULHOS'],
-                    'RJ': ['RIO DE JANEIRO', 'NITEROI', 'NOVA IGUACU', 'DUQUE DE CAXIAS'],
-                    'MG': ['BELO HORIZONTE', 'UBERLANDIA', 'JUIZ DE FORA', 'CONTAGEM', 'BETIM']
-                }
-                
-                cidades_hub = hubs_por_estado.get(uf_origem, [])
+                # Busca cidades próximas usando geolocalização
+                cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=100, limite=3)
+                cidades_hub = [c[0] for c in cidades_proximas]  # Extrai apenas os nomes das cidades
                 
                 if cidades_hub:
                     agentes_hub = df_agentes[
@@ -1362,7 +1439,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         agentes_entrega = df_agentes[
             df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
         ]
-            
+        
         # Se não encontrar agentes na cidade exata, usar estratégia global
         if agentes_entrega.empty:
             print(f"[AGENTES] 🔍 Busca global de agentes de entrega...")
@@ -1429,16 +1506,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             if agentes_entrega.empty or len(agentes_entrega) > 20:
                 print(f"[AGENTES] 📍 ESTRATÉGIA 3: Priorizando agentes em cidades HUB...")
                 
-                hubs_por_estado = {
-                    'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'PELOTAS', 'CANOAS', 'SANTA MARIA', 'NOVO HAMBURGO'],
-                    'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO', 'CRICIUMA'],
-                    'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA', 'FOZ DO IGUACU'],
-                    'SP': ['SAO PAULO', 'CAMPINAS', 'SANTOS', 'RIBEIRAO PRETO', 'GUARULHOS'],
-                    'RJ': ['RIO DE JANEIRO', 'NITEROI', 'NOVA IGUACU', 'DUQUE DE CAXIAS'],
-                    'MG': ['BELO HORIZONTE', 'UBERLANDIA', 'JUIZ DE FORA', 'CONTAGEM', 'BETIM']
-                }
-                
-                cidades_hub = hubs_por_estado.get(uf_destino, [])
+                # Busca cidades próximas usando geolocalização
+                cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=100, limite=3)
+                cidades_hub = [c[0] for c in cidades_proximas]  # Extrai apenas os nomes das cidades
                 
                 if cidades_hub:
                     agentes_hub = df_agentes[
@@ -1540,121 +1610,46 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     f"{uf_origem}{uf_destino}"
                 ]
                 
-                for pattern in patterns_uf:
-                    transf_entre_ufs = df_transferencias[
-                        df_transferencias['UF'].str.contains(pattern, case=False, na=False) |
-                        (df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False) & 
-                         df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False))
-                    ]
+                # ESTRATÉGIA 4: Buscar cidades próximas usando geolocalização
+                if transferencias_origem_destino.empty:
+                    print("[TRANSFERENCIAS] 🔍 ESTRATÉGIA 4: Buscando cidades próximas com agentes via geolocalização...")
                     
-                    if not transf_entre_ufs.empty:
-                        print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transf_entre_ufs)} transferências com padrão '{pattern}'")
-                        transferencias_origem_destino = transf_entre_ufs
-                        break
-            
-            # ESTRATÉGIA 4: Buscar cidades HUB principais de cada estado
-            if transferencias_origem_destino.empty:
-                print(f"[TRANSFERENCIAS] 📍 ESTRATÉGIA 4: Buscando via cidades HUB...")
-                
-                # Definir HUBs principais por estado
-                hubs_por_estado = {
-                    'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'PELOTAS', 'SANTA MARIA', 'PASSO FUNDO'],
-                    'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO', 'CRICIUMA'],
-                    'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA'],
-                    'SP': ['SAO PAULO', 'CAMPINAS', 'SANTOS', 'RIBEIRAO PRETO', 'SAO JOSE DOS CAMPOS'],
-                    'RJ': ['RIO DE JANEIRO', 'NITEROI', 'NOVA IGUACU', 'DUQUE DE CAXIAS'],
-                    'MG': ['BELO HORIZONTE', 'UBERLANDIA', 'JUIZ DE FORA', 'CONTAGEM']
-                }
-                
-                # Buscar transferências via HUBs
-                hubs_origem = hubs_por_estado.get(uf_origem, [])
-                hubs_destino = hubs_por_estado.get(uf_destino, [])
-                
-                for hub_orig in hubs_origem[:3]:  # Limitar a 3 principais HUBs
-                    for hub_dest in hubs_destino[:3]:
-                        transf_hub = df_transferencias[
-                            (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == hub_orig)) &
-                            (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == hub_dest))
-                        ]
+                    # Buscar cidades próximas à origem e destino
+                    cidades_proximas_origem = encontrar_municipios_proximos(origem, uf_origem, raio_km=100, limite=3)
+                    cidades_proximas_destino = encontrar_municipios_proximos(destino, uf_destino, raio_km=100, limite=3)
+                    
+                    print(f"[GEOLOC] 🌍 Cidades próximas a {origem}/{uf_origem}:")
+                    for cidade, uf, dist in cidades_proximas_origem:
+                        print(f"  - {cidade}/{uf} ({dist:.1f} km)")
                         
-                        if not transf_hub.empty:
-                            print(f"[TRANSFERENCIAS] ✅ Rota via HUBs: {hub_orig} → {hub_dest} ({len(transf_hub)} opções)")
-                            transferencias_origem_destino = pd.concat([transferencias_origem_destino, transf_hub])
-                            if len(transferencias_origem_destino) >= 3:
-                                break
+                    print(f"[GEOLOC] 🌍 Cidades próximas a {destino}/{uf_destino}:")
+                    for cidade, uf, dist in cidades_proximas_destino:
+                        print(f"  - {cidade}/{uf} ({dist:.1f} km)")
                     
-                    if len(transferencias_origem_destino) >= 3:
-                        break
-            
-            # ESTRATÉGIA 4.5: CONECTAR CIDADES PEQUENAS VIA HUBs PRÓXIMOS
-            if transferencias_origem_destino.empty:
-                print(f"[TRANSFERENCIAS] 🚀 ESTRATÉGIA 4.5: Conectando cidades pequenas via HUBs próximos...")
-                
-                # Mapa de cidades pequenas e seus HUBs mais próximos
-                cidades_pequenas_hubs = {
-                    # RS - Cidades pequenas e seus HUBs
-                    'ARAMBARE': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI'],
-                    'AGUDO': ['SANTA MARIA', 'SANTA CRUZ DO SUL'],
-                    'ALEGRETE': ['URUGUAIANA', 'SANTANA DO LIVRAMENTO'],
-                    'ALVORADA': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI'],
-                    
-                    # SC - Cidades pequenas e seus HUBs
-                    'AGRONOMICA': ['BLUMENAU', 'POMERODE', 'RIO DO SUL'],
-                    'AGUAS MORNAS': ['FLORIANOPOLIS', 'SAO JOSE', 'PALHOCA'],
-                    'ALFREDO WAGNER': ['FLORIANOPOLIS', 'LAGES'],
-                    'ANGELINA': ['FLORIANOPOLIS', 'SAO JOSE'],
-                    
-                    # PR - Cidades pequenas e seus HUBs
-                    'ADRIANOPOLIS': ['CURITIBA', 'PINHAIS'],
-                    'AGUDOS DO SUL': ['CURITIBA', 'SAO JOSE DOS PINHAIS'],
-                    'ALMIRANTE TAMANDARE': ['CURITIBA', 'COLOMBO']
-                }
-                
-                # Buscar HUBs próximos para origem e destino
-                hubs_proximos_origem = cidades_pequenas_hubs.get(origem_norm, [])
-                hubs_proximos_destino = cidades_pequenas_hubs.get(destino_norm, [])
-                
-                # Se não encontrou HUBs específicos, usar HUBs do estado
-                if not hubs_proximos_origem:
-                    hubs_proximos_origem = hubs_por_estado.get(uf_origem, [])[:3]
-                if not hubs_proximos_destino:
-                    hubs_proximos_destino = hubs_por_estado.get(uf_destino, [])[:3]
-                
-                print(f"[TRANSFERENCIAS] 🗺️ Origem {origem_norm}: HUBs próximos → {hubs_proximos_origem}")
-                print(f"[TRANSFERENCIAS] 🗺️ Destino {destino_norm}: HUBs próximos → {hubs_proximos_destino}")
-                
-                # Buscar transferências entre os HUBs próximos
-                for hub_orig in hubs_proximos_origem:
-                    for hub_dest in hubs_proximos_destino:
-                        # Buscar transferências HUB → HUB
-                        transf_entre_hubs = df_transferencias[
-                            (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == hub_orig)) &
-                            (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == hub_dest))
-                        ]
+                    # Buscar transferências entre cidades próximas
+                    for cidade_origem, uf_origem_prox, _ in cidades_proximas_origem:
+                        for cidade_destino, uf_destino_prox, _ in cidades_proximas_destino:
+                            # Buscar transferências diretas entre cidades próximas
+                            transf = df_unificado[
+                                (df_unificado['Tipo'] == 'Transferência') &
+                                (df_unificado['Origem'].str.contains(cidade_origem, case=False, na=False)) &
+                                (df_unificado['Destino'].str.contains(cidade_destino, case=False, na=False)) &
+                                (df_unificado['UF Origem'] == uf_origem_prox) &
+                                (df_unificado['UF Destino'] == uf_destino_prox)
+                            ]
+                            
+                            if not transf.empty:
+                                transferencias_origem_destino = pd.concat([transferencias_origem_destino, transf])
+                                print(f"[GEOLOC] 🔄 Encontrada transferência via cidades próximas: {cidade_origem} → {cidade_destino}")
+                                
+                                # Limita o número de transferências para evitar sobrecarga
+                                if len(transferencias_origem_destino) >= 5:
+                                    break
                         
-                        if not transf_entre_hubs.empty:
-                            print(f"[TRANSFERENCIAS] 🎯 ENCONTRADA rota: {origem_norm} → {hub_orig} → {hub_dest} → {destino_norm}")
-                            print(f"[TRANSFERENCIAS] ✅ Transferência {hub_orig} → {hub_dest}: {len(transf_entre_hubs)} opções")
-                            
-                            # Adicionar metadados sobre a rota completa
-                            for idx in transf_entre_hubs.index:
-                                # Criar cópia para não alterar o dataframe original
-                                transferencias_origem_destino = pd.concat([transferencias_origem_destino, transf_entre_hubs.loc[[idx]]])
-                            
-                            # Se encontrou suficientes, parar
-                            if len(transferencias_origem_destino) >= 3:
-                                break
-                    
-                    if len(transferencias_origem_destino) >= 3:
-                        break
+                        if len(transferencias_origem_destino) >= 5:
+                            break
                 
-                # Relatório final da estratégia 4.5
-                if not transferencias_origem_destino.empty:
-                    print(f"[TRANSFERENCIAS] ✅ ESTRATÉGIA 4.5 encontrou {len(transferencias_origem_destino)} rotas via HUBs")
-                else:
-                    print(f"[TRANSFERENCIAS] ❌ ESTRATÉGIA 4.5 não encontrou rotas via HUBs próximos")
-            
-            # ESTRATÉGIA 5: Busca final genérica - qualquer transferência entre os estados
+                # ESTRATÉGIA 5: Busca final genérica - qualquer transferência entre os estados
             if 'UF Origem' in df_transferencias.columns and 'UF Destino' in df_transferencias.columns:
                 transferencias_origem_destino = df_transferencias[
                     (df_transferencias['UF Origem'] == uf_origem) &
@@ -1790,17 +1785,72 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 
                 # Tentar usar geolocalização para encontrar municípios com base no estado intermediário
                 try:
+                    # Primeiro, tenta encontrar municípios com agentes no estado intermediário
                     municipios_intermediario = obter_municipios_com_base(estado_intermediario)
                     print(f"[GEOLOC] 🌍 Analisando {len(municipios_intermediario)} municípios com base em {estado_intermediario}")
                     
-                    # Se encontrou municípios com base, priorizá-los na busca
+                    # Se não encontrou municípios com agentes, busca cidades próximas em um raio de 80km
+                    if not municipios_intermediario:
+                        print(f"[GEOLOC] ⚠️ Nenhum município com agente encontrado em {estado_intermediario}, buscando cidades próximas em um raio de 80km...")
+                        
+                        # Obtém a localização geográfica do centro do estado
+                        try:
+                            # Tenta obter coordenadas de uma cidade principal do estado
+                            cidades_estado = {
+                                'RS': 'Porto Alegre', 'SC': 'Florianópolis', 'PR': 'Curitiba',
+                                'SP': 'São Paulo', 'RJ': 'Rio de Janeiro', 'MG': 'Belo Horizonte',
+                                'ES': 'Vitória', 'BA': 'Salvador', 'SE': 'Aracaju', 'AL': 'Maceió',
+                                'PE': 'Recife', 'PB': 'João Pessoa', 'RN': 'Natal', 'CE': 'Fortaleza',
+                                'PI': 'Teresina', 'MA': 'São Luís', 'PA': 'Belém', 'AP': 'Macapá',
+                                'AM': 'Manaus', 'RR': 'Boa Vista', 'AC': 'Rio Branco', 'RO': 'Porto Velho',
+                                'MT': 'Cuiabá', 'MS': 'Campo Grande', 'GO': 'Goiânia', 'DF': 'Brasília',
+                                'TO': 'Palmas'
+                            }
+                            
+                            cidade_referencia = cidades_estado.get(estado_intermediario, estado_intermediario)
+                            localizacao = geocode(cidade_referencia, estado_intermediario)
+                            
+                            if localizacao:
+                                # Busca cidades em um raio de 80km
+                                cidades_proximas = encontrar_municipios_proximos(
+                                    cidade_referencia, 
+                                    estado_intermediario, 
+                                    raio_km=80, 
+                                    limite=10  # Limita a 10 cidades para não sobrecarregar
+                                )
+                                
+                                if cidades_proximas:
+                                    print(f"[GEOLOC] 🔍 Encontradas {len(cidades_proximas)} cidades próximas em um raio de 80km")
+                                    municipios_intermediario = [
+                                        {'nome': cidade, 'uf': uf, 'distancia': dist} 
+                                        for cidade, uf, dist in grcidades_proximas
+                                    ]
+                        except Exception as e:
+                            print(f"[GEOLOC] ⚠️ Erro ao buscar cidades próximas: {str(e)}")
+                    
+                    # Se encontrou municípios (seja com agentes ou cidades próximas), tenta encontrar transferências
                     if municipios_intermediario:
                         transferencias_primeiro_trecho = pd.DataFrame()  # Começar com DF vazio
                         
-                        # Ordenar municípios por algum critério (ex: tamanho da população)
-                        for municipio in municipios_intermediario:
+                        # Adiciona mensagem de aviso se estiver usando localização alternativa
+                        if not municipios_intermediario[0].get('tem_agente', True):
+                            print("[GEOLOC] ℹ️ Utilizando localização alternativa (sem agente no local exato)")
+                            # Adiciona mensagem ao contexto para ser usada na resposta
+                            if 'aviso' not in locals():
+                                aviso = "⚠️ Atenção: Não foram encontrados agentes no local exato. Os resultados incluem opções em cidades próximas. Por favor, consulte o parceiro para confirmar disponibilidade."
+                        else:
+                            print("[GEOLOC] ℹ️ Utilizando localização com agente no local exato")
+                        
+                        # Ordenar municípios por distância (se disponível) ou alfabeticamente
+                        municipios_ordenados = sorted(
+                            municipios_intermediario, 
+                            key=lambda x: x.get('distancia', float('inf'))
+                        )
+                        
+                        for municipio in municipios_ordenados:
                             nome_municipio = municipio['nome']
-                            print(f"[GEOLOC] 📍 Verificando transferências via {nome_municipio}/{estado_intermediario}")
+                            distancia = municipio.get('distancia', 'N/A')
+                            print(f"[GEOLOC] 📍 Verificando transferências via {nome_municipio}/{estado_intermediario} (distância: {distancia}km)")
                             
                             # Buscar transferências que passam por esse município
                             transf_via_municipio = df_transferencias[
@@ -1812,8 +1862,19 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             
                             # Adicionar ao dataframe principal se encontrou
                             if not transf_via_municipio.empty:
-                                print(f"[GEOLOC] ✅ Encontradas {len(transf_via_municipio)} transferências via {nome_municipio}")
+                                print(f"[GEOLOC] ✅ Encontradas {len(transf_via_municipio)} transferências via {nome_municipio} (distância: {distancia}km)")
+                                
+                                # Adiciona flag de localização alternativa
+                                if distancia != 'N/A' and float(distancia) > 0:
+                                    transf_via_municipio['localizacao_alternativa'] = True
+                                    transf_via_municipio['mensagem_aviso'] = f"⚠️ Agente localizado em {nome_municipio} (a {distancia}km do destino solicitado). Por favor, consulte o parceiro para confirmar disponibilidade."
+                                
                                 transferencias_primeiro_trecho = pd.concat([transferencias_primeiro_trecho, transf_via_municipio])
+                                
+                                # Limita o número de transferências para evitar sobrecarga
+                                if len(transferencias_primeiro_trecho) >= 5:
+                                    print(f"[GEOLOC] ⏹️ Limite de 5 transferências atingido")
+                                    break
                                 
                                 # Se já encontrou transferências suficientes, parar
                                 if len(transferencias_primeiro_trecho) >= 3:
@@ -2619,12 +2680,15 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 'origem': f"{origem}/{uf_origem}",
                 'destino': f"{destino}/{uf_destino}",
                 'aviso': f"Nenhuma rota válida encontrada para {origem} → {destino}",
-                'tipo_aviso': 'SEM_ROTA_COMPLETA'
+                'tipo_aviso': 'SEM_ROTA_COMPLETA',
+                'agentes_faltando': agentes_faltando,
+                'avisos': avisos if avisos else []
             }
         
         print(f"\n[AGENTES] ✅ PROCESSO CONCLUÍDO: {len(rotas_encontradas)} rotas ÚNICAS encontradas")
         
-        return {
+        # Preparar resposta
+        resposta = {
             'rotas': rotas_encontradas,
             'total_opcoes': len(rotas_encontradas),
             'origem': f"{origem}/{uf_origem}",
@@ -2633,8 +2697,19 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 'rotas_processadas': len(rotas_processadas),
                 'rotas_finais': len(rotas_encontradas),
                 'duplicatas_evitadas': len(rotas_processadas) - len(rotas_encontradas) if len(rotas_processadas) > len(rotas_encontradas) else 0
-            }
+            },
+            'agentes_faltando': agentes_faltando,
+            'avisos': avisos if avisos else []
         }
+        
+        # Adicionar avisos adicionais se necessário
+        if agentes_faltando['origem'] and not agentes_faltando['agentes_proximos_origem']:
+            resposta['avisos'].append("Não foram encontrados agentes próximos à cidade de origem.")
+            
+        if agentes_faltando['destino'] and not agentes_faltando['agentes_proximos_destino']:
+            resposta['avisos'].append("Não foram encontrados agentes próximos à cidade de destino.")
+            
+        return resposta
         
     except Exception as e:
         print(f"[AGENTES] ❌ Erro: {e}")
@@ -2837,51 +2912,7 @@ def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=Non
         cubagem = float(cubagem) if cubagem else 0
         
         if cubagem <= 0:
-            return peso_real
-            
-        # Aplicar fator específico baseado no tipo
-        if tipo_linha == 'Agente':
-            fator_cubagem = 250  # kg/m³ para agentes
-        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper()):
-            fator_cubagem = 166  # kg/m³ para JEM e Concept
-            
-        peso_cubado = cubagem * fator_cubagem
-        peso_final = max(peso_real, peso_cubado)
-        
-        return peso_final
-        
-    except Exception as e:
-        return float(peso_real) if peso_real else 0
-
-def calcular_frete_aereo_base_unificada(origem, uf_origem, destino, uf_destino, peso, valor_nf=None):
-    """
-    Calcular frete aéreo usando a Base Unificada (tipo 'Aéreo')
-    """
-    try:
-        # Debug removido
-        print(f"[AÉREO] Peso: {peso}kg, Valor NF: R$ {valor_nf:,}" if valor_nf else f"[AÉREO] Peso: {peso}kg")
-        
-        # Carregar base unificada
-        df = carregar_base_unificada()
-        if df is None or df.empty:
-            print("[AÉREO] ❌ Erro ao carregar base unificada")
-            return None
-            
-        # Filtrar apenas registros do tipo 'Aéreo'
-        df_aereo = df[df['Tipo'] == 'Aéreo'].copy()
-        print(f"[AÉREO] Registros aéreos na base: {len(df_aereo)}")
-        
-        if df_aereo.empty:
-            print("[AÉREO] ❌ Nenhum registro aéreo encontrado na base")
-            return None
-        
-        # Normalizar origem e destino
-        origem_norm = normalizar_cidade_nome(origem)
-        destino_norm = normalizar_cidade_nome(destino)
-        uf_origem_norm = normalizar_uf(uf_origem)
-        uf_destino_norm = normalizar_uf(uf_destino)
-        
-        print(f"[AÉREO] Buscando: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
+            print(f"[AÉREO] Buscando: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
         
         # Buscar rotas aéreas correspondentes
         opcoes_aereas = []
@@ -2967,6 +2998,23 @@ def calcular_frete_aereo_base_unificada(origem, uf_origem, destino, uf_destino, 
         # Ordenar por menor custo
         opcoes_aereas.sort(key=lambda x: x['total'])
         
+        # Preparar mensagens de aviso sobre agentes ausentes
+        avisos = []
+        if agentes_faltando['origem']:
+            if agentes_faltando['agentes_proximos_origem']:
+                cidades_proximas = ", ".join([f"{m[0]}/{m[1]} ({m[2]:.1f}km)" for m in agentes_faltando['agentes_proximos_origem']])
+                avisos.append(f"Atenção: Nenhum agente encontrado em {origem}/{uf_origem}. Cidades próximas com agentes: {cidades_proximas}")
+            else:
+                avisos.append(f"Atenção: Nenhum agente encontrado em {origem}/{uf_origem} e não foram encontradas cidades próximas com agentes.")
+        
+        if agentes_faltando['destino']:
+            if agentes_faltando['agentes_proximos_destino']:
+                cidades_proximas = ", ".join([f"{m[0]}/{m[1]} ({m[2]:.1f}km)" for m in agentes_faltando['agentes_proximos_destino']])
+                avisos.append(f"Atenção: Nenhum agente encontrado em {destino}/{uf_destino}. Cidades próximas com agentes: {cidades_proximas}")
+            else:
+                avisos.append(f"Atenção: Nenhum agente encontrado em {destino}/{uf_destino} e não foram encontradas cidades próximas com agentes.")
+        
+        # Preparar resultado final
         resultado = {
             'opcoes': opcoes_aereas,
             'total_opcoes': len(opcoes_aereas),
@@ -2976,7 +3024,9 @@ def calcular_frete_aereo_base_unificada(origem, uf_origem, destino, uf_destino, 
             'destino': destino,
             'uf_destino': uf_destino,
             'peso': peso,
-            'valor_nf': valor_nf
+            'valor_nf': valor_nf,
+            'agentes_faltando': agentes_faltando,
+            'avisos': avisos if avisos else None
         }
         
         print(f"[AÉREO] ✅ {len(opcoes_aereas)} opções aéreas encontradas")
@@ -4322,6 +4372,73 @@ def sanitizar_json(obj):
     else:
         return obj
 
+def encontrar_municipios_proximos(municipio, uf, raio_km=100, limite=5):
+    """
+    Encontra municípios próximos ao município especificado dentro de um raio em km.
+    Retorna uma lista de tuplas (municipio, uf, distancia_km) ordenada por distância.
+    """
+    try:
+        # Primeiro, obter as coordenadas do município de origem
+        origem_coords = geocode(municipio, uf)
+        if not origem_coords:
+            print(f"[GEO] ❌ Não foi possível obter coordenadas para {municipio}/{uf}")
+            return []
+            
+        # Carregar todos os municípios do estado
+        municipios_estado = obter_municipios_uf(uf)
+        if not municipios_estado:
+            print(f"[GEO] ❌ Não foi possível carregar municípios para {uf}")
+            return []
+            
+        # Calcular distância para cada município
+        municipios_com_distancia = []
+        
+        for muni in municipios_estado:
+            if muni['nome'].lower() == municipio.lower():
+                continue  # Pular o próprio município
+                
+            # Obter coordenadas do município de destino
+            dest_coords = geocode(muni['nome'], uf)
+            if not dest_coords:
+                continue
+                
+            # Calcular distância em km (fórmula de Haversine)
+            lat1, lon1 = origem_coords
+            lat2, lon2 = dest_coords
+            
+            # Raio da Terra em km
+            R = 6371.0
+            
+            # Converter graus para radianos
+            lat1_rad = math.radians(lat1)
+            lon1_rad = math.radians(lon1)
+            lat2_rad = math.radians(lat2)
+            lon2_rad = math.radians(lon2)
+            
+            # Diferença das coordenadas
+            dlat = lat2_rad - lat1_rad
+            dlon = lon2_rad - lon1_rad
+            
+            # Fórmula de Haversine
+            a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            distancia = R * c
+            
+            # Adicionar à lista se estiver dentro do raio
+            if distancia <= raio_km:
+                municipios_com_distancia.append((muni['nome'], uf, round(distancia, 1)))
+        
+        # Ordenar por distância e limitar o número de resultados
+        municipios_com_distancia.sort(key=lambda x: x[2])
+        return municipios_com_distancia[:limite]
+        
+    except Exception as e:
+        print(f"[GEO] ❌ Erro ao buscar municípios próximos: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+
 def validar_e_corrigir_rota_fracionada(rota):
     """
     Valida e corrige dados de uma rota fracionada para garantir consistência
@@ -5571,8 +5688,7 @@ def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=Non
     """
     Calcula peso cubado aplicando fatores específicos por tipo de serviço:
     - Agentes (tipo 'Agente'): cubagem × 250
-    - Transferências JEM e Concept: cubagem × 166  
-    - Outros tipos: cubagem × 300 (padrão)
+    - Transferências JEM e Concept: cubagem × 166
     """
     try:
         peso_real = float(peso_real)
@@ -5585,12 +5701,9 @@ def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=Non
         if tipo_linha == 'Agente':
             fator_cubagem = 250  # kg/m³ para agentes
             tipo_calculo = "Agente (250kg/m³)"
-        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper()):
-            fator_cubagem = 166  # kg/m³ para JEM e Concept  
+        elif tipo_linha == 'Transferência' and fornecedor and ('JEM'in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper()) or 'SOL' in str(fornecedor).upper():
+            fator_cubagem = 166  # kg/m³ para JEM, Concept e SOL
             tipo_calculo = f"Transferência {fornecedor} (166kg/m³)"
-        else:
-            fator_cubagem = 300  # kg/m³ padrão
-            tipo_calculo = "Padrão (300kg/m³)"
             
         peso_cubado = cubagem * fator_cubagem
         peso_final = max(peso_real, peso_cubado)

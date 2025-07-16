@@ -484,6 +484,42 @@
   font-size: 1.1rem;
   color: #0a6ed1;
 }
+/* Location Warning Styles */
+.location-warning {
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    color: #856404;
+    padding: 12px 15px;
+    margin: 15px 0;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.location-warning i {
+    margin-right: 10px;
+    font-size: 1.2em;
+}
+
+.location-warning p {
+    margin: 0;
+    font-size: 0.95em;
+    line-height: 1.4;
+}
+
+.location-warning.alert-warning {
+    background-color: #fff3cd;
+    border-color: #ffeeba;
+    color: #856404;
+}
+
+.location-warning.alert-info {
+    background-color: #e7f5ff;
+    border-color: #b3e0ff;
+    color: #0c5460;
+}
+
 .dimensoes-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

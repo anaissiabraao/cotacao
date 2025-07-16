@@ -1,4 +1,4 @@
-﻿// Funções para manipulação dos formulários e botões
+// Funções para manipulação dos formulários e botões
 // Padronização completa de todos os fluxos: dedicado, aéreo, fracionado, exportação
 // Versão corrigida com melhorias de funcionalidade e depuração
 
@@ -1399,9 +1399,19 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         };
 
+        // Check if there are any location warnings in the ranking options
+        const hasLocationWarning = ranking.ranking_opcoes && 
+                                 ranking.ranking_opcoes.some(opcao => opcao.localizacao_alternativa);
+        
         let html = `
             <div class="success">
                 <h3><i class="fa-solid fa-boxes"></i> Cotação de Frete Fracionado Calculada - ${ranking.id_calculo}</h3>
+                
+                ${hasLocationWarning ? `
+                <div class="location-warning alert-warning">
+                    <i class="fas fa-info-circle"></i>
+                    <p>⚠️ Atenção: Alguns agentes estão localizados em cidades próximas. Por favor, consulte o parceiro para confirmar a disponibilidade.</p>
+                </div>` : ''}
                 
                 <div class="analise-container">
                     <div class="analise-title">📦 Melhor Opção: ${ranking.melhor_opcao ? ranking.melhor_opcao.tipo_servico : 'N/A'}</div>
@@ -1496,6 +1506,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     rowStyle = "background: #ffffff;";
                 }
                 
+                // Add location warning if this is an alternative location
+                const locationWarning = opcao.localizacao_alternativa ? 
+                    `<div class="location-warning alert-info" style="margin: 8px 0; padding: 8px 12px; font-size: 0.85em; display: flex; align-items: center;">
+                        <i class="fas fa-map-marker-alt" style="margin-right: 8px;"></i>
+                        <span>${opcao.mensagem_aviso || 'Agente localizado em cidade próxima'}</span>
+                    </div>` : '';
+
                 html += `
                     <tr style="${rowStyle}">
                         <td style="padding: 12px; border: 1px solid #dee2e6; font-weight: bold; font-size: 1.1em;">${posicaoIcon}</td>
@@ -1503,6 +1520,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             <strong>${opcao.tipo_servico}</strong><br>
                             <small style="color: #6c757d;">${opcao.descricao}</small><br>
                             <small style="color: #007bff; font-weight: bold;">Fornecedor: ${opcao.fornecedor}</small>
+                            ${locationWarning}
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; color: #28a745; font-size: 1.1em;">
                             R$ ${opcao.custo_total.toFixed(2)}
