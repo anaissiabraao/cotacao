@@ -2795,13 +2795,16 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                 valor_base_kg = 0
                 for i, faixa in enumerate(faixas_peso):
                     if peso_calculo <= faixa:
-                        valor_base_kg = float(linha.get(str(colunas_peso[i]), 0))
+                        # Use the column name directly without converting to string for numeric columns
+                        col_name = colunas_peso[i]
+                        valor_base_kg = float(linha.get(col_name, 0))
                         valor_base = peso_calculo * valor_base_kg
                         print(f"[CUSTO-TRANSF] ✅ Peso {peso_calculo}kg na faixa até {faixa}kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
                         break
                 else:
                     # Se não encontrou faixa, usar o último valor
-                    valor_base_kg = float(linha.get(colunas_peso[-1], 0))
+                    col_name = colunas_peso[-1]
+                    valor_base_kg = float(linha.get(col_name, 0))
                     valor_base = peso_calculo * valor_base_kg
                     print(f"[CUSTO-TRANSF] ⚠️ Usando última faixa disponível: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
             
