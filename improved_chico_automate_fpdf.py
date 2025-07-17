@@ -2755,6 +2755,7 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         
         if tipo_servico == 'TRANSFERÊNCIA' or 'TRANSFERENCIA' in tipo_servico:
             print(f"[CUSTO-TRANSF] 🔧 Aplicando lógica para transferência: {fornecedor}")
+            print(f"[CUSTO-TRANSF-DEBUG] Linha completa: {linha.to_dict() if hasattr(linha, 'to_dict') else linha}")
             
             # Para transferências, usar o maior entre peso real e cubado
             peso_calculo = peso_cubado  # Já é o máximo entre peso real e cubado
@@ -2786,25 +2787,32 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                 valor_base = peso_calculo * valor_por_kg
                 print(f"[CUSTO-TRANSF] ✅ Peso >100kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
             else:
-                # 3. Para pesos entre 10kg e 100kg, encontrar a faixa correta
-                # Mapeamento de faixas de peso para colunas (usando as colunas reais da base)
+                # 3. Para pesos entre 10kg e 100kg, buscar valor direto da coluna
+                # correspondente à faixa de peso (não multiplicar pelo peso)
                 faixas_peso = [20, 30, 50, 70, 100]
-                colunas_peso = [20, 30, 50, 70, 100]
                 
                 # Encontrar a menor faixa que seja maior ou igual ao peso
-                valor_base_kg = 0
-                for i, faixa in enumerate(faixas_peso):
+                valor_base = 0
+                for faixa in faixas_peso:
                     if peso_calculo <= faixa:
-                        coluna_key = colunas_peso[i]
-                        valor_base_kg = float(linha.get(coluna_key, 0))
-                        valor_base = peso_calculo * valor_base_kg
-                        print(f"[CUSTO-TRANSF] ✅ Peso {peso_calculo}kg na faixa até {faixa}kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
-                        break
-                else:
-                    # Se não encontrou faixa, usar coluna 100
-                    valor_base_kg = float(linha.get(100, 0))
-                    valor_base = peso_calculo * valor_base_kg
-                    print(f"[CUSTO-TRANSF] ⚠️ Usando faixa 100kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
+                        valor_coluna = linha.get(faixa, 0)
+                        print(f"[CUSTO-TRANSF-DEBUG] Verificando coluna {faixa}: valor = {valor_coluna}")
+                        if pd.notna(valor_coluna) and float(valor_coluna) > 0:
+                            valor_base = float(valor_coluna)
+                            print(f"[CUSTO-TRANSF] ✅ Peso {peso_calculo}kg - faixa {faixa}kg: R$ {valor_base:.2f}")
+                            break
+                        else:
+                            print(f"[CUSTO-TRANSF-DEBUG] Coluna {faixa} vazia ou zero")
+                
+                # Se não encontrou valor válido nas faixas
+                if valor_base == 0:
+                    # Tentar coluna 100
+                    valor_100 = linha.get(100, 0)
+                    if pd.notna(valor_100) and float(valor_100) > 0:
+                        valor_base = float(valor_100)
+                        print(f"[CUSTO-TRANSF] ⚠️ Usando faixa 100kg: R$ {valor_base:.2f}")
+                    else:
+                        print(f"[CUSTO-TRANSF] ❌ Nenhum valor encontrado para peso {peso_calculo}kg")
             
             custo_base = valor_base
             
@@ -3206,52 +3214,100 @@ def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, 
             if tipo_rota == 'transferencia_direta':
                 tipo_servico = f"TRANSFERÊNCIA DIRETA - {agentes_info['fornecedor_principal']}"
                 descricao = f"Transferência direta via {agentes_info['fornecedor_principal']}"
+                # Extrair capacidade real da transferência
+                transferencia_data = opcao.get('transferencia', detalhes.get('transferencia', {}))
+                peso_max_transf = transferencia_data.get('peso_maximo', 'Ilimitado')
+                prazo_transf = transferencia_data.get('prazo', 1)
                 capacidade_info = {
-                    'peso_max': 'Ilimitado',
+                    'peso_max': f"{peso_max_transf}kg" if peso_max_transf != 'Ilimitado' else 'Ilimitado',
                     'volume_max': 'Ilimitado',
-                    'descricao': 'Transferência rodoviária direta'
+                    'descricao': 'Transferência rodoviária direta',
+                    'prazo': prazo_transf,
+                    'excede_peso': peso_cubado > float(peso_max_transf) if peso_max_transf != 'Ilimitado' else False
                 }
             elif tipo_rota == 'direto_porta_porta':
                 tipo_servico = f"SERVIÇO DIRETO PORTA-A-PORTA - {agentes_info['fornecedor_principal']}"
                 rota_bases = opcao.get('rota_bases', f"{origem} → {destino} (Direto)")
                 descricao = f"ROTA: {rota_bases}<br/>Coleta e entrega incluídas no serviço"
+                # Extrair capacidade real do serviço direto
+                direto_data = opcao.get('direto', detalhes)
+                peso_max_direto = direto_data.get('peso_maximo', 500)
+                prazo_direto = direto_data.get('prazo', 1)
                 capacidade_info = {
-                    'peso_max': '500kg',
+                    'peso_max': f"{peso_max_direto}kg",
                     'volume_max': '15m³',
-                    'descricao': 'Serviço porta-a-porta completo'
+                    'descricao': 'Serviço porta-a-porta completo',
+                    'prazo': prazo_direto,
+                    'excede_peso': peso_cubado > float(peso_max_direto)
                 }
             elif tipo_rota == 'agente_direto':
                 tipo_servico = f"AGENTE DIRETO - {agentes_info['fornecedor_principal']}"
                 descricao = f"Porta-a-porta direto via {agentes_info['fornecedor_principal']}"
+                # Extrair capacidade real do agente direto
+                agente_data = opcao.get('agente_direto', detalhes.get('agente_direto', {}))
+                peso_max_agente = agente_data.get('peso_maximo', 500)
+                prazo_agente = agente_data.get('prazo', 1)
                 capacidade_info = {
-                    'peso_max': '500kg',
+                    'peso_max': f"{peso_max_agente}kg",
                     'volume_max': '15m³',
-                    'descricao': 'Coleta e entrega direta'
+                    'descricao': 'Coleta e entrega direta',
+                    'prazo': prazo_agente,
+                    'excede_peso': peso_cubado > float(peso_max_agente)
                 }
             elif tipo_rota == 'cliente_entrega_transferencia_agente_entrega':
                 tipo_servico = f"CLIENTE ENTREGA + TRANSFERÊNCIA + AGENTE ENTREGA"
                 rota_bases = opcao.get('rota_bases', 'Rota não definida')
                 descricao = f"ROTA: {rota_bases}<br/>Cliente entrega na base → Transferência → Agente entrega no destino"
+                # Extrair capacidade real da rota completa
+                transferencia = opcao.get('transferencia', detalhes.get('transferencia', {}))
+                agente_entrega = opcao.get('agente_entrega', detalhes.get('agente_entrega', {}))
+                peso_max_transf = transferencia.get('peso_maximo', 300)
+                peso_max_entrega = agente_entrega.get('peso_maximo', 300)
+                peso_max_final = min(float(peso_max_transf) if peso_max_transf else 300, 
+                                   float(peso_max_entrega) if peso_max_entrega else 300)
+                prazo_total = (transferencia.get('prazo', 1) or 1) + (agente_entrega.get('prazo', 0) or 0)
                 capacidade_info = {
-                    'peso_max': '300kg',
+                    'peso_max': f"{peso_max_final}kg",
                     'volume_max': '10m³',
-                    'descricao': 'Cliente entrega + transferência + agente entrega'
+                    'descricao': 'Cliente entrega + transferência + agente entrega',
+                    'prazo': prazo_total,
+                    'excede_peso': peso_cubado > peso_max_final
                 }
             elif tipo_rota == 'coleta_transferencia':
                 tipo_servico = f"COLETA + TRANSFERÊNCIA"
                 descricao = f"COLETA: {agentes_info['agente_coleta']} → TRANSFERÊNCIA: {agentes_info['transferencia']}"
+                # Extrair capacidade real da rota parcial
+                agente_coleta = opcao.get('agente_coleta', detalhes.get('agente_coleta', {}))
+                transferencia = opcao.get('transferencia', detalhes.get('transferencia', {}))
+                peso_max_col = agente_coleta.get('peso_maximo', 300)
+                peso_max_transf = transferencia.get('peso_maximo', 300)
+                peso_max_final = min(float(peso_max_col) if peso_max_col else 300,
+                                   float(peso_max_transf) if peso_max_transf else 300)
+                prazo_total = (agente_coleta.get('prazo', 1) or 1) + (transferencia.get('prazo', 1) or 1)
                 capacidade_info = {
-                    'peso_max': '300kg',
+                    'peso_max': f"{peso_max_final}kg",
                     'volume_max': '10m³',
-                    'descricao': 'Coleta local + transferência'
+                    'descricao': 'Coleta local + transferência',
+                    'prazo': prazo_total,
+                    'excede_peso': peso_cubado > peso_max_final
                 }
             elif tipo_rota == 'transferencia_entrega':
                 tipo_servico = f"TRANSFERÊNCIA + ENTREGA"
                 descricao = f"TRANSFERÊNCIA: {agentes_info['transferencia']} → ENTREGA: {agentes_info['agente_entrega']}"
+                # Extrair capacidade real da rota parcial
+                transferencia = opcao.get('transferencia', detalhes.get('transferencia', {}))
+                agente_entrega = opcao.get('agente_entrega', detalhes.get('agente_entrega', {}))
+                peso_max_transf = transferencia.get('peso_maximo', 300)
+                peso_max_entrega = agente_entrega.get('peso_maximo', 300)
+                peso_max_final = min(float(peso_max_transf) if peso_max_transf else 300,
+                                   float(peso_max_entrega) if peso_max_entrega else 300)
+                prazo_total = (transferencia.get('prazo', 1) or 1) + (agente_entrega.get('prazo', 1) or 1)
                 capacidade_info = {
-                    'peso_max': '300kg',
+                    'peso_max': f"{peso_max_final}kg",
                     'volume_max': '10m³',
-                    'descricao': 'Transferência + entrega local'
+                    'descricao': 'Transferência + entrega local',
+                    'prazo': prazo_total,
+                    'excede_peso': peso_cubado > peso_max_final
                 }
             elif tipo_rota == 'coleta_transferencia_entrega':
                 # 🆕 VERIFICAR SE A ROTA É COMPLETA OU PARCIAL
@@ -3261,26 +3317,59 @@ def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, 
                 if status_rota == 'PARCIAL' or transferencia_info.get('fornecedor') == 'SEM TRANSFERÊNCIA':
                     tipo_servico = f"ROTA PARCIAL (FALTA TRANSFERÊNCIA)"
                     descricao = f"COLETA: {agentes_info['agente_coleta']} → ⚠️ SEM TRANSFERÊNCIA → ENTREGA: {agentes_info['agente_entrega']}"
+                    # Pegar menor capacidade entre coleta e entrega
+                    agente_coleta = opcao.get('agente_coleta', detalhes.get('agente_coleta', {}))
+                    agente_entrega = opcao.get('agente_entrega', detalhes.get('agente_entrega', {}))
+                    peso_max_col = agente_coleta.get('peso_maximo', 300)
+                    peso_max_entrega = agente_entrega.get('peso_maximo', 300)
+                    peso_max_final = min(float(peso_max_col) if peso_max_col else 300,
+                                       float(peso_max_entrega) if peso_max_entrega else 300)
+                    prazo_total = (agente_coleta.get('prazo', 1) or 1) + (agente_entrega.get('prazo', 1) or 1)
                     capacidade_info = {
-                        'peso_max': '300kg',
+                        'peso_max': f"{peso_max_final}kg",
                         'volume_max': '10m³',
-                        'descricao': 'Rota incompleta - falta transferência entre bases'
+                        'descricao': 'Rota incompleta - falta transferência entre bases',
+                        'prazo': prazo_total,
+                        'excede_peso': peso_cubado > peso_max_final
                     }
                 else:
                     tipo_servico = f"ROTA COMPLETA (3 ETAPAS)"
                     descricao = f"COLETA: {agentes_info['agente_coleta']} → TRANSFERÊNCIA: {agentes_info['transferencia']} → ENTREGA: {agentes_info['agente_entrega']}"
+                    # Pegar menor capacidade entre todas as etapas
+                    agente_coleta = opcao.get('agente_coleta', detalhes.get('agente_coleta', {}))
+                    transferencia = opcao.get('transferencia', detalhes.get('transferencia', {}))
+                    agente_entrega = opcao.get('agente_entrega', detalhes.get('agente_entrega', {}))
+                    peso_max_col = agente_coleta.get('peso_maximo', 300)
+                    peso_max_transf = transferencia.get('peso_maximo', 300)
+                    peso_max_entrega = agente_entrega.get('peso_maximo', 300)
+                    peso_max_final = min(float(peso_max_col) if peso_max_col else 300,
+                                       float(peso_max_transf) if peso_max_transf else 300,
+                                       float(peso_max_entrega) if peso_max_entrega else 300)
+                    prazo_total = (agente_coleta.get('prazo', 1) or 1) + (transferencia.get('prazo', 1) or 1) + (agente_entrega.get('prazo', 0) or 0)
                     capacidade_info = {
-                        'peso_max': '300kg',
+                        'peso_max': f"{peso_max_final}kg",
                         'volume_max': '10m³',
-                        'descricao': 'Rota completa com agentes'
+                        'descricao': 'Rota completa com agentes',
+                        'prazo': prazo_total,
+                        'excede_peso': peso_cubado > peso_max_final
                     }
             else:
                 tipo_servico = f"FRETE FRACIONADO - {agentes_info['fornecedor_principal']}"
                 descricao = resumo_original or f"Frete fracionado via {agentes_info['fornecedor_principal']}"
+                # Extrair capacidade dos detalhes disponíveis
+                peso_max_final = 300
+                prazo_final = 1
+                # Tentar extrair de qualquer estrutura disponível
+                if 'peso_maximo' in detalhes:
+                    peso_max_final = float(detalhes.get('peso_maximo', 300))
+                if 'prazo' in detalhes:
+                    prazo_final = int(detalhes.get('prazo', 1))
                 capacidade_info = {
-                    'peso_max': '300kg',
+                    'peso_max': f"{peso_max_final}kg",
                     'volume_max': '10m³',
-                    'descricao': 'Frete fracionado padrão'
+                    'descricao': 'Frete fracionado padrão',
+                    'prazo': prazo_final,
+                    'excede_peso': peso_cubado > peso_max_final
                 }
             
             # Determinar ícone baseado na posição
@@ -3307,6 +3396,7 @@ def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, 
                 'peso_usado': f"{peso_cubado}kg",
                 'peso_usado_tipo': 'Real' if peso_real >= peso_cubado else 'Cubado',
                 'capacidade': capacidade_info,
+                'prazo': capacidade_info.get('prazo', prazo_total),  # Usar prazo da capacidade
                 'eh_melhor_opcao': (i == 1),
                 
                 # 🆕 DETALHES EXPANDIDOS

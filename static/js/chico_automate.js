@@ -1526,9 +1526,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             R$ ${opcao.custo_total.toFixed(2)}
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
-                            <strong>Peso:</strong> ${opcao.capacidade.peso_max}<br>
+                            <strong>Peso:</strong> <span style="${opcao.capacidade.excede_peso ? 'color: #dc3545; font-weight: bold;' : ''}">${opcao.capacidade.peso_max}</span>
+                            ${opcao.capacidade.excede_peso ? '<br><span style="color: #dc3545; font-size: 0.8rem;">⚠️ EXCEDE LIMITE!</span>' : ''}<br>
                             <strong>Volume:</strong> ${opcao.capacidade.volume_max}<br>
-                            <span style="color: #007bff;">📅 ${opcao.prazo} dias</span>
+                            <span style="color: #007bff;">📅 ${opcao.capacidade.prazo || opcao.prazo} dias</span>
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
                             <button class="btn btn-info btn-sm" onclick="toggleDetalhesOpcao(${index})" style="background: #17a2b8; border: none; color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem;">
@@ -1908,20 +1909,61 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
             
-            <!-- Custos Gerais da Cotação -->
-            <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
-                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                    <span>🚛 Coleta:</span>
-                    <span>R$ ${(detalhes.custos_detalhados?.custo_coleta || (detalhes.custos_detalhados?.custo_base_frete * 0.3) || 0).toFixed(2)}</span>
+            <!-- Detalhamento Específico do Agente -->
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 10px;">
+                <h6 style="color: #495057; margin-bottom: 10px; font-weight: bold;">
+                    📋 Detalhamento de Custos - ${nomeAgente}
+                </h6>
+                <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                        <span>💼 Frete Base:</span>
+                        <span>R$ ${custoEspecifico.toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                        <span>🛣️ Pedágio:</span>
+                        <span>R$ ${(
+                            tipoAgente === 'coleta' ? (detalhes.custos_detalhados?.pedagio_coleta || 0) :
+                            tipoAgente === 'transferencia' ? (detalhes.custos_detalhados?.pedagio_transferencia || 0) :
+                            (detalhes.custos_detalhados?.pedagio_entrega || 0)
+                        ).toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                        <span>📊 GRIS:</span>
+                        <span>R$ ${(
+                            tipoAgente === 'coleta' ? (detalhes.custos_detalhados?.gris_coleta || 0) :
+                            tipoAgente === 'transferencia' ? (detalhes.custos_detalhados?.gris_transferencia || 0) :
+                            (detalhes.custos_detalhados?.gris_entrega || 0)
+                        ).toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                        <span>🛡️ Seguro:</span>
+                        <span>R$ ${(
+                            tipoAgente === 'coleta' ? (detalhes.custos_detalhados?.seguro_coleta || 0) :
+                            tipoAgente === 'transferencia' ? (detalhes.custos_detalhados?.seguro_transferencia || 0) :
+                            (detalhes.custos_detalhados?.seguro_entrega || 0)
+                        ).toFixed(2)}</span>
+                    </div>
                 </div>
-                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                    <span>🚚 Transferência:</span>
-                    <span>R$ ${(detalhes.custos_detalhados?.custo_transferencia || (detalhes.custos_detalhados?.custo_base_frete * 0.5) || 0).toFixed(2)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                    <span>🚛 Entrega:</span>
-                    <span>R$ ${(detalhes.custos_detalhados?.custo_entrega || (detalhes.custos_detalhados?.custo_base_frete * 0.2) || 0).toFixed(2)}</span>
-                </div>
+            </div>
+            
+            <!-- Resumo Geral da Cotação -->
+            <div style="background: #fff; border: 1px solid #dee2e6; padding: 15px; border-radius: 8px;">
+                <h6 style="color: #495057; margin-bottom: 10px; font-weight: bold;">
+                    💰 Resumo Total da Cotação
+                </h6>
+                <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                        <span>🚛 Coleta:</span>
+                        <span>R$ ${(detalhes.custos_detalhados?.custo_coleta || 0).toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                        <span>🚚 Transferência:</span>
+                        <span>R$ ${(detalhes.custos_detalhados?.custo_transferencia || 0).toFixed(2)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                        <span>🚛 Entrega:</span>
+                        <span>R$ ${(detalhes.custos_detalhados?.custo_entrega || 0).toFixed(2)}</span>
+                    </div>
                 <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc; background: #f0f0f0; font-weight: bold;">
                     <span>💼 Subtotal Frete:</span>
                     <span><strong>R$ ${(detalhes.custos_detalhados?.custo_base_frete || 0).toFixed(2)}</strong></span>
