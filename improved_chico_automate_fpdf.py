@@ -2786,24 +2786,31 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                 valor_base = peso_calculo * valor_por_kg
                 print(f"[CUSTO-TRANSF] ✅ Peso >100kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
             else:
-                # 3. Para pesos entre 10kg e 100kg, encontrar a faixa correta (ignorando colunas M e N)
-                # Mapeamento de faixas de peso para colunas (usando as colunas disponíveis na base)
-                faixas_peso = [10, 20, 30, 50, 70, 100, 150, 200, 300, 500]
-                colunas_peso = ['VALOR MÍNIMO ATÉ 10', 20, 30, 50, 70, 100, 150, 200, 300, 'Acima 500']
+                # 3. Para pesos entre 10kg e 100kg, buscar a faixa correta excluindo M (150) e N (200)
+                # Faixas disponíveis: 20, 30, 50, 70, 100, depois usar 300 se necessário
+                faixas_disponiveis = [
+                    (20, 20), (30, 30), (50, 50), (70, 70), (100, 100)
+                ]
                 
-                # Encontrar a menor faixa que seja maior ou igual ao peso
-                valor_base_kg = 0
-                for i, faixa in enumerate(faixas_peso):
-                    if peso_calculo <= faixa:
-                        valor_base_kg = float(linha.get(str(colunas_peso[i]), 0))
-                        valor_base = peso_calculo * valor_base_kg
-                        print(f"[CUSTO-TRANSF] ✅ Peso {peso_calculo}kg na faixa até {faixa}kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
-                        break
-                else:
-                    # Se não encontrou faixa, usar o último valor
-                    valor_base_kg = float(linha.get(colunas_peso[-1], 0))
-                    valor_base = peso_calculo * valor_base_kg
-                    print(f"[CUSTO-TRANSF] ⚠️ Usando última faixa disponível: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
+                valor_por_kg = 0
+                faixa_usada = None
+                
+                # Buscar a faixa apropriada para o peso
+                for faixa_limite, coluna in faixas_disponiveis:
+                    if peso_calculo <= faixa_limite:
+                        valor_candidato = float(linha.get(coluna, 0))
+                        if valor_candidato > 0:  # Só usar se o valor não for 0
+                            valor_por_kg = valor_candidato
+                            faixa_usada = faixa_limite
+                            break
+                
+                # Se não encontrou valor válido nas faixas menores, usar coluna 300
+                if valor_por_kg == 0:
+                    valor_por_kg = float(linha.get(300, 0))
+                    faixa_usada = 300
+                
+                valor_base = peso_calculo * valor_por_kg
+                print(f"[CUSTO-TRANSF] ✅ Peso {peso_calculo}kg usando faixa {faixa_usada}kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
             
             custo_base = valor_base
             
