@@ -2786,24 +2786,25 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                 valor_base = peso_calculo * valor_por_kg
                 print(f"[CUSTO-TRANSF] ✅ Peso >100kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
             else:
-                # 3. Para pesos entre 10kg e 100kg, encontrar a faixa correta (ignorando colunas M e N)
-                # Mapeamento de faixas de peso para colunas (usando as colunas disponíveis na base)
-                faixas_peso = [10, 20, 30, 50, 70, 100, 150, 200, 300, 500]
-                colunas_peso = ['VALOR MÍNIMO ATÉ 10', 20, 30, 50, 70, 100, 150, 200, 300, 'Acima 500']
+                # 3. Para pesos entre 10kg e 100kg, encontrar a faixa correta
+                # Mapeamento de faixas de peso para colunas (usando as colunas reais da base)
+                faixas_peso = [20, 30, 50, 70, 100]
+                colunas_peso = [20, 30, 50, 70, 100]
                 
                 # Encontrar a menor faixa que seja maior ou igual ao peso
                 valor_base_kg = 0
                 for i, faixa in enumerate(faixas_peso):
                     if peso_calculo <= faixa:
-                        valor_base_kg = float(linha.get(str(colunas_peso[i]), 0))
+                        coluna_key = colunas_peso[i]
+                        valor_base_kg = float(linha.get(coluna_key, 0))
                         valor_base = peso_calculo * valor_base_kg
                         print(f"[CUSTO-TRANSF] ✅ Peso {peso_calculo}kg na faixa até {faixa}kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
                         break
                 else:
-                    # Se não encontrou faixa, usar o último valor
-                    valor_base_kg = float(linha.get(colunas_peso[-1], 0))
+                    # Se não encontrou faixa, usar coluna 100
+                    valor_base_kg = float(linha.get(100, 0))
                     valor_base = peso_calculo * valor_base_kg
-                    print(f"[CUSTO-TRANSF] ⚠️ Usando última faixa disponível: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
+                    print(f"[CUSTO-TRANSF] ⚠️ Usando faixa 100kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
             
             custo_base = valor_base
             
@@ -2851,48 +2852,39 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         
             custo_base = valor_base
         
-        # 🔧 CALCULAR PEDÁGIO (CORRIGIDO)
-        # Para transferências, não há pedágio
-        if tipo_servico == 'TRANSFERÊNCIA' or 'TRANSFERENCIA' in tipo_servico:
-            print("[CUSTO-TRANSF] ℹ️ Transferência: Pedágio não aplicável")
+        # 🔧 CALCULAR PEDÁGIO (APLICADO PARA TRANSFERÊNCIAS TAMBÉM)
+        pedagio = 0.0
+        try:
+            valor_pedagio = float(linha.get('Pedagio (100 Kg)', 0) or 0)
+            if valor_pedagio > 0 and peso_cubado > 0:
+                blocos_pedagio = math.ceil(peso_cubado / 100)
+                pedagio = blocos_pedagio * valor_pedagio
+                print(f"[PEDAGIO] {fornecedor}: {blocos_pedagio} blocos × R$ {valor_pedagio:.2f} = R$ {pedagio:.2f}")
+        except (ValueError, TypeError):
             pedagio = 0.0
-        else:
-            pedagio = 0.0
-            try:
-                valor_pedagio = float(linha.get('Pedagio (100 Kg)', 0) or 0)
-                if valor_pedagio > 0 and peso_cubado > 0:
-                    blocos_pedagio = math.ceil(peso_cubado / 100)
-                    pedagio = blocos_pedagio * valor_pedagio
-                    print(f"[PEDAGIO] {fornecedor}: {blocos_pedagio} blocos × R$ {valor_pedagio:.2f} = R$ {pedagio:.2f}")
-            except (ValueError, TypeError):
-                pedagio = 0.0
         
-        # 🔧 CALCULAR GRIS (CORRIGIDO)
-        # Para transferências, não há GRIS
-        if tipo_servico == 'TRANSFERÊNCIA' or 'TRANSFERENCIA' in tipo_servico:
-            print("[CUSTO-TRANSF] ℹ️ Transferência: GRIS não aplicável")
+        # 🔧 CALCULAR GRIS (APLICADO PARA TRANSFERÊNCIAS TAMBÉM)
+        gris_valor = 0.0
+        try:
+            if valor_nf and valor_nf > 0:
+                gris_exc = linha.get('Gris Exc')
+                gris_min = linha.get('Gris Min', 0)
+                if gris_exc is not None and not pd.isna(gris_exc):
+                    gris_exc = float(gris_exc)
+                    # CORREÇÃO: Gris Exc na planilha sempre está em formato percentual
+                    gris_percentual = gris_exc / 100
+                    gris_calculado = valor_nf * gris_percentual
+                    if gris_min is not None and not pd.isna(gris_min):
+                        gris_min = float(gris_min)
+                        gris_valor = max(gris_calculado, gris_min)
+                    else:
+                        gris_valor = gris_calculado
+                    # Verificar se o resultado é NaN
+                    if pd.isna(gris_valor) or math.isnan(gris_valor):
+                        gris_valor = 0.0
+                    print(f"[GRIS] {fornecedor}: {gris_exc:.1f}% de R$ {valor_nf:,.2f} = R$ {gris_valor:.2f} (mín: R$ {gris_min:.2f})")
+        except (ValueError, TypeError):
             gris_valor = 0.0
-        else:
-            gris_valor = 0.0
-            try:
-                if valor_nf and valor_nf > 0:
-                    gris_exc = linha.get('Gris Exc')
-                    gris_min = linha.get('Gris Min', 0)
-                    if gris_exc is not None and not pd.isna(gris_exc):
-                        gris_exc = float(gris_exc)
-                        # CORREÇÃO: Gris Exc na planilha sempre está em formato percentual
-                        gris_percentual = gris_exc / 100
-                        gris_calculado = valor_nf * gris_percentual
-                        if gris_min is not None and not pd.isna(gris_min):
-                            gris_min = float(gris_min)
-                            gris_valor = max(gris_calculado, gris_min)
-                        else:
-                            gris_valor = gris_calculado
-                        # Verificar se o resultado é NaN
-                        if pd.isna(gris_valor) or math.isnan(gris_valor):
-                            gris_valor = 0.0
-            except (ValueError, TypeError):
-                gris_valor = 0.0
         
         # Calcular total
         total = custo_base + pedagio + gris_valor
