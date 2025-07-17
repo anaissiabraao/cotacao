@@ -1374,6 +1374,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // 🆕 VERIFICAR SE HÁ RANKING FRACIONADO (NOVO FORMATO)
         if (data.ranking_fracionado) {
             console.log('[FRACIONADO] Usando novo formato de ranking');
+            // Armazenar ranking globalmente para acesso das funções
+            window.rankingFracionado = data.ranking_fracionado;
             exibirRankingFracionado(data.ranking_fracionado, container);
             return;
         }
@@ -1528,7 +1530,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
                             <strong>Peso:</strong> ${opcao.capacidade.peso_max}<br>
                             <strong>Volume:</strong> ${opcao.capacidade.volume_max}<br>
-                            <span style="color: #007bff;">📅 ${opcao.prazo} dias</span>
+                            <span style="color: #007bff;">📅 ${opcao.capacidade.prazo || opcao.prazo} dias</span>
+                            ${opcao.capacidade.alerta ? `<br><span style="color: #dc3545; font-weight: bold; font-size: 0.85em;">${opcao.capacidade.alerta}</span>` : ''}
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
                             <button class="btn btn-info btn-sm" onclick="toggleDetalhesOpcao(${index})" style="background: #17a2b8; border: none; color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem;">
@@ -2494,6 +2497,139 @@ document.addEventListener('DOMContentLoaded', function() {
         html += '</div>';
         container.innerHTML = html;
     }
+
+    // Função para alternar visualização de detalhes
+    window.toggleDetalhesOpcao = function(index) {
+        const detalhesRow = document.getElementById(`detalhes-row-${index}`);
+        const btnText = document.getElementById(`btn-text-${index}`);
+        
+        if (detalhesRow.style.display === 'none') {
+            detalhesRow.style.display = 'table-row';
+            btnText.textContent = '🔒 Ocultar Detalhes';
+        } else {
+            detalhesRow.style.display = 'none';
+            btnText.textContent = '🔎 Ver Detalhes';
+        }
+    };
+
+    // Função para exibir custos específicos de cada agente
+    window.exibirCustosAgente = function(tipo, indexOpcao) {
+        if (!window.rankingFracionado || !window.rankingFracionado.ranking_opcoes[indexOpcao]) {
+            alert('Dados não disponíveis');
+            return;
+        }
+        
+        const opcao = window.rankingFracionado.ranking_opcoes[indexOpcao];
+        const detalhes = opcao.detalhes_expandidos || {};
+        const dados_agentes = detalhes.dados_agentes || {};
+        
+        let agenteData = null;
+        let tituloAgente = '';
+        
+        // Selecionar o agente correto baseado no tipo
+        if (tipo === 'coleta' && dados_agentes.agente_coleta) {
+            agenteData = dados_agentes.agente_coleta;
+            tituloAgente = 'Agente de Coleta';
+        } else if (tipo === 'transferencia' && dados_agentes.transferencia) {
+            agenteData = dados_agentes.transferencia;
+            tituloAgente = 'Transferência';
+        } else if (tipo === 'entrega' && dados_agentes.agente_entrega) {
+            agenteData = dados_agentes.agente_entrega;
+            tituloAgente = 'Agente de Entrega';
+        }
+        
+        if (!agenteData || Object.keys(agenteData).length === 0) {
+            alert('Dados do agente não disponíveis');
+            return;
+        }
+        
+        // Montar HTML com os custos específicos do agente
+        let custosHtml = `
+            <div style="margin-bottom: 15px; padding: 10px; background: #e8f5e8; border-radius: 4px;">
+                <h6 style="color: #28a745; margin-bottom: 10px;">🔍 Custos Específicos de ${tituloAgente}</h6>
+                <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
+        `;
+        
+        // Informações do agente
+        if (agenteData.fornecedor) {
+            custosHtml += `
+                <div style="padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                    <strong>Fornecedor:</strong> ${agenteData.fornecedor}
+                </div>
+            `;
+        }
+        
+        if (agenteData.origem && agenteData.destino) {
+            custosHtml += `
+                <div style="padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                    <strong>Rota:</strong> ${agenteData.origem} → ${agenteData.destino}
+                </div>
+            `;
+        }
+        
+        // Custos detalhados
+        custosHtml += `
+            <div style="margin-top: 10px;">
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                    <span>💼 Frete Base:</span>
+                    <span>R$ ${(agenteData.custo_base || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                    <span>🛣️ Pedágio:</span>
+                    <span>R$ ${(agenteData.pedagio || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                    <span>📊 GRIS:</span>
+                    <span>R$ ${(agenteData.gris || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                    <span>🛡️ Seguro:</span>
+                    <span>R$ ${(agenteData.seguro || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                    <span>📦 TDA:</span>
+                    <span>R$ ${(agenteData.tda || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 4px 0;">
+                    <span>📋 TAS:</span>
+                    <span>R$ ${(agenteData.tas || 0).toFixed(2)}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 6px 0; margin-top: 5px; background: #d4ecda; border-radius: 4px; font-weight: bold;">
+                    <span style="padding-left: 8px;">Total ${tituloAgente}:</span>
+                    <span style="padding-right: 8px;">R$ ${(agenteData.total || 0).toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+        
+        // Informações adicionais
+        if (agenteData.prazo) {
+            custosHtml += `
+                <div style="margin-top: 10px; padding: 4px 0;">
+                    <strong>⏱️ Prazo:</strong> ${agenteData.prazo} dias
+                </div>
+            `;
+        }
+        
+        if (agenteData.peso_maximo && agenteData.peso_maximo > 0) {
+            custosHtml += `
+                <div style="padding: 4px 0;">
+                    <strong>⚖️ Peso Máximo:</strong> ${agenteData.peso_maximo}kg
+                    ${agenteData.excede_peso ? '<span style="color: #dc3545;"> ⚠️ EXCEDIDO</span>' : ''}
+                </div>
+            `;
+        }
+        
+        custosHtml += `
+                </div>
+            </div>
+        `;
+        
+        // Atualizar o container de custos
+        const custosContainer = document.getElementById(`custos-container-${indexOpcao}`);
+        if (custosContainer) {
+            custosContainer.innerHTML = custosHtml;
+        }
+    };
 
     function toggleLoading(id, show) {
         const loading = document.getElementById(id);
