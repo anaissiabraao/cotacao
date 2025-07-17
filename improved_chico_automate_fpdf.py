@@ -1970,7 +1970,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 if not transferencias_primeiro_trecho.empty and not transferencias_segundo_trecho.empty:
                     print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transferencias_primeiro_trecho)} transferências para {estado_intermediario} e {len(transferencias_segundo_trecho)} de {estado_intermediario} para {uf_destino}")
                     
-                    # Marcar as transferências como 'via_intermediario' para identificar que são do MÉTODO 3
+                    # Marcar as transferências como 'via_estado_intermediario' para identificar que são do MÉTODO 3
                     for _, transf in transferencias_primeiro_trecho.iterrows():
                         # Cria uma cópia da transferência e adiciona metadados
                         transf_dict = transf.to_dict()
@@ -2720,6 +2720,12 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
 def calcular_custo_agente(linha, peso_cubado, valor_nf):
     """
     Calcula o custo de um agente ou transferência específico
+    
+    Para transferências, segue regras específicas:
+    - Ignora colunas M e N (valores zero)
+    - Para pesos > 100kg, usa coluna 'ACIMA 100'
+    - Usa o maior entre peso real e cubado
+    - Aplica valor mínimo para pesos até 10kg
     """
     try:
         fornecedor = linha.get('Fornecedor', 'N/A')
@@ -2729,6 +2735,7 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         # ✅ VERIFICAR PESO MÁXIMO TRANSPORTADO (MELHORADO)
         peso_maximo = None
         alerta_peso = None
+        excede_peso = False
         
         if 'PESO MÁXIMO TRANSPORTADO' in linha and pd.notna(linha.get('PESO MÁXIMO TRANSPORTADO')):
             try:
@@ -2738,13 +2745,70 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                 if peso_maximo > 0 and peso_cubado > peso_maximo:
                     alerta_peso = f"⚠️ ATENÇÃO: Peso cubado ({peso_cubado}kg) excede o limite máximo do agente {fornecedor} ({peso_maximo}kg)"
                     print(f"[CUSTO] {alerta_peso}")
+                    excede_peso = True
             except (ValueError, TypeError):
                 pass
         
-        # 🔧 LÓGICA ESPECÍFICA PARA JEM/DFL - CORREÇÃO DO CÁLCULO
+        # 🔧 LÓGICA ESPECÍFICA PARA TRANSFERÊNCIAS
         fornecedor_upper = str(fornecedor).upper()
+        tipo_servico = str(linha.get('Tipo', '')).upper()
         
-        if 'JEM' in fornecedor_upper or 'DFL' in fornecedor_upper:
+        if tipo_servico == 'TRANSFERÊNCIA' or 'TRANSFERENCIA' in tipo_servico:
+            print(f"[CUSTO-TRANSF] 🔧 Aplicando lógica para transferência: {fornecedor}")
+            
+            # Para transferências, usar o maior entre peso real e cubado
+            peso_calculo = peso_cubado  # Já é o máximo entre peso real e cubado
+            
+            # 1. Verificar valor mínimo para até 10kg
+            if 'VALOR MÍNIMO ATÉ 10' in linha and pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')):
+                valor_minimo = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
+                
+                # Se peso for até 10kg, usar valor mínimo
+                if peso_calculo <= 10:
+                    valor_base = valor_minimo
+                    print(f"[CUSTO-TRANSF] ✅ Peso ≤ 10kg: Valor mínimo R$ {valor_base:.2f}")
+                    return {
+                        'custo_base': round(valor_base, 2),
+                        'pedagio': 0.0,
+                        'gris': 0.0,
+                        'total': round(valor_base, 2),
+                        'prazo': prazo,
+                        'peso_maximo': peso_maximo,
+                        'alerta_peso': alerta_peso,
+                        'excede_peso': excede_peso
+                    }
+            
+            # 2. Para pesos acima de 100kg, usar a coluna apropriada baseada no peso
+            if peso_calculo > 100:
+                # Removendo verificações de 150 e 200 que estão com 0
+                # Diretamente usar coluna 300 para >100kg
+                valor_por_kg = float(linha.get(300, 0))
+                valor_base = peso_calculo * valor_por_kg
+                print(f"[CUSTO-TRANSF] ✅ Peso >100kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
+            else:
+                # 3. Para pesos entre 10kg e 100kg, encontrar a faixa correta (ignorando colunas M e N)
+                # Mapeamento de faixas de peso para colunas (usando as colunas disponíveis na base)
+                faixas_peso = [10, 20, 30, 50, 70, 100, 150, 200, 300, 500]
+                colunas_peso = ['VALOR MÍNIMO ATÉ 10', 20, 30, 50, 70, 100, 150, 200, 300, 'Acima 500']
+                
+                # Encontrar a menor faixa que seja maior ou igual ao peso
+                valor_base_kg = 0
+                for i, faixa in enumerate(faixas_peso):
+                    if peso_calculo <= faixa:
+                        valor_base_kg = float(linha.get(str(colunas_peso[i]), 0))
+                        valor_base = peso_calculo * valor_base_kg
+                        print(f"[CUSTO-TRANSF] ✅ Peso {peso_calculo}kg na faixa até {faixa}kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
+                        break
+                else:
+                    # Se não encontrou faixa, usar o último valor
+                    valor_base_kg = float(linha.get(colunas_peso[-1], 0))
+                    valor_base = peso_calculo * valor_base_kg
+                    print(f"[CUSTO-TRANSF] ⚠️ Usando última faixa disponível: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
+            
+            custo_base = valor_base
+            
+        # 🔧 LÓGICA ESPECÍFICA PARA JEM/DFL - CORREÇÃO DO CÁLCULO
+        elif 'JEM' in fornecedor_upper or 'DFL' in fornecedor_upper:
             print(f"[CUSTO-JEM] 🔧 Aplicando lógica específica para JEM/DFL: {fornecedor}")
             
             # JEM/DFL usa VALOR MÍNIMO + EXCEDENTE
@@ -2767,6 +2831,7 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                         print(f"[CUSTO-JEM] ✅ Peso > 10kg: Mínimo R$ {valor_min:.2f} + ({peso_excedente:.1f}kg × R$ {excedente:.3f}) = R$ {valor_base:.2f}")
             
             print(f"[CUSTO-JEM] Fornecedor: {fornecedor}, Peso: {peso_cubado}kg, Base: R$ {valor_base:.2f}")
+            custo_base = valor_base
         
         else:
             # LÓGICA PADRÃO PARA OUTROS FORNECEDORES
@@ -2784,42 +2849,53 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         
                 valor_base = valor_base + excedente_valor
         
-        custo_base = valor_base
+            custo_base = valor_base
         
         # 🔧 CALCULAR PEDÁGIO (CORRIGIDO)
-        pedagio = 0.0
-        try:
-            valor_pedagio = float(linha.get('Pedagio (100 Kg)', 0) or 0)
-            if valor_pedagio > 0 and peso_cubado > 0:
-                blocos_pedagio = math.ceil(peso_cubado / 100)
-                pedagio = blocos_pedagio * valor_pedagio
-                print(f"[PEDAGIO] {fornecedor}: {blocos_pedagio} blocos × R$ {valor_pedagio:.2f} = R$ {pedagio:.2f}")
-        except (ValueError, TypeError):
+        # Para transferências, não há pedágio
+        if tipo_servico == 'TRANSFERÊNCIA' or 'TRANSFERENCIA' in tipo_servico:
+            print("[CUSTO-TRANSF] ℹ️ Transferência: Pedágio não aplicável")
             pedagio = 0.0
+        else:
+            pedagio = 0.0
+            try:
+                valor_pedagio = float(linha.get('Pedagio (100 Kg)', 0) or 0)
+                if valor_pedagio > 0 and peso_cubado > 0:
+                    blocos_pedagio = math.ceil(peso_cubado / 100)
+                    pedagio = blocos_pedagio * valor_pedagio
+                    print(f"[PEDAGIO] {fornecedor}: {blocos_pedagio} blocos × R$ {valor_pedagio:.2f} = R$ {pedagio:.2f}")
+            except (ValueError, TypeError):
+                pedagio = 0.0
         
         # 🔧 CALCULAR GRIS (CORRIGIDO)
-        gris_valor = 0.0
-        try:
-            if valor_nf and valor_nf > 0:
-                gris_exc = linha.get('Gris Exc')
-                gris_min = linha.get('Gris Min', 0)
-                if gris_exc is not None and not pd.isna(gris_exc):
-                    gris_exc = float(gris_exc)
-                    # CORREÇÃO: Gris Exc na planilha sempre está em formato percentual
-                    # Exemplo: 0.1 = 0.1%, 0.17 = 0.17%, 3.5 = 3.5%
-                    gris_percentual = gris_exc / 100
-                    gris_calculado = valor_nf * gris_percentual
-                    if gris_min is not None and not pd.isna(gris_min):
-                        gris_min = float(gris_min)
-                        gris_valor = max(gris_calculado, gris_min)
-                    else:
-                        gris_valor = gris_calculado
-                    # Verificar se o resultado é NaN
-                    if pd.isna(gris_valor) or math.isnan(gris_valor):
-                        gris_valor = 0.0
-                    print(f"[GRIS] {fornecedor}: {gris_exc}% de R$ {valor_nf:,.2f} = R$ {gris_valor:.2f} (mín: R$ {gris_min:.2f})")
-        except (ValueError, TypeError):
+        # Para transferências, não há GRIS
+        if tipo_servico == 'TRANSFERÊNCIA' or 'TRANSFERENCIA' in tipo_servico:
+            print("[CUSTO-TRANSF] ℹ️ Transferência: GRIS não aplicável")
             gris_valor = 0.0
+        else:
+            gris_valor = 0.0
+            try:
+                if valor_nf and valor_nf > 0:
+                    gris_exc = linha.get('Gris Exc')
+                    gris_min = linha.get('Gris Min', 0)
+                    if gris_exc is not None and not pd.isna(gris_exc):
+                        gris_exc = float(gris_exc)
+                        # CORREÇÃO: Gris Exc na planilha sempre está em formato percentual
+                        gris_percentual = gris_exc / 100
+                        gris_calculado = valor_nf * gris_percentual
+                        if gris_min is not None and not pd.isna(gris_min):
+                            gris_min = float(gris_min)
+                            gris_valor = max(gris_calculado, gris_min)
+                        else:
+                            gris_valor = gris_calculado
+                        # Verificar se o resultado é NaN
+                        if pd.isna(gris_valor) or math.isnan(gris_valor):
+                            gris_valor = 0.0
+            except (ValueError, TypeError):
+                gris_valor = 0.0
+        
+        # Calcular total
+        total = custo_base + pedagio + gris_valor
         
         # 🔧 CALCULAR SEGURO SE DISPONÍVEL
         seguro = 0
