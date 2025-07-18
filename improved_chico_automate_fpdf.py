@@ -634,7 +634,6 @@ def calcular_distancia_osrm(origem, destino):
     except Exception as e:
         print(f"[OSRM] Erro ao calcular distância: {e}")
         return None
-
 def calcular_distancia_openroute(origem, destino):
     try:
         url = "https://api.openrouteservice.org/v2/directions/driving-car"
@@ -1139,7 +1138,6 @@ def obter_municipios_com_base(uf):
     except Exception as e:
         print(f"[MUNICIPIOS_BASE] ❌ Erro ao obter municípios: {e}")
         return []
-
 def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, valor_nf=None, cubagem=None):
     """
     Calcula frete com sistema de agentes - APENAS rotas completas válidas
@@ -2278,7 +2276,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'agente_entrega': custo_entrega
                             }
                             rotas_encontradas.append(rota)
-
         # 🎯 PRIORIDADE 1: TRANSFERÊNCIAS DIRETAS + AGENTES DE ENTREGA
         if not transferencias_origem_destino.empty and not agentes_entrega.empty:
             print(f"[ROTAS] 🏆 PRIORIDADE MÁXIMA: Transferências diretas + Agentes de entrega")
@@ -2716,7 +2713,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         import traceback
         traceback.print_exc()
         return None
-
 def calcular_custo_agente(linha, peso_cubado, valor_nf):
     """
     Calcula o custo de um agente ou transferência específico
@@ -2980,202 +2976,39 @@ def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=Non
         cubagem = float(cubagem) if cubagem else 0
         
         if cubagem <= 0:
-            print(f"[AÉREO] Buscando: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
+            return peso_real
+            
+        # Fator de cubagem padrão
+        fator_cubagem = 300  # kg/m³
         
-        # Buscar rotas aéreas correspondentes
-        opcoes_aereas = []
-        
-
-        for _, linha in df_aereo.iterrows():
-            origem_base = normalizar_cidade_nome(str(linha.get('Origem', '')))
-            destino_base = normalizar_cidade_nome(str(linha.get('Destino', '')))
-            # Verificar se a rota corresponde
-            if origem_base == origem_norm and destino_base == destino_norm:
-                # Processar dados da linha
-                fornecedor = linha.get('Fornecedor', 'N/A')
-                prazo_raw = int(linha.get('Prazo', 1))
-                # Para modal aéreo: prazo 0 = 1 dia
-                prazo = 1 if prazo_raw == 0 else prazo_raw
-                # Calcular custo baseado no peso
-                peso_float = float(peso)
-                # Valores da planilha
-                valor_minimo = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
-                excedente = float(linha.get('EXCEDENTE', 0))
-                # Calcular custo total
-                if peso_float <= 10:
-                    custo_base = valor_minimo
-                else:
-                    peso_excedente = peso_float - 10
-                    custo_base = valor_minimo + (peso_excedente * excedente)
-                # GRIS para aéreo (se informado) - CORRIGIDO
-                gris_valor = 0.0
-                try:
-                    if valor_nf and valor_nf > 0:
-                        gris_exc = linha.get('Gris Exc')
-                        gris_min = linha.get('Gris Min', 0)
-                        if gris_exc is not None and not pd.isna(gris_exc):
-                            gris_exc = float(gris_exc)
-                            # CORREÇÃO: Gris Exc na planilha sempre está em formato percentual
-                            gris_percentual = gris_exc / 100
-                            gris_calculado = valor_nf * gris_percentual
-                            if gris_min is not None and not pd.isna(gris_min):
-                                gris_min = float(gris_min)
-                                gris_valor = max(gris_calculado, gris_min)
-                            else:
-                                gris_valor = gris_calculado
-                            # Verificar se o resultado é NaN
-                            if pd.isna(gris_valor) or math.isnan(gris_valor):
-                                gris_valor = 0.0
-                except (ValueError, TypeError):
-                    gris_valor = 0.0
-
-                    # Pedágio para aéreo (normalmente zero) - CORRIGIDO
-                    pedagio = 0.0
-                    try:
-                        valor_pedagio = float(linha.get('Pedagio (100 Kg)', 0) or 0)
-                        if valor_pedagio > 0 and peso_float > 0:
-                            blocos_pedagio = math.ceil(peso_float / 100)
-                            pedagio = blocos_pedagio * valor_pedagio
-                    except (ValueError, TypeError):
-                        pedagio = 0.0
-
-                    # Total
-                    total = custo_base + gris_valor + pedagio
-
-                    opcao = {
-                        'fornecedor': fornecedor,
-                        'origem': linha.get('Origem', ''),
-                        'destino': linha.get('Destino', ''),
-                        'custo_base': round(custo_base, 2),
-                        'gris': round(gris_valor, 2),
-                        'pedagio': round(pedagio, 2),
-                        'total': round(total, 2),
-                        'prazo': prazo,
-                        'peso_usado': peso_float,
-                        'modalidade': 'AÉREO'
-                    }
-
-                    opcoes_aereas.append(opcao)
-                    print(f"[AÉREO] ✅ {fornecedor}: R$ {total:,.2f} (prazo: {prazo} dias)")
-                    
-        
-        if not opcoes_aereas:
-            print(f"[AÉREO] ❌ Nenhuma rota aérea encontrada para {origem_norm} → {destino_norm}")
-            return None
-        
-        # Ordenar por menor custo
-        opcoes_aereas.sort(key=lambda x: x['total'])
-        
-        # Preparar mensagens de aviso sobre agentes ausentes
-        avisos = []
-        if agentes_faltando['origem']:
-            if agentes_faltando['agentes_proximos_origem']:
-                cidades_proximas = ", ".join([f"{m[0]}/{m[1]} ({m[2]:.1f}km)" for m in agentes_faltando['agentes_proximos_origem']])
-                avisos.append(f"Atenção: Nenhum agente encontrado em {origem}/{uf_origem}. Cidades próximas com agentes: {cidades_proximas}")
+        # Ajustar fator baseado no tipo
+        if tipo_linha == 'Agente':
+            fator_cubagem = 250
+        elif tipo_linha == 'Transferencia':
+            fator_cubagem = 166
+        elif tipo_linha == 'Direto':
+            # Pode variar por fornecedor
+            if fornecedor and 'REUNIDAS' in str(fornecedor).upper():
+                fator_cubagem = 300
+            elif fornecedor and 'GRITSCH' in str(fornecedor).upper():
+                fator_cubagem = 300
             else:
-                avisos.append(f"Atenção: Nenhum agente encontrado em {origem}/{uf_origem} e não foram encontradas cidades próximas com agentes.")
+                fator_cubagem = 300
+                
+        # Calcular peso cubado
+        peso_cubado = cubagem * fator_cubagem
         
-        if agentes_faltando['destino']:
-            if agentes_faltando['agentes_proximos_destino']:
-                cidades_proximas = ", ".join([f"{m[0]}/{m[1]} ({m[2]:.1f}km)" for m in agentes_faltando['agentes_proximos_destino']])
-                avisos.append(f"Atenção: Nenhum agente encontrado em {destino}/{uf_destino}. Cidades próximas com agentes: {cidades_proximas}")
-            else:
-                avisos.append(f"Atenção: Nenhum agente encontrado em {destino}/{uf_destino} e não foram encontradas cidades próximas com agentes.")
+        # Retornar o maior entre peso real e cubado
+        peso_final = max(peso_real, peso_cubado)
         
-        # Preparar resultado final
-        resultado = {
-            'opcoes': opcoes_aereas,
-            'total_opcoes': len(opcoes_aereas),
-            'melhor_opcao': opcoes_aereas[0] if opcoes_aereas else None,
-            'origem': origem,
-            'uf_origem': uf_origem,
-            'destino': destino,
-            'uf_destino': uf_destino,
-            'peso': peso,
-            'valor_nf': valor_nf,
-            'agentes_faltando': agentes_faltando,
-            'avisos': avisos if avisos else None
-        }
+        if peso_cubado > peso_real:
+            print(f"[PESO_CUBADO] {tipo_linha} ({fator_cubagem}kg/m³): {peso_real}kg vs {peso_cubado:.1f}kg = {peso_final}kg")
         
-        print(f"[AÉREO] ✅ {len(opcoes_aereas)} opções aéreas encontradas")
-        return resultado
+        return peso_final
         
     except Exception as e:
-        print(f"[AÉREO] ❌ Erro no cálculo aéreo: {e}")
-        return None
-
-def gerar_pedagios_estimados_mapa(rota_info, tipo_veiculo, valor_total_pedagio, distancia_total):
-    """
-    Gera localizações estimadas de pedágios ao longo da rota para exibir no mapa
-    """
-    try:
-        pedagios_mapa = []
-        
-        # Se não temos pontos da rota, não podemos gerar localizações
-        if not rota_info.get("rota_pontos") or len(rota_info["rota_pontos"]) < 2:
-            return []
-        
-        rota_pontos = rota_info["rota_pontos"]
-        
-        # Estimar número de pedágios baseado na distância (aproximadamente a cada 120-180km)
-        num_pedagios_estimado = max(1, int(distancia_total / 150))
-        
-        # Se a rota é muito curta, pode não ter pedágios
-        if distancia_total < 80:
-            return []
-        
-        # Calcular valor médio por pedágio
-        valor_por_pedagio = valor_total_pedagio / num_pedagios_estimado if num_pedagios_estimado > 0 else 0
-        
-        # Distribuir pedágios ao longo da rota
-        total_pontos = len(rota_pontos)
-        
-        for i in range(num_pedagios_estimado):
-            # Posicionar pedágios em intervalos regulares ao longo da rota
-            # Evitar muito próximo do início e fim
-            posicao_percentual = 0.15 + (i * 0.7 / max(1, num_pedagios_estimado - 1))
-            if num_pedagios_estimado == 1:
-                posicao_percentual = 0.5  # No meio da rota
-            
-            indice_ponto = int(posicao_percentual * (total_pontos - 1))
-            indice_ponto = max(0, min(indice_ponto, total_pontos - 1))
-            
-            lat, lon = rota_pontos[indice_ponto]
-            
-            # Variação no valor do pedágio baseada no tipo de estrada/região
-            variacao = 0.8 + (i * 0.4 / max(1, num_pedagios_estimado - 1))  # Entre 80% e 120%
-            valor_pedagio = valor_por_pedagio * variacao
-            
-            # Determinar nome estimado do pedágio baseado na posição
-            nomes_estimados = [
-                f"Pedágio {i+1} - Rodovia Principal",
-                f"Praça {i+1} - Via Expressa", 
-                f"Pedágio {i+1} - Concessionária",
-                f"Posto {i+1} - Rodovia Federal"
-            ]
-            nome_pedagio = nomes_estimados[i % len(nomes_estimados)]
-            
-            pedagio_info = {
-                "id": f"pedagio_{i+1}",
-                "nome": nome_pedagio,
-                "lat": lat,
-                "lon": lon,
-                "valor": valor_pedagio,
-                "tipo_veiculo": tipo_veiculo,
-                "distancia_origem": (i + 1) * (distancia_total / (num_pedagios_estimado + 1)),
-                "concessionaria": f"Concessionária {chr(65 + i)}",  # A, B, C, etc.
-                "tipo_estrada": "Rodovia Federal" if i % 2 == 0 else "Rodovia Estadual"
-            }
-            
-            pedagios_mapa.append(pedagio_info)
-        
-        print(f"[PEDÁGIO_MAPA] Gerados {len(pedagios_mapa)} pedágios estimados para o mapa")
-        return pedagios_mapa
-        
-    except Exception as e:
-        print(f"[PEDÁGIO_MAPA] Erro ao gerar pedágios para mapa: {e}")
-        return []
-
+        print(f"[PESO_CUBADO] Erro no cálculo: {e}")
+        return peso_real
 def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, valor_nf=None):
     """
     Gera ranking das opções de frete fracionado no formato similar ao dedicado
@@ -3823,7 +3656,6 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
             'outros': 0,
             'total_custos': opcao.get('total', 0)
         }
-
 # Rotas da aplicação
 @app.route("/")
 @middleware_auth
@@ -4439,7 +4271,6 @@ def sanitizar_json(obj):
         return sanitizar_json(obj.to_dict())
     else:
         return obj
-
 def encontrar_municipios_proximos(municipio, uf, raio_km=100, limite=5):
     """
     Encontra municípios próximos ao município especificado dentro de um raio em km.
@@ -5012,7 +4843,6 @@ def exportar_excel():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Erro ao exportar Excel: {str(e)}"})
-
 # APIs para cálculo de pedágios reais
 GOOGLE_ROUTES_API_KEY = os.getenv("GOOGLE_ROUTES_API_KEY", "SUA_CHAVE_AQUI")
 TOLLGURU_API_KEY = os.getenv("TOLLGURU_API_KEY", "SUA_CHAVE_TOLLGURU")
@@ -5616,7 +5446,6 @@ def analisar_base():
     except Exception as e:
         print(f"Erro na análise: {e}")
         return jsonify({'error': str(e)}), 500
-
 def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_nf=None):
     """
     Gera ranking das opções de frete dedicado no formato "all in"
@@ -5751,37 +5580,6 @@ def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_
         import traceback
         traceback.print_exc()
         return None
-
-def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=None):
-    """
-    Calcula peso cubado aplicando fatores específicos por tipo de serviço:
-    - Agentes (tipo 'Agente'): cubagem × 250
-    - Transferências JEM e Concept: cubagem × 166
-    """
-    try:
-        peso_real = float(peso_real)
-        cubagem = float(cubagem) if cubagem else 0
-        
-        if cubagem <= 0:
-            return peso_real
-            
-        # Aplicar fator específico baseado no tipo
-        if tipo_linha == 'Agente':
-            fator_cubagem = 250  # kg/m³ para agentes
-            tipo_calculo = "Agente (250kg/m³)"
-        elif tipo_linha == 'Transferência' and fornecedor and ('JEM'in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper()) or 'SOL' in str(fornecedor).upper():
-            fator_cubagem = 166  # kg/m³ para JEM, Concept e SOL
-            tipo_calculo = f"Transferência {fornecedor} (166kg/m³)"
-            
-        peso_cubado = cubagem * fator_cubagem
-        peso_final = max(peso_real, peso_cubado)
-        
-        print(f"[PESO_CUBADO] {tipo_calculo}: {peso_real}kg vs {peso_cubado}kg = {peso_final}kg")
-        return peso_final
-        
-    except Exception as e:
-        print(f"[PESO_CUBADO] Erro no cálculo: {e}")
-        return float(peso_real) if peso_real else 0
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
