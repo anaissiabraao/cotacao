@@ -1452,7 +1452,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             • <strong>Modalidade:</strong> Frete fracionado com agentes<br>
                             • <strong>Peso Real:</strong> ${ranking.peso}kg<br>
                             • <strong>Cubagem:</strong> ${ranking.cubagem}m³<br>
-                            • <strong>Peso Cubado:</strong> ${ranking.peso_cubado}kg (${ranking.peso_usado_tipo})<br
+                            • <strong>Peso Cubado:</strong> ${ranking.peso_cubado}kg (${ranking.peso_usado_tipo})<br>
                         </div>
                         <div style="margin-bottom: 10px;">
                             <strong>🚚 Tipos de Rota:</strong><br>
