@@ -634,7 +634,6 @@ def calcular_distancia_osrm(origem, destino):
     except Exception as e:
         print(f"[OSRM] Erro ao calcular distância: {e}")
         return None
-
 def calcular_distancia_openroute(origem, destino):
     try:
         url = "https://api.openrouteservice.org/v2/directions/driving-car"
@@ -1139,7 +1138,6 @@ def obter_municipios_com_base(uf):
     except Exception as e:
         print(f"[MUNICIPIOS_BASE] ❌ Erro ao obter municípios: {e}")
         return []
-
 def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, valor_nf=None, cubagem=None):
     """
     Calcula frete com sistema de agentes - APENAS rotas completas válidas
@@ -1209,57 +1207,37 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             (df_agentes['UF'] == uf_destino)
         ]
         
-        # Verificar se faltam agentes exatos e buscar próximos
+        # Verificar se faltam agentes e registrar avisos
         if agentes_origem.empty:
             agentes_faltando['origem'] = True
             print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {origem_norm}/{uf_origem}")
             avisos.append(f"Atenção: Nenhum agente encontrado em {origem_norm}/{uf_origem}")
-            
-            # Buscar agentes próximos
-            cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=50, limite=3)
-            if cidades_proximas:
-                agentes_faltando['agentes_proximos_origem'] = [
-                    {'cidade': cid, 'uf': uf, 'distancia_km': dist} 
-                    for cid, uf, dist in cidades_proximas
-                ]
-                cidades_str = ", ".join([f"{c[0]}/{c[1]} ({c[2]}km)" for c in cidades_proximas])
-                avisos.append(f"Agentes próximos disponíveis em: {cidades_str}")
-                print(f"[AGENTES] 🔍 Agentes próximos a {origem_norm}: {cidades_str}")
         
         if agentes_destino.empty:
             agentes_faltando['destino'] = True
             print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {destino_norm}/{uf_destino}")
             avisos.append(f"Atenção: Nenhum agente encontrado em {destino_norm}/{uf_destino}")
-            
-            # Buscar agentes próximos
-            cidades_proximas = encontrar_municipios_proximos(destino, uf_destino, raio_km=50, limite=3)
+        
+        # Buscar bases de transferência próximas quando não houver no município
+        print(f"[TRANSFERENCIAS] 🔍 Buscando bases de transferência em {origem_norm}/{uf_origem}...")
+        transferencias_origem = df_transferencias[
+            (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) |
+            (df_transferencias['Base Origem'].str.contains(origem_norm, case=False, na=False))
+        ]
+        
+        if transferencias_origem.empty:
+            print(f"[TRANSFERENCIAS] ⚠️ Nenhuma base em {origem_norm}, buscando em cidades próximas...")
+            cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=100, limite=5)
             if cidades_proximas:
-                agentes_faltando['agentes_proximos_destino'] = [
-                    {'cidade': cid, 'uf': uf, 'distancia_km': dist} 
-                    for cid, uf, dist in cidades_proximas
-                ]
-                cidades_str = ", ".join([f"{c[0]}/{c[1]} ({c[2]}km)" for c in cidades_proximas])
-                avisos.append(f"Agentes próximos disponíveis em: {cidades_str}")
-                print(f"[AGENTES] 🔍 Agentes próximos a {destino_norm}: {cidades_str}")
-        
-        # Verificar se não há agentes exatos e buscar os mais próximos
-        if agentes_origem.empty:
-            agentes_faltando['origem'] = True
-            print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {origem}/{uf_origem}")
-            # Buscar municípios próximos com agentes
-            agentes_faltando['agentes_proximos_origem'] = encontrar_municipios_proximos(
-                origem, uf_origem, raio_km=100, limite=3
-            )
-            print(f"[AGENTES] 🔍 Agentes próximos a {origem}: {agentes_faltando['agentes_proximos_origem']}")
-        
-        if agentes_destino.empty:
-            agentes_faltando['destino'] = True
-            print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {destino}/{uf_destino}")
-            # Buscar municípios próximos com agentes
-            agentes_faltando['agentes_proximos_destino'] = encontrar_municipios_proximos(
-                destino, uf_destino, raio_km=100, limite=3
-            )
-            print(f"[AGENTES] 🔍 Agentes próximos a {destino}: {agentes_faltando['agentes_proximos_destino']}")
+                for cidade_prox, uf_prox, dist in cidades_proximas:
+                    transferencias_prox = df_transferencias[
+                        (df_transferencias['Origem'].str.contains(cidade_prox, case=False, na=False)) |
+                        (df_transferencias['Base Origem'].str.contains(cidade_prox, case=False, na=False))
+                    ]
+                    if not transferencias_prox.empty:
+                        print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transferencias_prox)} bases em {cidade_prox}/{uf_prox} ({dist:.1f}km)")
+                        avisos.append(f"Bases de transferência disponíveis em {cidade_prox}/{uf_prox} ({dist:.1f}km)")
+                        break
         
         # 1. BUSCAR SERVIÇOS DIRETOS (PORTA-A-PORTA)
         # Primeiro tentar cidades exatas
@@ -1340,218 +1318,37 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 continue
         
         # 2. BUSCAR ROTAS COM AGENTES + TRANSFERÊNCIAS
-        # Agentes de coleta - BUSCA GLOBAL E INTELIGENTE
+        # Agentes de coleta - busca simples por cidade
         agentes_coleta = df_agentes[
-            df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)
+            (df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
+            (df_agentes['UF'] == uf_origem)
         ]
         
-        # Se não encontrar agentes na cidade exata, usar estratégia global
+        # Se não encontrar agentes na cidade exata, buscar no estado
         if agentes_coleta.empty:
-            print(f"[AGENTES] 🔍 Busca global de agentes de coleta...")
+            print(f"[AGENTES] 🔍 Buscando agentes de coleta em {uf_origem}...")
+            agentes_coleta = df_agentes[
+                (df_agentes['UF'] == uf_origem) &
+                (df_agentes['Tipo'] == 'Agente')
+            ].head(10)  # Limitar a 10 agentes
             
-            # ESTRATÉGIA 0.5: Buscar agentes em cidades próximas primeiro
-            print(f"[AGENTES] 🗺️ ESTRATÉGIA 0.5: Buscando agentes em cidades próximas a {origem_norm}...")
-            
-            # Mapa de cidades próximas para cidades pequenas
-            cidades_proximas_mapa = {
-                # RS - Cidades pequenas e suas cidades HUB mais próximas
-                'ARAMBARE': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI', 'NOVO HAMBURGO'],
-                'AGUDO': ['SANTA MARIA', 'SANTA CRUZ DO SUL'],
-                'ALEGRETE': ['URUGUAIANA', 'SANTANA DO LIVRAMENTO'],
-                
-                # SC - Cidades pequenas e suas cidades HUB mais próximas  
-                'AGRONOMICA': ['BLUMENAU', 'POMERODE', 'INDAIAL', 'RIO DO SUL'],
-                'AGUAS MORNAS': ['FLORIANOPOLIS', 'SAO JOSE', 'PALHOCA'],
-                'ALFREDO WAGNER': ['FLORIANOPOLIS', 'LAGES'],
-                
-                # Padrão para qualquer cidade pequena por estado
-                '_DEFAULT_RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'CANOAS', 'PELOTAS', 'SANTA MARIA'],
-                '_DEFAULT_SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO'],
-                '_DEFAULT_PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA']
-            }
-            
-            # Buscar cidades próximas
-            cidades_proximas = cidades_proximas_mapa.get(origem_norm, [])
-            if not cidades_proximas:
-                # Usar cidades padrão do estado
-                cidades_proximas = cidades_proximas_mapa.get(f'_DEFAULT_{uf_origem}', [])
-            
-            if cidades_proximas:
-                # Buscar agentes em qualquer uma das cidades próximas
-                agentes_coleta = df_agentes[
-                    df_agentes['Origem'].apply(
-                        lambda x: any(cidade in normalizar_cidade_nome(str(x)) for cidade in cidades_proximas)
-                    ) & (df_agentes['Tipo'] == 'Agente')
-                ]
-                
-                if not agentes_coleta.empty:
-                    print(f"[AGENTES] ✅ Encontrados {len(agentes_coleta)} agentes em cidades próximas: {cidades_proximas[:3]}")
-                else:
-                    print(f"[AGENTES] ⚠️ Nenhum agente encontrado nas cidades próximas")
-            
-            # Se ainda não encontrou, continuar com estratégias existentes
-            if agentes_coleta.empty:
-                # ESTRATÉGIA 1: Buscar agentes do estado, mas filtrar para só cidades próximas ou HUBs
-                print(f"[AGENTES] 📍 ESTRATÉGIA 1: Buscando agentes em {uf_origem} (apenas cidades válidas)...")
-                cidades_validas = set([origem_norm] + cidades_proximas)
-                agentes_coleta = df_agentes[
-                    (df_agentes['UF'] == uf_origem) &
-                    (df_agentes['Tipo'] == 'Agente') &
-                    (df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) in cidades_validas))
-                ]
-                
-                # ESTRATÉGIA 2: Se ainda vazio, buscar agentes que mencionem o estado
-                if agentes_coleta.empty:
-                    print(f"[AGENTES] 📍 ESTRATÉGIA 2: Busca flexível por {uf_origem}...")
-                    agentes_coleta = df_agentes[
-                        (df_agentes['Base Origem'].str.contains(uf_origem, case=False, na=False) |
-                         df_agentes['Base Destino'].str.contains(uf_origem, case=False, na=False) |
-                         df_agentes['UF'].str.contains(uf_origem, case=False, na=False))
-                    ]
-            
-            # ESTRATÉGIA 3: Buscar agentes em cidades HUB do estado
-            if agentes_coleta.empty or len(agentes_coleta) > 20:
-                print(f"[AGENTES] 📍 ESTRATÉGIA 3: Priorizando agentes em cidades HUB...")
-                
-                # Busca cidades próximas usando geolocalização
-                cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=100, limite=3)
-                cidades_hub = [c[0] for c in cidades_proximas]  # Extrai apenas os nomes das cidades
-                
-                if cidades_hub:
-                    agentes_hub = df_agentes[
-                        df_agentes['Origem'].apply(
-                            lambda x: any(hub in normalizar_cidade_nome(str(x)) for hub in cidades_hub)
-                        )
-        ]
+        print(f"[AGENTES] ✅ Total de agentes de coleta encontrados: {len(agentes_coleta)}")
         
-                    if not agentes_hub.empty:
-                        agentes_coleta = agentes_hub
-                        print(f"[AGENTES] ✅ Priorizados {len(agentes_coleta)} agentes em cidades HUB")
-            
-            # Limitar resultados para não sobrecarregar
-            if len(agentes_coleta) > 10:
-                agentes_coleta = agentes_coleta.head(10)
-                print(f"[AGENTES] ⚠️ Limitado a 10 agentes de coleta")
-            
-            print(f"[AGENTES] ✅ Total de agentes de coleta encontrados: {len(agentes_coleta)}")
-        
-        # Agentes de entrega - BUSCA GLOBAL E INTELIGENTE
+        # Agentes de entrega - busca simples por cidade
         agentes_entrega = df_agentes[
-            df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
+            (df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)) &
+            (df_agentes['UF'] == uf_destino)
         ]
         
-        # Se não encontrar agentes na cidade exata, usar estratégia global
+        # Se não encontrar agentes na cidade exata, buscar no estado
         if agentes_entrega.empty:
-            print(f"[AGENTES] 🔍 Busca global de agentes de entrega...")
+            print(f"[AGENTES] 🔍 Buscando agentes de entrega em {uf_destino}...")
+            agentes_entrega = df_agentes[
+                (df_agentes['UF'] == uf_destino) &
+                (df_agentes['Tipo'] == 'Agente')
+            ].head(10)  # Limitar a 10 agentes
             
-            # ESTRATÉGIA 0.5: Buscar agentes em cidades próximas primeiro
-            print(f"[AGENTES] 🗺️ ESTRATÉGIA 0.5: Buscando agentes em cidades próximas a {destino_norm}...")
-            
-            # Usar o mesmo mapa de cidades próximas
-            cidades_proximas_mapa = {
-                # RS - Cidades pequenas e suas cidades HUB mais próximas
-                'ARAMBARE': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI', 'NOVO HAMBURGO'],
-                'AGUDO': ['SANTA MARIA', 'SANTA CRUZ DO SUL'],
-                'ALEGRETE': ['URUGUAIANA', 'SANTANA DO LIVRAMENTO'],
-                
-                # SC - Cidades pequenas e suas cidades HUB mais próximas  
-                'AGRONOMICA': ['BLUMENAU', 'POMERODE', 'INDAIAL', 'RIO DO SUL'],
-                'AGUAS MORNAS': ['FLORIANOPOLIS', 'SAO JOSE', 'PALHOCA'],
-                'ALFREDO WAGNER': ['FLORIANOPOLIS', 'LAGES'],
-                
-                # Padrão para qualquer cidade pequena por estado
-                '_DEFAULT_RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'CANOAS', 'PELOTAS', 'SANTA MARIA'],
-                '_DEFAULT_SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO'],
-                '_DEFAULT_PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA']
-            }
-            
-            # Buscar cidades próximas
-            cidades_proximas = cidades_proximas_mapa.get(destino_norm, [])
-            if not cidades_proximas:
-                # Usar cidades padrão do estado
-                cidades_proximas = cidades_proximas_mapa.get(f'_DEFAULT_{uf_destino}', [])
-            
-            if cidades_proximas:
-                # Buscar agentes em qualquer uma das cidades próximas
-                agentes_entrega = df_agentes[
-                    df_agentes['Origem'].apply(
-                        lambda x: any(cidade in normalizar_cidade_nome(str(x)) for cidade in cidades_proximas)
-                    ) & (df_agentes['Tipo'] == 'Agente')
-                ]
-                
-                if not agentes_entrega.empty:
-                    print(f"[AGENTES] ✅ Encontrados {len(agentes_entrega)} agentes em cidades próximas: {cidades_proximas[:3]}")
-                else:
-                    print(f"[AGENTES] ⚠️ Nenhum agente encontrado nas cidades próximas")
-            
-            # Se ainda não encontrou, continuar com estratégias existentes
-            if agentes_entrega.empty:
-                # ESTRATÉGIA 1: Buscar QUALQUER agente no estado de destino
-                print(f"[AGENTES] 📍 ESTRATÉGIA 1: Buscando agentes em {uf_destino}...")
-                agentes_entrega = df_agentes[
-                    (df_agentes['UF'] == uf_destino) &
-                    (df_agentes['Tipo'] == 'Agente')
-                ]
-                
-                # ESTRATÉGIA 2: Se ainda vazio, buscar agentes que mencionem o estado
-                if agentes_entrega.empty:
-                    print(f"[AGENTES] 📍 ESTRATÉGIA 2: Busca flexível por {uf_destino}...")
-                    agentes_entrega = df_agentes[
-                        (df_agentes['Base Origem'].str.contains(uf_destino, case=False, na=False) |
-                         df_agentes['Base Destino'].str.contains(uf_destino, case=False, na=False) |
-                         df_agentes['UF'].str.contains(uf_destino, case=False, na=False))
-                    ]
-            
-            # ESTRATÉGIA 3: Buscar agentes em cidades HUB do estado
-            if agentes_entrega.empty or len(agentes_entrega) > 20:
-                print(f"[AGENTES] 📍 ESTRATÉGIA 3: Priorizando agentes em cidades HUB...")
-                
-                # Busca cidades próximas usando geolocalização
-                cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=100, limite=3)
-                cidades_hub = [c[0] for c in cidades_proximas]  # Extrai apenas os nomes das cidades
-                
-                if cidades_hub:
-                    agentes_hub = df_agentes[
-                        df_agentes['Origem'].apply(
-                            lambda x: any(hub in normalizar_cidade_nome(str(x)) for hub in cidades_hub)
-                        )
-                    ]
-                    
-                    if not agentes_hub.empty:
-                        agentes_entrega = agentes_hub
-                        print(f"[AGENTES] ✅ Priorizados {len(agentes_entrega)} agentes em cidades HUB")
-            
-            # ESTRATÉGIA 4: Se ainda não tem agentes suficientes, expandir busca
-            if len(agentes_entrega) < 3:
-                print(f"[AGENTES] 📍 ESTRATÉGIA 4: Expandindo busca para estados vizinhos...")
-                
-                # Mapa de estados vizinhos
-                estados_vizinhos = {
-                    'RS': ['SC'],
-                    'SC': ['RS', 'PR'],
-                    'PR': ['SC', 'SP', 'MS'],
-                    'SP': ['PR', 'MG', 'RJ', 'MS'],
-                    'RJ': ['SP', 'MG', 'ES'],
-                    'MG': ['SP', 'RJ', 'ES', 'BA', 'GO']
-                }
-                
-                vizinhos = estados_vizinhos.get(uf_destino, [])
-                for estado_viz in vizinhos[:1]:  # Pegar apenas o vizinho mais próximo
-                    agentes_viz = df_agentes[
-                        (df_agentes['UF'] == estado_viz) &
-                        (df_agentes['Tipo'] == 'Agente')
-                    ].head(5)  # Limitar a 5 agentes
-                    
-                    if not agentes_viz.empty:
-                        print(f"[AGENTES] ✅ Adicionados {len(agentes_viz)} agentes de {estado_viz}")
-                        agentes_entrega = pd.concat([agentes_entrega, agentes_viz])
-            
-            # Limitar resultados para não sobrecarregar
-            if len(agentes_entrega) > 10:
-                agentes_entrega = agentes_entrega.head(10)
-                print(f"[AGENTES] ⚠️ Limitado a 10 agentes de entrega")
-            
-            print(f"[AGENTES] ✅ Total de agentes de entrega encontrados: {len(agentes_entrega)}")
+        print(f"[AGENTES] ✅ Total de agentes de entrega encontrados: {len(agentes_entrega)}")
 
         # AVISO: Verificar se há agentes de entrega, mas continuar com rotas parciais
         if agentes_entrega.empty:
@@ -2278,7 +2075,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'agente_entrega': custo_entrega
                             }
                             rotas_encontradas.append(rota)
-
         # 🎯 PRIORIDADE 1: TRANSFERÊNCIAS DIRETAS + AGENTES DE ENTREGA
         if not transferencias_origem_destino.empty and not agentes_entrega.empty:
             print(f"[ROTAS] 🏆 PRIORIDADE MÁXIMA: Transferências diretas + Agentes de entrega")
@@ -2716,7 +2512,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         import traceback
         traceback.print_exc()
         return None
-
 def calcular_custo_agente(linha, peso_cubado, valor_nf):
     """
     Calcula o custo de um agente ou transferência específico
@@ -3175,7 +2970,6 @@ def gerar_pedagios_estimados_mapa(rota_info, tipo_veiculo, valor_total_pedagio, 
     except Exception as e:
         print(f"[PEDÁGIO_MAPA] Erro ao gerar pedágios para mapa: {e}")
         return []
-
 def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, valor_nf=None):
     """
     Gera ranking das opções de frete fracionado no formato similar ao dedicado
@@ -3823,7 +3617,6 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
             'outros': 0,
             'total_custos': opcao.get('total', 0)
         }
-
 # Rotas da aplicação
 @app.route("/")
 @middleware_auth
@@ -4439,7 +4232,6 @@ def sanitizar_json(obj):
         return sanitizar_json(obj.to_dict())
     else:
         return obj
-
 def encontrar_municipios_proximos(municipio, uf, raio_km=100, limite=5):
     """
     Encontra municípios próximos ao município especificado dentro de um raio em km.
@@ -5012,12 +4804,10 @@ def exportar_excel():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Erro ao exportar Excel: {str(e)}"})
-
 # APIs para cálculo de pedágios reais
 GOOGLE_ROUTES_API_KEY = os.getenv("GOOGLE_ROUTES_API_KEY", "SUA_CHAVE_AQUI")
 TOLLGURU_API_KEY = os.getenv("TOLLGURU_API_KEY", "SUA_CHAVE_TOLLGURU")
 OPENROUTE_API_KEY = "5b3ce3597851110001cf6248a355ae5a9ee94a6ca9c6d876c7e4d534"  # Chave pública
-
 def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
     """
     Sistema inteligente de cálculo de pedágios usando múltiplas APIs
@@ -5616,7 +5406,6 @@ def analisar_base():
     except Exception as e:
         print(f"Erro na análise: {e}")
         return jsonify({'error': str(e)}), 500
-
 def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_nf=None):
     """
     Gera ranking das opções de frete dedicado no formato "all in"
