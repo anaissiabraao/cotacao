@@ -2222,9 +2222,115 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                     if len(rotas_encontradas) >= MAX_ROTAS:
                                         print(f"[AGENTES] ⚠️ Limite máximo de {MAX_ROTAS} rotas atingido - interrompendo busca")
                                         break
+        
+        # 3. BUSCAR AGENTES DIRETOS (QUE FAZEM COLETA E ENTREGA)
+        # Buscar agentes que podem fazer o serviço completo sozinhos
+        print(f"[AGENTES] 🚚 Buscando agentes diretos (coleta + entrega)...")
+        
+        # Buscar agentes que atendem ambas as cidades ou estados
+        agentes_diretos = df_agentes[
+            ((df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) |
+             (df_agentes['UF'] == uf_origem)) &
+            ((df_agentes['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)) |
+             (df_agentes['Base Destino'].str.contains(uf_destino, case=False, na=False)) |
+             (df_agentes['UF'].str.contains(f"{uf_origem}-{uf_destino}", case=False, na=False)) |
+             (df_agentes['UF'].str.contains(f"{uf_origem}/{uf_destino}", case=False, na=False)))
+        ]
+        
+        # Se não encontrou, buscar agentes que fazem rotas interestaduais
+        if agentes_diretos.empty:
+            print(f"[AGENTES] 🔍 Expandindo busca de agentes diretos...")
+            agentes_diretos = df_agentes[
+                (df_agentes['Tipo'] == 'Agente') &
+                ((df_agentes['UF'].str.contains(uf_origem, case=False, na=False)) |
+                 (df_agentes['Base Origem'].str.contains(uf_origem, case=False, na=False))) &
+                ((df_agentes['UF'].str.contains(uf_destino, case=False, na=False)) |
+                 (df_agentes['Base Destino'].str.contains(uf_destino, case=False, na=False)))
+            ]
+        
+        # Processar agentes diretos encontrados
+        for _, agente in agentes_diretos.iterrows():
+            try:
+                fornecedor = agente.get('Fornecedor', 'N/A')
+                
+                # Verificar se o agente já foi processado
+                chave_rota = f"DIRETO_{fornecedor}"
+                if chave_rota in rotas_processadas:
+                    continue
+                rotas_processadas.add(chave_rota)
+                
+                peso_cubado_agente = calcular_peso_cubado_por_tipo(peso_real, cubagem, 'Agente', fornecedor)
+                custo_agente = calcular_custo_agente(agente, peso_cubado_agente, valor_nf)
+                
+                if custo_agente:
+                    # Para agente direto, o custo total é multiplicado por um fator (geralmente inclui coleta e entrega)
+                    fator_servico_completo = 1.8  # Fator para incluir coleta e entrega
+                    custo_total_direto = custo_agente['total'] * fator_servico_completo
+                    
+                    rota = {
+                        'tipo_rota': 'agente_direto',
+                        'resumo': f"{fornecedor} - Agente Direto (Coleta + Entrega)",
+                        'total': custo_total_direto,
+                        'prazo_total': custo_agente.get('prazo', 1) + 1,  # +1 dia para coleta/entrega
+                        'maior_peso': peso_cubado,
+                        'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
+                        'detalhamento_custos': {
+                            'coleta': custo_total_direto * 0.4,  # 40% do custo para coleta
+                            'transferencia': custo_total_direto * 0.2,  # 20% para transporte
+                            'entrega': custo_total_direto * 0.4,  # 40% para entrega
+                            'pedagio': custo_agente.get('pedagio', 0),
+                            'gris_total': custo_agente.get('gris', 0)
+                        },
+                        'observacoes': f"Serviço completo porta-a-porta por {fornecedor}",
+                        'agente_direto': custo_agente,
+                        'status_rota': 'COMPLETA',
+                        # Adicionar dados dos "agentes" para compatibilidade com o frontend
+                        'agente_coleta': {
+                            'fornecedor': fornecedor,
+                            'custo_base': custo_total_direto * 0.4,
+                            'prazo': custo_agente.get('prazo', 1),
+                            'peso_maximo': custo_agente.get('peso_maximo'),
+                            'pedagio': 0,
+                            'gris': 0,
+                            'seguro': 0,
+                            'tda': 0,
+                            'tas': 0,
+                            'total': custo_total_direto * 0.4
+                        },
+                        'transferencia': {
+                            'fornecedor': fornecedor,
+                            'custo_base': custo_total_direto * 0.2,
+                            'prazo': 0,
+                            'peso_maximo': custo_agente.get('peso_maximo'),
+                            'pedagio': custo_agente.get('pedagio', 0),
+                            'gris': custo_agente.get('gris', 0),
+                            'seguro': custo_agente.get('seguro', 0),
+                            'tda': custo_agente.get('tda', 0),
+                            'tas': custo_agente.get('tas', 0),
+                            'total': custo_total_direto * 0.2 + custo_agente.get('pedagio', 0) + custo_agente.get('gris', 0)
+                        },
+                        'agente_entrega': {
+                            'fornecedor': fornecedor,
+                            'custo_base': custo_total_direto * 0.4,
+                            'prazo': 1,
+                            'peso_maximo': custo_agente.get('peso_maximo'),
+                            'pedagio': 0,
+                            'gris': 0,
+                            'seguro': 0,
+                            'tda': 0,
+                            'tas': 0,
+                            'total': custo_total_direto * 0.4
+                        }
+                    }
+                    rotas_encontradas.append(rota)
+                    print(f"[AGENTE_DIRETO] ✅ {fornecedor}: R$ {custo_total_direto:.2f} (Serviço completo)")
+                    
+            except Exception as e:
+                print(f"[AGENTE_DIRETO] ❌ Erro ao processar agente direto {fornecedor}: {e}")
+                continue
 
         # Se há agentes de coleta mas não há transferências diretas, tentar via bases
-        elif not agentes_coleta.empty and transferencias_origem_destino.empty:
+        if not agentes_coleta.empty and transferencias_origem_destino.empty:
             if transferencias_para_bases:
                 for item in transferencias_para_bases:
                     transf = item['transferencia']
