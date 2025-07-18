@@ -1061,6 +1061,12 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         if rotas_agentes and rotas_agentes.get('total_opcoes', 0) > 0:
             print(f"[FRACIONADO] ✅ {rotas_agentes.get('total_opcoes', 0)} rotas com agentes encontradas")
             
+            # Verificar se há avisos de rotas alternativas
+            if rotas_agentes.get('usando_rota_alternativa', False):
+                print("[FRACIONADO] ⚠️ Algumas rotas estão usando bases alternativas")
+                for aviso in rotas_agentes.get('avisos_rota_alternativa', []):
+                    print(f"[FRACIONADO] {aviso}")
+            
             # Processar rotas com agentes
             for rota in rotas_agentes.get('rotas', []):
                 # Extrair fornecedor corretamente do resumo
@@ -1116,7 +1122,9 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             'peso': peso,
             'cubagem': cubagem,
             'peso_cubado': peso_cubado,
-            'valor_nf': valor_nf
+            'valor_nf': valor_nf,
+            'usando_rota_alternativa': rotas_agentes.get('usando_rota_alternativa', False) if rotas_agentes else False,
+            'avisos_rota_alternativa': rotas_agentes.get('avisos_rota_alternativa', []) if rotas_agentes else []
         }
         
         return resultado
@@ -1126,6 +1134,134 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         import traceback
         traceback.print_exc()
         return None
+
+def buscar_bases_proximas_transferencia(cidade, uf, df_transferencias, tipo='origem'):
+    """
+    Busca bases de transferência próximas quando não há base exata na cidade.
+    Retorna lista de bases alternativas com informação de que é rota alternativa.
+    
+    Args:
+        cidade: Nome da cidade
+        uf: UF do estado
+        df_transferencias: DataFrame com as transferências
+        tipo: 'origem' ou 'destino' para indicar qual coluna buscar
+    
+    Returns:
+        dict com bases próximas e flag indicando que é rota alternativa
+    """
+    try:
+        cidade_norm = normalizar_cidade_nome(cidade)
+        resultado = {
+            'bases_alternativas': [],
+            'eh_rota_alternativa': False,
+            'aviso': None
+        }
+        
+        # Definir cidades principais por estado (capitais e principais cidades)
+        CIDADES_PRINCIPAIS = {
+            'SP': ['SAO PAULO', 'CAMPINAS', 'SANTOS', 'RIBEIRAO PRETO', 'SAO JOSE DOS CAMPOS'],
+            'RJ': ['RIO DE JANEIRO', 'NITEROI', 'DUQUE DE CAXIAS', 'NOVA IGUACU'],
+            'MG': ['BELO HORIZONTE', 'UBERLANDIA', 'CONTAGEM', 'JUIZ DE FORA', 'BETIM'],
+            'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'CANOAS', 'PELOTAS', 'SANTA MARIA'],
+            'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA'],
+            'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO', 'SAO JOSE'],
+            'BA': ['SALVADOR', 'FEIRA DE SANTANA', 'VITORIA DA CONQUISTA', 'CAMACARI'],
+            'PE': ['RECIFE', 'JABOATAO DOS GUARARAPES', 'OLINDA', 'CARUARU'],
+            'CE': ['FORTALEZA', 'CAUCAIA', 'JUAZEIRO DO NORTE', 'MARACANAU'],
+            'GO': ['GOIANIA', 'APARECIDA DE GOIANIA', 'ANAPOLIS'],
+            'PA': ['BELEM', 'ANANINDEUA', 'SANTAREM'],
+            'MA': ['SAO LUIS', 'IMPERATRIZ', 'SAO JOSE DE RIBAMAR'],
+            'MT': ['CUIABA', 'VARZEA GRANDE', 'RONDONOPOLIS'],
+            'MS': ['CAMPO GRANDE', 'DOURADOS', 'TRES LAGOAS'],
+            'DF': ['BRASILIA'],
+            'ES': ['VITORIA', 'VILA VELHA', 'SERRA', 'CARIACICA'],
+            'PB': ['JOAO PESSOA', 'CAMPINA GRANDE'],
+            'RN': ['NATAL', 'MOSSORO'],
+            'AL': ['MACEIO', 'ARAPIRACA'],
+            'SE': ['ARACAJU', 'NOSSA SENHORA DO SOCORRO'],
+            'PI': ['TERESINA', 'PARNAIBA'],
+            'RO': ['PORTO VELHO', 'JI-PARANA'],
+            'TO': ['PALMAS', 'ARAGUAINA'],
+            'AC': ['RIO BRANCO', 'CRUZEIRO DO SUL'],
+            'RR': ['BOA VISTA'],
+            'AP': ['MACAPA', 'SANTANA'],
+            'AM': ['MANAUS', 'PARINTINS']
+        }
+        
+        # Buscar primeiro se há transferências exatas para a cidade
+        coluna_busca = 'Base Origem' if tipo == 'origem' else 'Base Destino'
+        coluna_cidade = 'Origem' if tipo == 'origem' else 'Destino'
+        
+        # Verificar se há transferências exatas
+        transferencias_exatas = df_transferencias[
+            df_transferencias[coluna_cidade].apply(lambda x: normalizar_cidade_nome(str(x)) == cidade_norm)
+        ]
+        
+        if not transferencias_exatas.empty:
+            # Há transferências exatas, não precisa buscar alternativas
+            return resultado
+        
+        # Se não há transferências exatas, buscar bases alternativas
+        print(f"[BASES_PROXIMAS] ⚠️ Não há base exata em {cidade}/{uf}, buscando alternativas...")
+        
+        # 1. Buscar bases nas cidades principais do estado
+        cidades_principais = CIDADES_PRINCIPAIS.get(uf, [])
+        bases_encontradas = []
+        
+        for cidade_principal in cidades_principais:
+            bases_cidade = df_transferencias[
+                df_transferencias[coluna_cidade].apply(
+                    lambda x: normalizar_cidade_nome(str(x)) == normalizar_cidade_nome(cidade_principal)
+                )
+            ][coluna_busca].unique()
+            
+            for base in bases_cidade:
+                if base and str(base).strip() and str(base) != 'nan':
+                    bases_encontradas.append({
+                        'base': str(base),
+                        'cidade': cidade_principal,
+                        'tipo': 'CIDADE_PRINCIPAL'
+                    })
+        
+        # 2. Se ainda não encontrou, buscar qualquer base do estado
+        if not bases_encontradas:
+            bases_estado = df_transferencias[
+                df_transferencias[coluna_busca].str.contains(uf, case=False, na=False)
+            ][coluna_busca].unique()
+            
+            for base in bases_estado[:10]:  # Limitar a 10 bases
+                if base and str(base).strip() and str(base) != 'nan':
+                    # Extrair cidade da base se possível
+                    cidade_base = str(base).split('-')[0] if '-' in str(base) else str(base)
+                    bases_encontradas.append({
+                        'base': str(base),
+                        'cidade': cidade_base,
+                        'tipo': 'BASE_ESTADO'
+                    })
+        
+        if bases_encontradas:
+            resultado['bases_alternativas'] = bases_encontradas[:5]  # Limitar a 5 bases
+            resultado['eh_rota_alternativa'] = True
+            resultado['aviso'] = (
+                f"⚠️ ATENÇÃO: Não há base de transferência em {cidade}/{uf}. "
+                f"As opções abaixo utilizam bases alternativas em outras cidades do estado. "
+                f"Consulte o parceiro para confirmar viabilidade e custos adicionais de transbordo."
+            )
+            
+            print(f"[BASES_PROXIMAS] ✅ Encontradas {len(bases_encontradas)} bases alternativas")
+        else:
+            resultado['aviso'] = f"❌ Não foram encontradas bases de transferência no estado {uf}"
+            print(f"[BASES_PROXIMAS] ❌ Nenhuma base alternativa encontrada")
+        
+        return resultado
+        
+    except Exception as e:
+        print(f"[BASES_PROXIMAS] ❌ Erro ao buscar bases próximas: {e}")
+        return {
+            'bases_alternativas': [],
+            'eh_rota_alternativa': False,
+            'aviso': None
+        }
 
 def obter_municipios_com_base(uf):
     """
@@ -1650,6 +1786,10 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         else:
             print(f"[AGENTES] ✅ Agentes de entrega encontrados: {len(agentes_entrega)}")
 
+        # Variáveis para rastrear se estamos usando rotas alternativas
+        usando_rota_alternativa = False
+        avisos_rota_alternativa = []
+        
         # 🔧 BUSCAR TRANSFERÊNCIAS DIRETAS CIDADE → CIDADE (PRIORIDADE MÁXIMA)
         # Primeiro tentar cidades exatas
         transferencias_origem_destino = df_transferencias[
@@ -1661,14 +1801,51 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         if transferencias_origem_destino.empty:
             print(f"[TRANSFERENCIAS] 🔍 Busca inteligente por rotas disponíveis...")
             
+            # Verificar se há bases próximas
+            info_bases_origem = buscar_bases_proximas_transferencia(origem, uf_origem, df_transferencias, tipo='origem')
+            info_bases_destino = buscar_bases_proximas_transferencia(destino, uf_destino, df_transferencias, tipo='destino')
+            
+            if info_bases_origem['eh_rota_alternativa']:
+                usando_rota_alternativa = True
+                avisos_rota_alternativa.append(info_bases_origem['aviso'])
+                avisos.append(info_bases_origem['aviso'])
+            
+            if info_bases_destino['eh_rota_alternativa']:
+                usando_rota_alternativa = True
+                avisos_rota_alternativa.append(info_bases_destino['aviso'])
+                avisos.append(info_bases_destino['aviso'])
+            
             # ESTRATÉGIA 1: Buscar TODAS as transferências que saem da origem para o estado destino
             print(f"[TRANSFERENCIAS] 📍 ESTRATÉGIA 1: Buscando transferências {origem_norm} → qualquer cidade em {uf_destino}...")
-            transf_origem_para_uf = df_transferencias[
-                (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
-                ((df_transferencias['UF'] == f"{uf_origem}-{uf_destino}") |
-                 (df_transferencias['UF'].str.contains(uf_destino, case=False, na=False)) |
-                 (df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)))
-            ]
+            
+            # Se há bases alternativas na origem, buscar transferências a partir delas
+            if info_bases_origem['bases_alternativas']:
+                print(f"[TRANSFERENCIAS] 🔄 Usando bases alternativas de origem: {[b['cidade'] for b in info_bases_origem['bases_alternativas'][:3]]}")
+                transf_origem_para_uf = pd.DataFrame()
+                
+                for base_alt in info_bases_origem['bases_alternativas'][:3]:
+                    cidade_base = base_alt['cidade']
+                    transf_base = df_transferencias[
+                        (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == normalizar_cidade_nome(cidade_base))) &
+                        ((df_transferencias['UF'] == f"{uf_origem}-{uf_destino}") |
+                         (df_transferencias['UF'].str.contains(uf_destino, case=False, na=False)) |
+                         (df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)))
+                    ]
+                    
+                    if not transf_base.empty:
+                        # Adicionar flag de rota alternativa
+                        transf_base = transf_base.copy()
+                        transf_base['rota_alternativa'] = True
+                        transf_base['cidade_alternativa_origem'] = cidade_base
+                        transf_origem_para_uf = pd.concat([transf_origem_para_uf, transf_base])
+            else:
+                # Busca normal
+                transf_origem_para_uf = df_transferencias[
+                    (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
+                    ((df_transferencias['UF'] == f"{uf_origem}-{uf_destino}") |
+                     (df_transferencias['UF'].str.contains(uf_destino, case=False, na=False)) |
+                     (df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)))
+                ]
             
             if not transf_origem_para_uf.empty:
                 print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transf_origem_para_uf)} transferências de {origem_norm} para {uf_destino}")
@@ -1777,7 +1954,12 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         print(f"[TRANSFERENCIAS] 🎯 Busca direta {origem} → {destino}: {len(transferencias_origem_destino)} encontradas")
         if not transferencias_origem_destino.empty:
             for _, transf in transferencias_origem_destino.iterrows():
-                print(f"[TRANSFERENCIAS] ✅ Direta: {transf.get('Fornecedor')} | {transf.get('Origem')} → {transf.get('Destino')}")
+                eh_alternativa = transf.get('rota_alternativa', False)
+                cidade_alt = transf.get('cidade_alternativa_origem', '')
+                if eh_alternativa:
+                    print(f"[TRANSFERENCIAS] ⚠️ Alternativa via {cidade_alt}: {transf.get('Fornecedor')} | {transf.get('Origem')} → {transf.get('Destino')}")
+                else:
+                    print(f"[TRANSFERENCIAS] ✅ Direta: {transf.get('Fornecedor')} | {transf.get('Origem')} → {transf.get('Destino')}")
         else:
             print(f"[TRANSFERENCIAS] ❌ Nenhuma transferência direta {origem} → {destino}")
             print(f"[TRANSFERENCIAS] 🔍 Buscando rotas alternativas via bases...")
@@ -2551,23 +2733,32 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transf.get('Tipo', 'Transferência'), transf.get('Fornecedor'))
                     custo_transferencia = calcular_custo_agente(transf, peso_cubado_transf, valor_nf)
                     
-                    if custo_transferencia:
-                        rota = {
-                            'tipo_rota': 'transferencia_direta',
-                            'resumo': f"{fornecedor_transf} - Transferência Direta (Cliente entrega e retira)",
-                            'total': custo_transferencia['total'],
-                            'prazo_total': custo_transferencia.get('prazo', 1),
-                            'maior_peso': peso_cubado,
-                            'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
-                            'detalhamento_custos': {
-                                'coleta': 0,
-                                'transferencia': custo_transferencia['total'],
-                                'entrega': 0,
-                                'pedagio': custo_transferencia.get('pedagio', 0),
-                                'gris_total': custo_transferencia.get('gris', 0)
-                            },
-                            'observacoes': f"TRANSFERÊNCIA DIRETA: Cliente entrega em {origem} e retira em {destino}",
-                            'status_rota': 'DIRETA',
+                                    if custo_transferencia:
+                    # Verificar se é rota alternativa
+                    eh_alternativa = transf.get('rota_alternativa', False)
+                    cidade_alt = transf.get('cidade_alternativa_origem', '')
+                    observacao_alt = ""
+                    
+                    if eh_alternativa:
+                        observacao_alt = f" ⚠️ ROTA ALTERNATIVA: Transferência saindo de {cidade_alt}. Consulte parceiro para confirmar viabilidade e custos adicionais."
+                    
+                    rota = {
+                        'tipo_rota': 'transferencia_direta',
+                        'resumo': f"{fornecedor_transf} - Transferência Direta (Cliente entrega e retira){' - ROTA ALTERNATIVA' if eh_alternativa else ''}",
+                        'total': custo_transferencia['total'],
+                        'prazo_total': custo_transferencia.get('prazo', 1),
+                        'maior_peso': peso_cubado,
+                        'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
+                        'detalhamento_custos': {
+                            'coleta': 0,
+                            'transferencia': custo_transferencia['total'],
+                            'entrega': 0,
+                            'pedagio': custo_transferencia.get('pedagio', 0),
+                            'gris_total': custo_transferencia.get('gris', 0)
+                        },
+                        'observacoes': f"TRANSFERÊNCIA DIRETA: Cliente entrega em {origem} e retira em {destino}{observacao_alt}",
+                        'status_rota': 'DIRETA_ALTERNATIVA' if eh_alternativa else 'DIRETA',
+                        'eh_rota_alternativa': eh_alternativa,
                             'agente_coleta': {
                                 'fornecedor': 'Cliente entrega na origem',
                                 'custo': 0,
@@ -2749,6 +2940,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             'total_opcoes': len(rotas_encontradas),
             'origem': f"{origem}/{uf_origem}",
             'destino': f"{destino}/{uf_destino}",
+            'usando_rota_alternativa': usando_rota_alternativa,
+            'avisos_rota_alternativa': avisos_rota_alternativa,
             'estatisticas': {
                 'rotas_processadas': len(rotas_processadas),
                 'rotas_finais': len(rotas_encontradas),
@@ -4450,6 +4643,12 @@ def calcular_frete_fracionado():
             "melhor_opcao": ranking_fracionado['melhor_opcao'],
             "total_opcoes": ranking_fracionado['total_opcoes']
         }
+        
+        # Adicionar avisos de rotas alternativas se houver
+        if resultado_fracionado.get('usando_rota_alternativa', False):
+            resposta["avisos_importantes"] = resultado_fracionado.get('avisos_rota_alternativa', [])
+            resposta["rota_alternativa"] = True
+            print("[FRACIONADO] ⚠️ Incluindo avisos de rotas alternativas na resposta")
         
         # 🔧 CORREÇÃO: Sanitizar JSON para evitar valores NaN
         resposta_sanitizada = sanitizar_json(resposta)
