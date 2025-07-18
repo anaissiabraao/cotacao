@@ -634,7 +634,6 @@ def calcular_distancia_osrm(origem, destino):
     except Exception as e:
         print(f"[OSRM] Erro ao calcular distância: {e}")
         return None
-
 def calcular_distancia_openroute(origem, destino):
     try:
         url = "https://api.openrouteservice.org/v2/directions/driving-car"
@@ -980,63 +979,131 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         print(f"[FRACIONADO] 📦 Iniciando cálculo: {origem}/{uf_origem} → {destino}/{uf_destino}")
         print(f"[FRACIONADO] Peso: {peso}kg, Cubagem: {cubagem}m³, Valor NF: R$ {valor_nf:,}" if valor_nf else f"[FRACIONADO] Peso: {peso}kg, Cubagem: {cubagem}m³")
         
-        # Usar a função correta de calcular frete com agentes do backup
+        # Carregar base unificada
+        df_base = carregar_base_unificada()
+        if df_base is None:
+            print("[FRACIONADO] ❌ Erro ao carregar base unificada")
+            return None
+            
+        opcoes_formatadas = []
+        peso_float = float(peso)
+        cubagem_float = float(cubagem)
+        peso_cubado = max(peso_float, cubagem_float * 300)  # 1m³ = 300kg
+        
+        # 1. PRIMEIRO: Buscar serviços DIRETOS (porta-porta) da base
+        print("[FRACIONADO] 🚚 Buscando serviços diretos porta-porta...")
+        df_diretos = df_base[df_base['Tipo'] == 'Direto'].copy()
+        
+        # Normalizar cidades
+        origem_norm = normalizar_cidade_nome(origem)
+        destino_norm = normalizar_cidade_nome(destino)
+        
+        # Buscar serviços diretos
+        servicos_diretos = df_diretos[
+            (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
+            (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
+        ]
+        
+        print(f"[FRACIONADO] Encontrados {len(servicos_diretos)} serviços diretos porta-porta")
+        
+        # Processar serviços diretos
+        for _, servico in servicos_diretos.iterrows():
+            try:
+                peso_cubado_servico = calcular_peso_cubado_por_tipo(peso_float, cubagem_float, servico.get('Tipo', 'Direto'), servico.get('Fornecedor'))
+                
+                opcao = processar_linha_fracionado(servico, peso_cubado_servico, valor_nf, "DIRETO")
+                if opcao:
+                    opcao_formatada = {
+                        'fornecedor': opcao['fornecedor'],
+                        'origem': origem,
+                        'destino': destino,
+                        'total': opcao['total'],
+                        'prazo': opcao['prazo'],
+                        'peso_cubado': peso_cubado_servico,
+                        'peso_usado': peso_cubado_servico,
+                        'modalidade': 'DIRETO PORTA-A-PORTA',
+                        'tipo': 'direto_porta_porta',
+                        'tipo_rota': 'direto_porta_porta',
+                        'resumo': f"{opcao['fornecedor']} - Serviço Direto Porta-a-Porta",
+                        'detalhes': {
+                            'tipo_rota': 'direto_porta_porta',
+                            'resumo': f"{opcao['fornecedor']} - Serviço Direto Porta-a-Porta",
+                            'total': opcao['total'],
+                            'prazo_total': opcao['prazo'],
+                            'maior_peso': peso_cubado_servico,
+                            'detalhamento_custos': {
+                                'coleta': opcao['custo_base'],
+                                'transferencia': 0,
+                                'entrega': 0,
+                                'pedagio': opcao['pedagio'],
+                                'gris_total': opcao['gris']
+                            },
+                            'observacoes': "Serviço direto porta-a-porta (coleta e entrega incluídas)"
+                        },
+                        'custo_base': opcao['custo_base'],
+                        'gris': opcao['gris'],
+                        'pedagio': opcao['pedagio']
+                    }
+                    opcoes_formatadas.append(opcao_formatada)
+                    print(f"[FRACIONADO] ✅ Direto adicionado: {opcao['fornecedor']} - R$ {opcao['total']:.2f}")
+            except Exception as e:
+                print(f"[FRACIONADO] ❌ Erro ao processar serviço direto: {e}")
+                continue
+        
+        # 2. DEPOIS: Buscar rotas com agentes
+        print("[FRACIONADO] 🔄 Buscando rotas com agentes...")
         rotas_agentes = calcular_frete_com_agentes(
             origem, uf_origem,
             destino, uf_destino,
             peso, valor_nf, cubagem
         )
         
-        if not rotas_agentes or rotas_agentes.get('total_opcoes', 0) == 0:
-            print("[FRACIONADO] ❌ Nenhuma rota com agentes encontrada")
-            return None
+        if rotas_agentes and rotas_agentes.get('total_opcoes', 0) > 0:
+            print(f"[FRACIONADO] ✅ {rotas_agentes.get('total_opcoes', 0)} rotas com agentes encontradas")
             
-        # Preparar dados no formato esperado
-        opcoes = rotas_agentes.get('rotas', [])
-        if not opcoes:
-            print("[FRACIONADO] ❌ Lista de rotas vazia")
-            return None
-            
-        # Converter rotas para formato compatível
-        opcoes_formatadas = []
-        for rota in opcoes:
-            # Extrair fornecedor corretamente do resumo
-            resumo = rota.get('resumo', 'N/A')
-            if resumo and resumo != 'N/A' and ' - ' in resumo:
-                fornecedor = resumo.split(' - ')[0]  # Extrai só o nome antes do " - "
-            else:
-                # Fallback - tentar dos detalhes da transferência
-                transferencia_info = rota.get('transferencia', {})
-                if isinstance(transferencia_info, dict):
-                    fornecedor = transferencia_info.get('fornecedor', 'N/A')
+            # Processar rotas com agentes
+            for rota in rotas_agentes.get('rotas', []):
+                # Extrair fornecedor corretamente do resumo
+                resumo = rota.get('resumo', 'N/A')
+                if resumo and resumo != 'N/A' and ' - ' in resumo:
+                    fornecedor = resumo.split(' - ')[0]  # Extrai só o nome antes do " - "
                 else:
-                    fornecedor = 'N/A'
-            
-            opcao = {
-                'fornecedor': fornecedor,  # 🔧 CORRIGIDO - agora extrai corretamente
-                'origem': origem,
-                'destino': destino,
-                'total': rota.get('total', 0),
-                'prazo': rota.get('prazo_total', 1),
-                'peso_cubado': rota.get('maior_peso', max(float(peso), float(cubagem) * 300)),
-                'peso_usado': rota.get('maior_peso', max(float(peso), float(cubagem) * 300)),
-                'modalidade': rota.get('tipo_rota', 'ROTA_COMPLETA').upper(),
-                'tipo': rota.get('tipo_rota', 'ROTA_COMPLETA'),
-                'tipo_rota': rota.get('tipo_rota', 'transferencia_direta'),  # 🆕 Adicionado
-                'resumo': resumo,  # 🆕 Manter resumo original
-                'detalhes': rota,  # Manter detalhes completos
-                'custo_base': rota.get('detalhamento_custos', {}).get('coleta', 0) + rota.get('detalhamento_custos', {}).get('transferencia', 0) + rota.get('detalhamento_custos', {}).get('entrega', 0),
-                'gris': rota.get('detalhamento_custos', {}).get('gris_total', 0),
-                'pedagio': rota.get('detalhamento_custos', {}).get('pedagio', 0)
-            }
-            opcoes_formatadas.append(opcao)
+                    # Fallback - tentar dos detalhes da transferência
+                    transferencia_info = rota.get('transferencia', {})
+                    if isinstance(transferencia_info, dict):
+                        fornecedor = transferencia_info.get('fornecedor', 'N/A')
+                    else:
+                        fornecedor = 'N/A'
+                
+                opcao = {
+                    'fornecedor': fornecedor,
+                    'origem': origem,
+                    'destino': destino,
+                    'total': rota.get('total', 0),
+                    'prazo': rota.get('prazo_total', 1),
+                    'peso_cubado': rota.get('maior_peso', max(float(peso), float(cubagem) * 300)),
+                    'peso_usado': rota.get('maior_peso', max(float(peso), float(cubagem) * 300)),
+                    'modalidade': rota.get('tipo_rota', 'ROTA_COMPLETA').upper(),
+                    'tipo': rota.get('tipo_rota', 'ROTA_COMPLETA'),
+                    'tipo_rota': rota.get('tipo_rota', 'transferencia_direta'),
+                    'resumo': resumo,
+                    'detalhes': rota,
+                    'custo_base': rota.get('detalhamento_custos', {}).get('coleta', 0) + rota.get('detalhamento_custos', {}).get('transferencia', 0) + rota.get('detalhamento_custos', {}).get('entrega', 0),
+                    'gris': rota.get('detalhamento_custos', {}).get('gris_total', 0),
+                    'pedagio': rota.get('detalhamento_custos', {}).get('pedagio', 0)
+                }
+                opcoes_formatadas.append(opcao)
+        else:
+            print("[FRACIONADO] ⚠️ Nenhuma rota com agentes encontrada")
         
-        # Calcular peso cubado
-        peso_float = float(peso)
-        cubagem_float = float(cubagem)
-        peso_cubado = max(peso_float, cubagem_float * 300)  # 1m³ = 300kg
+        # Ordenar todas as opções por valor total
+        opcoes_formatadas.sort(key=lambda x: x['total'])
         
-        print(f"[FRACIONADO] ✅ {len(opcoes_formatadas)} opções encontradas com agentes")
+        print(f"[FRACIONADO] ✅ Total de opções encontradas: {len(opcoes_formatadas)}")
+        
+        if len(opcoes_formatadas) == 0:
+            print("[FRACIONADO] ❌ Nenhuma opção encontrada (nem diretos, nem com agentes)")
+            return None
         
         resultado = {
             'opcoes': opcoes_formatadas,
@@ -1139,7 +1206,6 @@ def obter_municipios_com_base(uf):
     except Exception as e:
         print(f"[MUNICIPIOS_BASE] ❌ Erro ao obter municípios: {e}")
         return []
-
 def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, valor_nf=None, cubagem=None):
     """
     Calcula frete com sistema de agentes - APENAS rotas completas válidas
@@ -1215,51 +1281,53 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {origem_norm}/{uf_origem}")
             avisos.append(f"Atenção: Nenhum agente encontrado em {origem_norm}/{uf_origem}")
             
-            # Buscar agentes próximos
-            cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=50, limite=3)
-            if cidades_proximas:
-                agentes_faltando['agentes_proximos_origem'] = [
-                    {'cidade': cid, 'uf': uf, 'distancia_km': dist} 
-                    for cid, uf, dist in cidades_proximas
-                ]
-                cidades_str = ", ".join([f"{c[0]}/{c[1]} ({c[2]}km)" for c in cidades_proximas])
-                avisos.append(f"Agentes próximos disponíveis em: {cidades_str}")
-                print(f"[AGENTES] 🔍 Agentes próximos a {origem_norm}: {cidades_str}")
+            # Buscar bases de transferência próximas
+            print(f"[AGENTES] 🔍 Buscando bases de transferência em {uf_origem}...")
+            bases_proximas = df_transferencias[
+                df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)
+            ]['Base Origem'].unique()
+            if len(bases_proximas) > 0:
+                bases_str = ', '.join(list(bases_proximas[:5]))
+                avisos.append(f"Bases de transferência disponíveis em {uf_origem}: {bases_str}")
+                print(f"[AGENTES] ✅ Bases de transferência encontradas: {bases_str}")
         
         if agentes_destino.empty:
             agentes_faltando['destino'] = True
             print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {destino_norm}/{uf_destino}")
             avisos.append(f"Atenção: Nenhum agente encontrado em {destino_norm}/{uf_destino}")
             
-            # Buscar agentes próximos
-            cidades_proximas = encontrar_municipios_proximos(destino, uf_destino, raio_km=50, limite=3)
-            if cidades_proximas:
-                agentes_faltando['agentes_proximos_destino'] = [
-                    {'cidade': cid, 'uf': uf, 'distancia_km': dist} 
-                    for cid, uf, dist in cidades_proximas
-                ]
-                cidades_str = ", ".join([f"{c[0]}/{c[1]} ({c[2]}km)" for c in cidades_proximas])
-                avisos.append(f"Agentes próximos disponíveis em: {cidades_str}")
-                print(f"[AGENTES] 🔍 Agentes próximos a {destino_norm}: {cidades_str}")
+            # Buscar bases de transferência próximas
+            print(f"[AGENTES] 🔍 Buscando bases de transferência em {uf_destino}...")
+            bases_proximas = df_transferencias[
+                df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)
+            ]['Base Destino'].unique()
+            if len(bases_proximas) > 0:
+                bases_str = ', '.join(list(bases_proximas[:5]))
+                avisos.append(f"Bases de transferência disponíveis em {uf_destino}: {bases_str}")
+                print(f"[AGENTES] ✅ Bases de transferência encontradas: {bases_str}")
         
-        # Verificar se não há agentes exatos e buscar os mais próximos
+        # Verificar se não há agentes exatos e buscar bases de transferência próximas
         if agentes_origem.empty:
             agentes_faltando['origem'] = True
             print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {origem}/{uf_origem}")
-            # Buscar municípios próximos com agentes
-            agentes_faltando['agentes_proximos_origem'] = encontrar_municipios_proximos(
-                origem, uf_origem, raio_km=100, limite=3
-            )
-            print(f"[AGENTES] 🔍 Agentes próximos a {origem}: {agentes_faltando['agentes_proximos_origem']}")
+            # Buscar bases de transferência no mesmo estado
+            print(f"[AGENTES] 🔍 Buscando bases de transferência em {uf_origem}...")
+            bases_proximas_origem = df_transferencias[
+                df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)
+            ]['Base Origem'].unique()
+            if len(bases_proximas_origem) > 0:
+                print(f"[AGENTES] ✅ Bases de transferência encontradas em {uf_origem}: {list(bases_proximas_origem[:5])}")
         
         if agentes_destino.empty:
             agentes_faltando['destino'] = True
             print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {destino}/{uf_destino}")
-            # Buscar municípios próximos com agentes
-            agentes_faltando['agentes_proximos_destino'] = encontrar_municipios_proximos(
-                destino, uf_destino, raio_km=100, limite=3
-            )
-            print(f"[AGENTES] 🔍 Agentes próximos a {destino}: {agentes_faltando['agentes_proximos_destino']}")
+            # Buscar bases de transferência no mesmo estado
+            print(f"[AGENTES] 🔍 Buscando bases de transferência em {uf_destino}...")
+            bases_proximas_destino = df_transferencias[
+                df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)
+            ]['Base Destino'].unique()
+            if len(bases_proximas_destino) > 0:
+                print(f"[AGENTES] ✅ Bases de transferência encontradas em {uf_destino}: {list(bases_proximas_destino[:5])}")
         
         # 1. BUSCAR SERVIÇOS DIRETOS (PORTA-A-PORTA)
         # Primeiro tentar cidades exatas
@@ -1413,17 +1481,28 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             if agentes_coleta.empty or len(agentes_coleta) > 20:
                 print(f"[AGENTES] 📍 ESTRATÉGIA 3: Priorizando agentes em cidades HUB...")
                 
-                # Busca cidades próximas usando geolocalização
-                cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=100, limite=3)
-                cidades_hub = [c[0] for c in cidades_proximas]  # Extrai apenas os nomes das cidades
+                # Define cidades HUB por estado
+                cidades_hub_por_estado = {
+                    'SP': ['SAO PAULO', 'CAMPINAS', 'SANTOS', 'SAO JOSE DOS CAMPOS', 'RIBEIRAO PRETO'],
+                    'RJ': ['RIO DE JANEIRO', 'NITEROI', 'SAO GONÇALO', 'DUQUE DE CAXIAS'],
+                    'MG': ['BELO HORIZONTE', 'UBERLANDIA', 'CONTAGEM', 'JUIZ DE FORA'],
+                    'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'CANOAS', 'PELOTAS'],
+                    'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL'],
+                    'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI'],
+                    'BA': ['SALVADOR', 'FEIRA DE SANTANA', 'VITORIA DA CONQUISTA'],
+                    'PE': ['RECIFE', 'JABOATAO DOS GUARARAPES', 'OLINDA'],
+                    'CE': ['FORTALEZA', 'CAUCAIA', 'JUAZEIRO DO NORTE']
+                }
+                
+                cidades_hub = cidades_hub_por_estado.get(uf_origem, [])
                 
                 if cidades_hub:
                     agentes_hub = df_agentes[
                         df_agentes['Origem'].apply(
                             lambda x: any(hub in normalizar_cidade_nome(str(x)) for hub in cidades_hub)
                         )
-        ]
-        
+                    ]
+                    
                     if not agentes_hub.empty:
                         agentes_coleta = agentes_hub
                         print(f"[AGENTES] ✅ Priorizados {len(agentes_coleta)} agentes em cidades HUB")
@@ -1506,9 +1585,20 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             if agentes_entrega.empty or len(agentes_entrega) > 20:
                 print(f"[AGENTES] 📍 ESTRATÉGIA 3: Priorizando agentes em cidades HUB...")
                 
-                # Busca cidades próximas usando geolocalização
-                cidades_proximas = encontrar_municipios_proximos(origem, uf_origem, raio_km=100, limite=3)
-                cidades_hub = [c[0] for c in cidades_proximas]  # Extrai apenas os nomes das cidades
+                # Define cidades HUB por estado
+                cidades_hub_por_estado = {
+                    'SP': ['SAO PAULO', 'CAMPINAS', 'SANTOS', 'SAO JOSE DOS CAMPOS', 'RIBEIRAO PRETO'],
+                    'RJ': ['RIO DE JANEIRO', 'NITEROI', 'SAO GONÇALO', 'DUQUE DE CAXIAS'],
+                    'MG': ['BELO HORIZONTE', 'UBERLANDIA', 'CONTAGEM', 'JUIZ DE FORA'],
+                    'RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'CANOAS', 'PELOTAS'],
+                    'PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL'],
+                    'SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI'],
+                    'BA': ['SALVADOR', 'FEIRA DE SANTANA', 'VITORIA DA CONQUISTA'],
+                    'PE': ['RECIFE', 'JABOATAO DOS GUARARAPES', 'OLINDA'],
+                    'CE': ['FORTALEZA', 'CAUCAIA', 'JUAZEIRO DO NORTE']
+                }
+                
+                cidades_hub = cidades_hub_por_estado.get(uf_destino, [])
                 
                 if cidades_hub:
                     agentes_hub = df_agentes[
@@ -1610,44 +1700,34 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     f"{uf_origem}{uf_destino}"
                 ]
                 
-                # ESTRATÉGIA 4: Buscar cidades próximas usando geolocalização
+                # ESTRATÉGIA 4: Buscar transferências entre bases principais dos estados
                 if transferencias_origem_destino.empty:
-                    print("[TRANSFERENCIAS] 🔍 ESTRATÉGIA 4: Buscando cidades próximas com agentes via geolocalização...")
+                    print("[TRANSFERENCIAS] 🔍 ESTRATÉGIA 4: Buscando transferências entre bases principais...")
                     
-                    # Buscar cidades próximas à origem e destino
-                    cidades_proximas_origem = encontrar_municipios_proximos(origem, uf_origem, raio_km=100, limite=3)
-                    cidades_proximas_destino = encontrar_municipios_proximos(destino, uf_destino, raio_km=100, limite=3)
+                    # Buscar todas as bases de transferência dos estados
+                    bases_origem = df_transferencias[
+                        df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)
+                    ]['Base Origem'].unique()
                     
-                    print(f"[GEOLOC] 🌍 Cidades próximas a {origem}/{uf_origem}:")
-                    for cidade, uf, dist in cidades_proximas_origem:
-                        print(f"  - {cidade}/{uf} ({dist:.1f} km)")
+                    bases_destino = df_transferencias[
+                        df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)
+                    ]['Base Destino'].unique()
+                    
+                    print(f"[TRANSFERENCIAS] 📍 Bases em {uf_origem}: {list(bases_origem[:5])}")
+                    print(f"[TRANSFERENCIAS] 📍 Bases em {uf_destino}: {list(bases_destino[:5])}")
+                    
+                    # Buscar transferências entre qualquer base dos estados
+                    if len(bases_origem) > 0 and len(bases_destino) > 0:
+                        transferencias_entre_bases = df_transferencias[
+                            (df_transferencias['Base Origem'].isin(bases_origem)) &
+                            (df_transferencias['Base Destino'].isin(bases_destino))
+                        ]
                         
-                    print(f"[GEOLOC] 🌍 Cidades próximas a {destino}/{uf_destino}:")
-                    for cidade, uf, dist in cidades_proximas_destino:
-                        print(f"  - {cidade}/{uf} ({dist:.1f} km)")
+                        if not transferencias_entre_bases.empty:
+                            print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transferencias_entre_bases)} transferências entre bases dos estados")
+                            transferencias_origem_destino = transferencias_entre_bases[:10]  # Limitar a 10 opções
                     
-                    # Buscar transferências entre cidades próximas
-                    for cidade_origem, uf_origem_prox, _ in cidades_proximas_origem:
-                        for cidade_destino, uf_destino_prox, _ in cidades_proximas_destino:
-                            # Buscar transferências diretas entre cidades próximas
-                            transf = df_unificado[
-                                (df_unificado['Tipo'] == 'Transferência') &
-                                (df_unificado['Origem'].str.contains(cidade_origem, case=False, na=False)) &
-                                (df_unificado['Destino'].str.contains(cidade_destino, case=False, na=False)) &
-                                (df_unificado['UF Origem'] == uf_origem_prox) &
-                                (df_unificado['UF Destino'] == uf_destino_prox)
-                            ]
-                            
-                            if not transf.empty:
-                                transferencias_origem_destino = pd.concat([transferencias_origem_destino, transf])
-                                print(f"[GEOLOC] 🔄 Encontrada transferência via cidades próximas: {cidade_origem} → {cidade_destino}")
-                                
-                                # Limita o número de transferências para evitar sobrecarga
-                                if len(transferencias_origem_destino) >= 5:
-                                    break
-                        
-                        if len(transferencias_origem_destino) >= 5:
-                            break
+
                 
                 # ESTRATÉGIA 5: Busca final genérica - qualquer transferência entre os estados
             if 'UF Origem' in df_transferencias.columns and 'UF Destino' in df_transferencias.columns:
@@ -1789,44 +1869,21 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     municipios_intermediario = obter_municipios_com_base(estado_intermediario)
                     print(f"[GEOLOC] 🌍 Analisando {len(municipios_intermediario)} municípios com base em {estado_intermediario}")
                     
-                    # Se não encontrou municípios com agentes, busca cidades próximas em um raio de 80km
+                    # Se não encontrou municípios com agentes, usa bases principais do estado
                     if not municipios_intermediario:
-                        print(f"[GEOLOC] ⚠️ Nenhum município com agente encontrado em {estado_intermediario}, buscando cidades próximas em um raio de 80km...")
+                        print(f"[TRANSFERENCIAS] ⚠️ Nenhum município com agente encontrado em {estado_intermediario}, buscando bases principais...")
                         
-                        # Obtém a localização geográfica do centro do estado
-                        try:
-                            # Tenta obter coordenadas de uma cidade principal do estado
-                            cidades_estado = {
-                                'RS': 'Porto Alegre', 'SC': 'Florianópolis', 'PR': 'Curitiba',
-                                'SP': 'São Paulo', 'RJ': 'Rio de Janeiro', 'MG': 'Belo Horizonte',
-                                'ES': 'Vitória', 'BA': 'Salvador', 'SE': 'Aracaju', 'AL': 'Maceió',
-                                'PE': 'Recife', 'PB': 'João Pessoa', 'RN': 'Natal', 'CE': 'Fortaleza',
-                                'PI': 'Teresina', 'MA': 'São Luís', 'PA': 'Belém', 'AP': 'Macapá',
-                                'AM': 'Manaus', 'RR': 'Boa Vista', 'AC': 'Rio Branco', 'RO': 'Porto Velho',
-                                'MT': 'Cuiabá', 'MS': 'Campo Grande', 'GO': 'Goiânia', 'DF': 'Brasília',
-                                'TO': 'Palmas'
-                            }
-                            
-                            cidade_referencia = cidades_estado.get(estado_intermediario, estado_intermediario)
-                            localizacao = geocode(cidade_referencia, estado_intermediario)
-                            
-                            if localizacao:
-                                # Busca cidades em um raio de 80km
-                                cidades_proximas = encontrar_municipios_proximos(
-                                    cidade_referencia, 
-                                    estado_intermediario, 
-                                    raio_km=80, 
-                                    limite=10  # Limita a 10 cidades para não sobrecarregar
-                                )
-                                
-                                if cidades_proximas:
-                                    print(f"[GEOLOC] 🔍 Encontradas {len(cidades_proximas)} cidades próximas em um raio de 80km")
-                                    municipios_intermediario = [
-                                        {'nome': cidade, 'uf': uf, 'distancia': dist} 
-                                        for cidade, uf, dist in grcidades_proximas
-                                    ]
-                        except Exception as e:
-                            print(f"[GEOLOC] ⚠️ Erro ao buscar cidades próximas: {str(e)}")
+                        # Buscar bases de transferência do estado intermediário
+                        bases_estado = df_transferencias[
+                            (df_transferencias['Base Origem'].str.contains(estado_intermediario, case=False, na=False)) |
+                            (df_transferencias['Base Destino'].str.contains(estado_intermediario, case=False, na=False))
+                        ][['Base Origem', 'Base Destino']].values.flatten()
+                        
+                        bases_unicas = list(set([base for base in bases_estado if estado_intermediario in str(base)]))
+                        
+                        if bases_unicas:
+                            print(f"[TRANSFERENCIAS] ✅ Encontradas {len(bases_unicas)} bases em {estado_intermediario}")
+                            municipios_intermediario = [{'nome': base, 'uf': estado_intermediario} for base in bases_unicas[:5]]
                     
                     # Se encontrou municípios (seja com agentes ou cidades próximas), tenta encontrar transferências
                     if municipios_intermediario:
@@ -2278,7 +2335,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'agente_entrega': custo_entrega
                             }
                             rotas_encontradas.append(rota)
-
         # 🎯 PRIORIDADE 1: TRANSFERÊNCIAS DIRETAS + AGENTES DE ENTREGA
         if not transferencias_origem_destino.empty and not agentes_entrega.empty:
             print(f"[ROTAS] 🏆 PRIORIDADE MÁXIMA: Transferências diretas + Agentes de entrega")
@@ -2716,7 +2772,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         import traceback
         traceback.print_exc()
         return None
-
 def calcular_custo_agente(linha, peso_cubado, valor_nf):
     """
     Calcula o custo de um agente ou transferência específico
@@ -3175,7 +3230,6 @@ def gerar_pedagios_estimados_mapa(rota_info, tipo_veiculo, valor_total_pedagio, 
     except Exception as e:
         print(f"[PEDÁGIO_MAPA] Erro ao gerar pedágios para mapa: {e}")
         return []
-
 def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, valor_nf=None):
     """
     Gera ranking das opções de frete fracionado no formato similar ao dedicado
@@ -3823,7 +3877,6 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
             'outros': 0,
             'total_custos': opcao.get('total', 0)
         }
-
 # Rotas da aplicação
 @app.route("/")
 @middleware_auth
@@ -4439,7 +4492,6 @@ def sanitizar_json(obj):
         return sanitizar_json(obj.to_dict())
     else:
         return obj
-
 def encontrar_municipios_proximos(municipio, uf, raio_km=100, limite=5):
     """
     Encontra municípios próximos ao município especificado dentro de um raio em km.
@@ -4453,7 +4505,7 @@ def encontrar_municipios_proximos(municipio, uf, raio_km=100, limite=5):
             return []
             
         # Carregar todos os municípios do estado
-        municipios_estado = obter_municipios_uf(uf)
+        municipios_estado = get_municipios_uf(uf)
         if not municipios_estado:
             print(f"[GEO] ❌ Não foi possível carregar municípios para {uf}")
             return []
@@ -5012,7 +5064,6 @@ def exportar_excel():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Erro ao exportar Excel: {str(e)}"})
-
 # APIs para cálculo de pedágios reais
 GOOGLE_ROUTES_API_KEY = os.getenv("GOOGLE_ROUTES_API_KEY", "SUA_CHAVE_AQUI")
 TOLLGURU_API_KEY = os.getenv("TOLLGURU_API_KEY", "SUA_CHAVE_TOLLGURU")
@@ -5616,7 +5667,6 @@ def analisar_base():
     except Exception as e:
         print(f"Erro na análise: {e}")
         return jsonify({'error': str(e)}), 500
-
 def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_nf=None):
     """
     Gera ranking das opções de frete dedicado no formato "all in"
