@@ -1937,24 +1937,24 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             rota_bases = f"{transf.get('Origem')} → {transf.get('Destino')}"
                             
                             rota = {
-                                'tipo_rota': 'cliente_entrega_transferencia_agente_entrega',
-                                'resumo': f"Cliente entrega na base → {fornecedor_transf} (Transferência) → {fornecedor_ent} (Entrega)",
+                                'tipo_rota': 'transferencia_entrega',
+                                'resumo': f"{fornecedor_transf} (Transferência) + {fornecedor_ent} (Entrega)",
                                 'total': total,
                                 'prazo_total': prazo_total,
                                 'maior_peso': peso_cubado,
                                 'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
                                 'rota_bases': rota_bases,  # ✅ CORREÇÃO: Mostra rota real das cidades
                                 'detalhamento_custos': {
-                                    'coleta': 0,  # Cliente entrega
+                                    'coleta': 0,  # Sem agente de coleta
                                     'transferencia': custo_transferencia['total'],
                                     'entrega': custo_entrega['total'],
                                     'pedagio': custo_transferencia.get('pedagio', 0) + custo_entrega.get('pedagio', 0),
                                     'gris_total': custo_transferencia.get('gris', 0) + custo_entrega.get('gris', 0)
                                 },
-                                'observacoes': f"Cliente entrega em {transf.get('Origem')} → Transferência direta → Entrega no {destino}",
-                                'status_rota': 'DIRETA_COM_AGENTE_ENTREGA',
+                                'observacoes': f"Sem agente de coleta em {origem}",
+                                'status_rota': 'PARCIAL_SEM_COLETA',
                                 'agente_coleta': {
-                                    'fornecedor': 'Cliente entrega na origem',
+                                    'fornecedor': 'SEM AGENTE',
                                     'custo': 0,
                                     'total': 0,
                                     'pedagio': 0,
@@ -1962,7 +1962,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                     'seguro': 0,
                                     'prazo': 0,
                                     'sem_agente': True,
-                                    'observacao': f"Cliente deve entregar a mercadoria em {transf.get('Origem')}"
+                                    'observacao': ''
                                 },
                                 'transferencia': {
                                     'fornecedor': fornecedor_transf,
@@ -1985,80 +1985,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             rotas_encontradas.append(rota)
                             print(f"[ROTAS] ✅ Rota DIRETA criada: {rota_bases} - R$ {total:.2f}")
 
-        # Se não há agentes de coleta mas há transferências diretas - criar rotas parciais
-        if agentes_coleta.empty and not transferencias_origem_destino.empty:
-            print(f"[ROTAS] 🔄 Criando rotas parciais: Apenas Transferência (sem coleta)")
-            
-            for _, transf in transferencias_origem_destino.iterrows():
-                fornecedor_transf = transf.get('Fornecedor', 'N/A')
-                base_origem_transf = transf.get('Base Origem', origem_norm)
-                base_destino_transf = transf.get('Base Destino', destino_norm)
-                peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transf.get('Tipo', 'Transferência'), transf.get('Fornecedor'))
-                custo_transferencia = calcular_custo_agente(transf, peso_cubado_transf, valor_nf)
-                
-                if custo_transferencia:
-                    # Se há agentes de entrega, adicionar
-                    if not agentes_entrega.empty:
-                        for _, agente_ent in agentes_entrega.iterrows():
-                            fornecedor_ent = agente_ent.get('Fornecedor', 'N/A')
-                            peso_cubado_ent = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_ent.get('Tipo', 'Agente'), agente_ent.get('Fornecedor'))
-                            custo_entrega = calcular_custo_agente(agente_ent, peso_cubado_ent, valor_nf)
-                            
-                            if custo_entrega:
-                                total = custo_transferencia['total'] + custo_entrega['total']
-                                prazo_total = max(custo_transferencia.get('prazo', 1), custo_entrega.get('prazo', 1))
-                                
-                                rota_parcial = {
-                                    'tipo_rota': 'transferencia_entrega',
-                                    'resumo': f"PARCIAL: Cliente entrega → {fornecedor_transf} → {fornecedor_ent}",
-                                    'total': total,
-                                    'prazo_total': prazo_total,
-                                    'observacoes': 'ATENÇÃO: Sem agente de coleta - cliente deve entregar na origem',
-                                    'status_rota': 'PARCIAL',
-                                    'agente_coleta': {
-                                        'fornecedor': 'SEM AGENTE',
-                                        'total': 0,
-                                        'pedagio': 0,
-                                        'gris': 0,
-                                        'seguro': 0,
-                                        'observacao': f"Cliente deve entregar em {origem}"
-                                    },
-                                    'transferencia': custo_transferencia,
-                                    'agente_entrega': custo_entrega
-                                }
-                                rotas_encontradas.append(rota_parcial)
-                                print(f"[ROTAS] ✅ Rota PARCIAL criada: Cliente entrega → {fornecedor_transf} → {fornecedor_ent} - R$ {total:.2f}")
-                    
-                    # Se não há agentes de entrega, criar rota só com transferência
-                    else:
-                        total = custo_transferencia['total']
-                        rota_parcial = {
-                            'tipo_rota': 'transferencia_direta',
-                            'resumo': f"PARCIAL: Cliente entrega → {fornecedor_transf} → Cliente retira",
-                            'total': total,
-                            'prazo_total': custo_transferencia.get('prazo', 1),
-                            'observacoes': 'ATENÇÃO: Sem agentes - cliente deve entregar na origem e retirar no destino',
-                            'status_rota': 'PARCIAL',
-                            'agente_coleta': {
-                                'fornecedor': 'SEM AGENTE',
-                                'total': 0,
-                                'pedagio': 0,
-                                'gris': 0,
-                                'seguro': 0,
-                                'observacao': f"Cliente deve entregar em {origem}"
-                            },
-                            'transferencia': custo_transferencia,
-                            'agente_entrega': {
-                                'fornecedor': 'SEM AGENTE',
-                                'total': 0,
-                                'pedagio': 0,
-                                'gris': 0,
-                                'seguro': 0,
-                                'observacao': f"Cliente deve retirar em {destino}"
-                            }
-                        }
-                        rotas_encontradas.append(rota_parcial)
-                        print(f"[ROTAS] ✅ Rota PARCIAL criada: Cliente entrega → {fornecedor_transf} → Cliente retira - R$ {total:.2f}")
+        # Se não há agentes de coleta mas há transferências diretas - NÃO criar rotas duplicadas aqui
+        # As rotas já foram criadas em PRIORIDADE MÁXIMA acima
 
         # 3. ROTAS PARCIAIS: Agente Coleta + Transferência (sem agente de entrega)
         if not agentes_coleta.empty and agentes_entrega.empty:
@@ -3350,7 +3278,7 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
                     custo_coleta = total_opcao * 0.30
                     custo_transferencia = total_opcao * 0.50  
                     custo_entrega = total_opcao * 0.20
-                elif tipo_rota == 'transferencia_entrega' or tipo_rota == 'transferencia_direta_entrega' or tipo_rota == 'cliente_entrega_transferencia_agente_entrega':
+                elif tipo_rota == 'transferencia_entrega' or tipo_rota == 'transferencia_direta_entrega' or tipo_rota == 'cliente_entrega_transferencia_agente_entrega' or tipo_rota == 'PARCIAL_SEM_COLETA':
                     # 🔧 CORREÇÃO: Sem agente de coleta - 70% transferência + 30% entrega
                     custo_coleta = 0.0  # ✅ Cliente entrega na base (sem custo de agente)
                     custo_transferencia = total_opcao * 0.70
