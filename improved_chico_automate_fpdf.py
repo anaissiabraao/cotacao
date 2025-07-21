@@ -1457,8 +1457,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             if agentes_coleta.empty:
                 print(f"[AGENTES] 📍 ESTRATÉGIA 3: Buscando qualquer agente em {uf_origem}...")
                 agentes_coleta = df_agentes[
-                    (df_agentes['UF'] == uf_origem) &
-                    (df_agentes['Tipo'] == 'Agente')
+                    (df_base['UF'] == uf_origem) &
+                    (df_base['Tipo'] == 'Agente')
                 ]
             
             # Limitar resultados para não sobrecarregar
@@ -1853,77 +1853,26 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             if len(str(codigo_base)) > 3:
                 return str(codigo_base)
             return str(codigo_base)
-        # Mapa de proximidade geográfica entre estados (adjacentes + próximos)
-        # Usado para priorizar transferências entre estados vizinhos
-        ESTADOS_PROXIMOS = {
-            'RS': ['SC', 'PR'],
-            'SC': ['RS', 'PR'],
-            'PR': ['SC', 'SP', 'MS'],
-            'SP': ['RJ', 'MG', 'MS', 'PR'],
-            'RJ': ['SP', 'MG', 'ES'],
-            'ES': ['BA', 'MG', 'RJ'],
-            'MG': ['SP', 'GO', 'DF', 'BA', 'ES', 'RJ'],
-            'MS': ['SP', 'PR', 'MT', 'GO'],
-            'MT': ['MS', 'GO', 'RO'],
-            'GO': ['DF', 'MG', 'BA', 'TO', 'MT', 'MS'],
-            'DF': ['GO', 'MG'],
-            'BA': ['SE', 'AL', 'PE', 'MG', 'ES'],
-            'SE': ['BA', 'AL'],
-            'AL': ['SE', 'BA', 'PE'],
-            'PE': ['PB', 'CE', 'BA', 'AL'],
-            'PB': ['RN', 'CE', 'PE'],
-            'RN': ['CE', 'PB'],
-            'CE': ['PI', 'PE', 'PB', 'RN'],
-            'PI': ['CE', 'MA', 'BA'],
-            'MA': ['PA', 'PI'],
-            'TO': ['PA', 'MT', 'GO', 'BA'],
-            'PA': ['AP', 'MA', 'TO'],
-            'AP': ['PA'],
-            'AM': ['RR', 'RO', 'AC'],
-            'RR': ['AM'],
-            'AC': ['AM', 'RO'],
-            'RO': ['AM', 'MT', 'AC']
-        }
-        
-        # Função para calcular proximidade entre estados (0 = mesmo estado, 1 = vizinhos, 2 = segundo grau...)
-        def calcular_proximidade_estados(uf1, uf2):
-            if uf1 == uf2:
-                return 0
-            if uf1 in ESTADOS_PROXIMOS and uf2 in ESTADOS_PROXIMOS[uf1]:
-                return 1
-            # Verificar vizinhos de segundo grau
-            if uf1 in ESTADOS_PROXIMOS:
-                for estado_vizinho in ESTADOS_PROXIMOS[uf1]:
-                    if uf2 in ESTADOS_PROXIMOS.get(estado_vizinho, []):
-                        return 2
-            return 3  # Distantes
+        # REMOVIDO: Mapa de proximidade geográfica entre estados
+        # Não é necessário sem cálculo de geolocalização
+        # O sistema agora usa apenas os dados da planilha sem priorizar por distância geográfica
         
         # Buscar transferências para bases dos agentes de entrega
-        # Priorizar agentes em estados vizinhos ou próximos ao estado de origem
+        # Usar agentes na ordem da planilha sem priorizar por proximidade
         if not agentes_entrega.empty:
-            # Adicionar campo de proximidade para ordenar agentes
-            agentes_list = []
-            for _, agente in agentes_entrega.iterrows():
-                uf_agente = agente.get('UF', '')
-                proximidade = calcular_proximidade_estados(uf_origem, uf_agente)
-                agentes_list.append((agente, proximidade))
-            
-            # Ordenar agentes por proximidade geográfica
-            agentes_list.sort(key=lambda x: x[1])
-            print(f"[AGENTES] 📍 Agentes ordenados por proximidade geográfica: {len(agentes_list)}")
+            # Processar agentes na ordem que aparecem na planilha
+            agentes_list = [(agente, 0) for _, agente in agentes_entrega.iterrows()]
+            print(f"[AGENTES] 📍 Agentes disponíveis: {len(agentes_list)}")
         else:
             agentes_list = []
-            print(f"[AGENTES] ⚠️ Nenhum agente de entrega para ordenar por proximidade")
+            print(f"[AGENTES] ⚠️ Nenhum agente de entrega disponível")
         
-        # Percorrer agentes ordenados por proximidade - LIMITAR APENAS A ESTADOS PRÓXIMOS
+        # Percorrer agentes sem ordenar por proximidade
         transferencias_para_bases = []
-        for agente_ent, proximidade in agentes_list:
-            # FILTRAR: Só considerar agentes em estados próximos (proximidade <= 1)
-            if proximidade > 1:
-                print(f"[TRANSFERENCIAS] ⏭️ Ignorando agente {agente_ent.get('Fornecedor', 'N/A')} - estado muito distante (proximidade: {proximidade})")
-                continue
+        for agente_ent, _ in agentes_list:
+            # Processar todos os agentes sem filtrar por proximidade
                 
-            print(f"[TRANSFERENCIAS] 🔍 Buscando transferências para base do agente {agente_ent.get('Fornecedor', 'N/A')} (proximidade: {proximidade})")
+            print(f"[TRANSFERENCIAS] 🔍 Buscando transferências para base do agente {agente_ent.get('Fornecedor', 'N/A')}")
             fornecedor_ent = agente_ent.get('Fornecedor', 'N/A')
             base_agente = agente_ent.get('Base Origem') or agente_ent.get('Base Destino', '')
             
@@ -2432,92 +2381,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # Substituir a lista original
         rotas_encontradas = rotas_unicas
         # 🆕 RELATÓRIO FINAL DE ROTAS
-        if len(rotas_encontradas) > 0:
-            print(f"\n[AGENTES] 📊 RELATÓRIO FINAL DE ROTAS:")
-            print(f"[AGENTES] Total de rotas únicas encontradas: {len(rotas_encontradas)}")
-            print(f"[AGENTES] Rotas processadas (controle duplicatas): {len(rotas_processadas)}")
-            
-            # 🆕 RELATÓRIO DETALHADO POR TIPO DE ROTA
-            tipos_rota = {}
-            for rota in rotas_encontradas:
-                tipo = rota.get('tipo_rota', 'N/A')
-                if tipo not in tipos_rota:
-                    tipos_rota[tipo] = []
-                tipos_rota[tipo].append(rota)
-            
-            print(f"[AGENTES] 📈 DISTRIBUIÇÃO POR TIPO DE ROTA:")
-            for tipo, lista_rotas in tipos_rota.items():
-                # Identificar se é rota completa ou parcial
-                if tipo == 'coleta_transferencia_entrega':
-                    status_rota = "🏆 COMPLETA"
-                else:
-                    status_rota = "⚠️ PARCIAL"
-                
-                print(f"[AGENTES]   {tipo}: {len(lista_rotas)} rotas {status_rota}")
-                
-                # Verificar se há agentes faltando
-                for rota in lista_rotas[:2]:  # Mostrar só as 2 primeiras de cada tipo
-                    agente_col = rota.get('agente_coleta', {})
-                    agente_ent = rota.get('agente_entrega', {})
-                    sem_coleta = agente_col.get('sem_agente', False) if isinstance(agente_col, dict) else False
-                    sem_entrega = agente_ent.get('sem_agente', False) if isinstance(agente_ent, dict) else False
-                    
-                    alertas = []
-                    if sem_coleta:
-                        alertas.append("SEM COLETA")
-                    if sem_entrega:
-                        alertas.append("SEM ENTREGA")
-                    
-                    alerta_texto = f" [{', '.join(alertas)}]" if alertas else ""
-                    print(f"[AGENTES]     - R$ {rota.get('total', 0):.2f}{alerta_texto}: {rota.get('resumo', 'N/A')}")
-            
-            # Mostrar as 5 melhores rotas
-            print(f"[AGENTES] 🏆 TOP 5 MELHORES ROTAS:")
-            for i, rota in enumerate(rotas_encontradas[:5], 1):
-                tipo_rota = rota.get('tipo_rota', 'N/A')
-                total = rota.get('total', 0)
-                resumo = rota.get('resumo', 'N/A')
-                
-                # Identificar tipo de rota para o usuário
-                if tipo_rota == 'coleta_transferencia_entrega':
-                    status_display = "🏆 COMPLETA"
-                else:
-                    status_display = "⚠️ PARCIAL"
-                
-                # Verificar se tem agentes faltando
-                agente_col = rota.get('agente_coleta', {})
-                agente_ent = rota.get('agente_entrega', {})
-                sem_coleta = agente_col.get('sem_agente', False) if isinstance(agente_col, dict) else False
-                sem_entrega = agente_ent.get('sem_agente', False) if isinstance(agente_ent, dict) else False
-                
-                alertas = []
-                if sem_coleta:
-                    alertas.append("SEM COLETA")
-                if sem_entrega:
-                    alertas.append("SEM ENTREGA")
-                
-                alerta_texto = f" [{', '.join(alertas)}]" if alertas else ""
-                print(f"[AGENTES]   {i}º) {status_display}: R$ {total:.2f}{alerta_texto}")
-                print(f"[AGENTES]       {resumo}")
-            
-            # Verificar duplicatas por valor total
-            valores_totais = {}
-            for rota in rotas_encontradas:
-                total = round(rota.get('total', 0), 2)
-                if total in valores_totais:
-                    valores_totais[total] += 1
-                else:
-                    valores_totais[total] = 1
-            
-            duplicatas_valor = [total for total, count in valores_totais.items() if count > 1]
-            if duplicatas_valor:
-                print(f"[AGENTES] ⚠️ ATENÇÃO: Rotas com valores totais duplicados: {duplicatas_valor}")
-                for total_dup in duplicatas_valor:
-                    rotas_dup = [r for r in rotas_encontradas if round(r.get('total', 0), 2) == total_dup]
-                    print(f"[AGENTES]     R$ {total_dup}: {len(rotas_dup)} rotas")
-                    for rota_dup in rotas_dup:
-                        print(f"[AGENTES]       - {rota_dup.get('resumo', 'N/A')}")
-        
         if len(rotas_encontradas) == 0:
             print(f"\n[AGENTES] ❌ NENHUMA ROTA ENCONTRADA")
             return {
@@ -3192,9 +3055,10 @@ def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, 
         # Informações da cotação (similar ao dedicado)
         melhor_opcao = ranking_opcoes[0] if ranking_opcoes else None
         
-        # Calcular informações de rota (estimativas para fracionado)
-        distancia_estimada = 800  # Distância aproximada
-        tempo_estimado = f"{int(distancia_estimada/80)}h {int((distancia_estimada/80)*60)%60}min"
+        # REMOVIDO: Cálculo de distância por geolocalização
+        # Usar valores padrão baseados apenas na planilha
+        distancia_estimada = 0  # Sem cálculo de distância
+        tempo_estimado = f"{melhor_opcao['prazo']}d" if melhor_opcao else "N/A"
         
         resultado_formatado = {
             'id_calculo': f"#Fra{len(ranking_opcoes):03d}",
@@ -3206,10 +3070,10 @@ def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, 
             'peso_cubado': peso_cubado,
             'peso_usado_tipo': 'Real' if peso_real >= peso_cubado else 'Cubado',
             'valor_nf': valor_nf,
-            'distancia': distancia_estimada,
+            'distancia': 0,  # Sem cálculo de distância
             'tempo_estimado': tempo_estimado,
-            'consumo_estimado': round(distancia_estimada * 0.08, 2),  # Menor consumo para fracionado
-            'emissao_co2': round(distancia_estimada * 0.08 * 2.3, 2),
+            'consumo_estimado': 0,  # Sem estimativa de consumo
+            'emissao_co2': 0,  # Sem cálculo de emissão
             'melhor_opcao': melhor_opcao,
             'ranking_opcoes': ranking_opcoes,
             'total_opcoes': len(ranking_opcoes),
@@ -4224,19 +4088,19 @@ def calcular_frete_fracionado():
         # 🚀 RESPOSTA NO FORMATO DEDICADO
         resposta = {
             "tipo": "Fracionado",
-            "distancia": ranking_fracionado['distancia'],
-            "duracao": (ranking_fracionado['distancia'] / 80) * 60,  # Estimativa
+            "distancia": 0,  # Sem cálculo de distância
+            "duracao": 0,  # Sem estimativa
             "custos": custos_fracionado,  # Para compatibilidade
-            "rota_pontos": [[-21.2, -47.8], [-26.9, -48.7]],  # Coordenadas aproximadas
+            "rota_pontos": [],  # Sem coordenadas
             "analise": {
                 "id_historico": ranking_fracionado['id_calculo'],
                 "tipo": "Fracionado",
                 "origem": ranking_fracionado['origem'],
                 "destino": ranking_fracionado['destino'],
-                "distancia": ranking_fracionado['distancia'],
+                "distancia": 0,  # Sem cálculo de distância
                 "tempo_estimado": ranking_fracionado['tempo_estimado'],
-                "consumo_estimado": ranking_fracionado['consumo_estimado'],
-                "emissao_co2": ranking_fracionado['emissao_co2'],
+                "consumo_estimado": 0,  # Sem estimativa
+                "emissao_co2": 0,  # Sem cálculo
                 "peso_cubado": ranking_fracionado['peso_cubado'],
                 "peso_usado_tipo": ranking_fracionado['peso_usado_tipo'],
                 "valor_nf": valor_nf,
