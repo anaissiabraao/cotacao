@@ -1305,9 +1305,12 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 print(f"[AGENTES] 📍 Bases de transferência disponíveis em {uf_destino}: {', '.join(bases_transferencia_destino[:5])}")
                 avisos.append(f"Sem agente em {destino_norm}, mas há bases de transferência no estado: {', '.join(bases_transferencia_destino[:3])}")
         
-        # 1. BUSCAR SERVIÇOS DIRETOS (PORTA-A-PORTA)
-        # Primeiro tentar cidades exatas
-        servicos_diretos = df_diretos[
+        # REMOVIDO: Serviços diretos - já são processados em calcular_frete_fracionado_base_unificada
+        # para evitar duplicação
+        servicos_diretos = pd.DataFrame()  # DataFrame vazio
+        
+        # CÓDIGO ORIGINAL COMENTADO:
+        # servicos_diretos = df_diretos[
             (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
             (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
         ]
@@ -1336,6 +1339,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     ]
             print(f"[DIRETOS] Busca expandida encontrou: {len(servicos_diretos)} serviços")
         
+        # REMOVIDO - Loop de processamento de serviços diretos para evitar duplicação
+        # Os serviços diretos já são processados em calcular_frete_fracionado_base_unificada
+        """
         for _, servico in servicos_diretos.iterrows():
             try:
                 peso_cubado_servico = calcular_peso_cubado_por_tipo(peso_real, cubagem, servico.get('Tipo', 'Direto'), servico.get('Fornecedor'))
@@ -1382,6 +1388,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             except Exception as e:
                 print(f"[DIRETO] ❌ Erro ao processar serviço direto: {e}")
                 continue
+        """
         
         # 2. BUSCAR ROTAS COM AGENTES + TRANSFERÊNCIAS
         # Agentes de coleta - BUSCA GLOBAL E INTELIGENTE
@@ -2048,59 +2055,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     except Exception as e:
                         continue
 
-        # 4. ROTAS PARCIAIS: Transferência + Agente Entrega (sem agente de coleta)
-        elif agentes_coleta.empty and not agentes_entrega.empty:
-            print(f"[AGENTES] 🔄 Calculando rotas parciais: Transferência + Agente Entrega ({len(agentes_entrega)} agentes)")
-            
-            for _, transf in transferencias_origem_destino.iterrows():
-                for _, agente_ent in agentes_entrega.iterrows():
-                    try:
-                        fornecedor_transf = transf.get('Fornecedor', 'N/A')
-                        fornecedor_ent = agente_ent.get('Fornecedor', 'N/A')
-                        
-                        peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transf.get('Tipo', 'Transferência'), transf.get('Fornecedor'))
-                        peso_cubado_ent = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_ent.get('Tipo', 'Agente'), agente_ent.get('Fornecedor'))
-                        
-                        custo_transferencia = calcular_custo_agente(transf, peso_cubado_transf, valor_nf)
-                        custo_entrega = calcular_custo_agente(agente_ent, peso_cubado_ent, valor_nf)
-                        
-                        if custo_transferencia and custo_entrega:
-                            total = custo_transferencia['total'] + custo_entrega['total']
-                            prazo_total = max(custo_transferencia.get('prazo', 1), custo_entrega.get('prazo', 1))
-                            
-                            rota = {
-                                'tipo_rota': 'transferencia_entrega',
-                                'resumo': f"{fornecedor_transf} (Transferência) + {fornecedor_ent} (Entrega) - Cliente entrega na origem",
-                                'total': total,
-                                'prazo_total': prazo_total,
-                                'maior_peso': peso_cubado,
-                                'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
-                                'detalhamento_custos': {
-                                    'coleta': 0,
-                                    'transferencia': custo_transferencia['total'],
-                                    'entrega': custo_entrega['total'],
-                                    'pedagio': custo_transferencia.get('pedagio', 0) + custo_entrega.get('pedagio', 0),
-                                    'gris_total': custo_transferencia.get('gris', 0) + custo_entrega.get('gris', 0)
-                                },
-                                'observacoes': f"ROTA PARCIAL: Cliente deve entregar a mercadoria em {origem}",
-                                'status_rota': 'PARCIAL',
-                                'agente_coleta': {
-                                    'fornecedor': 'Cliente entrega na origem',
-                                    'custo': 0,
-                                    'total': 0,
-                                    'pedagio': 0,
-                                    'gris': 0,
-                                    'seguro': 0,
-                                    'prazo': 0,
-                                    'sem_agente': True,
-                                    'observacao': f"Cliente deve entregar a mercadoria em {origem}"
-                                },
-                                'transferencia': custo_transferencia,
-                                'agente_entrega': custo_entrega
-                            }
-                            rotas_encontradas.append(rota)
-                    except Exception as e:
-                        continue
+        # REMOVIDO: Seção 4 - estava duplicando as rotas já criadas em PRIORIDADE MÁXIMA
 
         # 5. TRANSFERÊNCIAS DIRETAS: Quando não há agentes (nem coleta nem entrega)
         elif agentes_coleta.empty and agentes_entrega.empty and not transferencias_origem_destino.empty:
