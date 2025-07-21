@@ -999,10 +999,21 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                 (df_base['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
             ]
             
-            print(f"[FRACIONADO] Encontrados {len(servicos_diretos)} serviços diretos porta-porta")
+            # ADICIONAR: Buscar GRITSCH mesmo que esteja como Agente (tratamento especial)
+            gritsch_services = df_base[
+                (df_base['Fornecedor'].str.contains('GRITSCH', case=False, na=False)) &
+                (df_base['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
+                (df_base['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
+            ]
+            
+            # Combinar resultados (serviços diretos + GRITSCH)
+            import pandas as pd
+            servicos_diretos_completos = pd.concat([servicos_diretos, gritsch_services]).drop_duplicates()
+            
+            print(f"[FRACIONADO] Encontrados {len(servicos_diretos_completos)} serviços diretos porta-porta (incluindo GRITSCH)")
             
             # Processar cada serviço direto
-            for _, servico in servicos_diretos.iterrows():
+            for _, servico in servicos_diretos_completos.iterrows():
                 try:
                     peso_real = float(peso)
                     peso_cubado = calcular_peso_cubado_por_tipo(peso_real, cubagem, 'Direto', servico.get('Fornecedor'))
@@ -1224,12 +1235,13 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # Separar tipos e filtrar agente ML (agente especial)
         df_agentes = df_base[
             (df_base['Tipo'] == 'Agente') & 
-            (df_base['Fornecedor'] != 'ML')
+            (df_base['Fornecedor'] != 'ML') &
+            (~df_base['Fornecedor'].str.contains('GRITSCH', case=False, na=False))  # EXCLUIR GRITSCH (agora é DIRETO)
         ].copy()
         df_transferencias = df_base[df_base['Tipo'] == 'Transferência'].copy()
         df_diretos = df_base[df_base['Tipo'] == 'Direto'].copy()
         
-        print(f"[AGENTES] Agentes carregados (excluindo ML): {len(df_agentes)}")
+        print(f"[AGENTES] Agentes carregados (excluindo ML e GRITSCH): {len(df_agentes)}")
         print(f"[AGENTES] Transferências carregadas: {len(df_transferencias)}")
         print(f"[AGENTES] Diretos carregados: {len(df_diretos)}")
         
@@ -1841,7 +1853,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             if len(str(codigo_base)) > 3:
                 return str(codigo_base)
             return str(codigo_base)
-            
         # Mapa de proximidade geográfica entre estados (adjacentes + próximos)
         # Usado para priorizar transferências entre estados vizinhos
         ESTADOS_PROXIMOS = {
@@ -2418,10 +2429,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 rotas_unicas.append(rota)
             else:
                 print(f"[AGENTES] 🗑️ Rota duplicada removida na validação final: {chave_final}")
-        
         # Substituir a lista original
         rotas_encontradas = rotas_unicas
-        
         # 🆕 RELATÓRIO FINAL DE ROTAS
         if len(rotas_encontradas) > 0:
             print(f"\n[AGENTES] 📊 RELATÓRIO FINAL DE ROTAS:")
@@ -2779,6 +2788,14 @@ def processar_linha_fracionado(linha, peso_cubado, valor_nf, tipo_servico="FRACI
     """
     try:
         fornecedor = linha.get('Fornecedor', 'N/A')
+        
+        # TRATAMENTO ESPECIAL PARA GRITSCH - forçar como DIRETO
+        if 'GRITSCH' in fornecedor.upper():
+            tipo_servico = "DIRETO PORTA-A-PORTA"
+            # Forçar tipo como Direto para processamento correto
+            linha_temp = linha.copy() if hasattr(linha, 'copy') else dict(linha)
+            linha_temp['Tipo'] = 'Direto'
+            linha = linha_temp
         
         # Calcular custo usando a função existente
         custo_resultado = calcular_custo_agente(linha, peso_cubado, valor_nf)
@@ -4849,7 +4866,6 @@ def exportar_excel():
 GOOGLE_ROUTES_API_KEY = os.getenv("GOOGLE_ROUTES_API_KEY", "SUA_CHAVE_AQUI")
 TOLLGURU_API_KEY = os.getenv("TOLLGURU_API_KEY", "SUA_CHAVE_TOLLGURU")
 OPENROUTE_API_KEY = "5b3ce3597851110001cf6248a355ae5a9ee94a6ca9c6d876c7e4d534"  # Chave pública
-
 def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
     """
     Sistema inteligente de cálculo de pedágios usando múltiplas APIs
@@ -5453,7 +5469,7 @@ def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_
     Gera ranking das opções de frete dedicado no formato "all in"
     """
     try:
-        # Preparar ranking das opções baseado nos custos
+        # Preparar ranking das opcoes baseado nos custos
         ranking_opcoes = []
         
         # Ordenar custos por valor crescente
