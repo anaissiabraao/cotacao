@@ -1453,13 +1453,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                          df_agentes['UF'].str.contains(uf_origem, case=False, na=False))
                     ]
             
-            # ESTRATÉGIA 3: Se ainda vazio, buscar agentes no estado
-            if agentes_coleta.empty:
-                print(f"[AGENTES] 📍 ESTRATÉGIA 3: Buscando qualquer agente em {uf_origem}...")
-                agentes_coleta = df_agentes[
-                    (df_base['UF'] == uf_origem) &
-                    (df_base['Tipo'] == 'Agente')
-                ]
+            # REMOVIDO: Não buscar agentes genéricos em todo o estado
+            # Se não há agentes específicos, manter vazio para rotas parciais
             
             # Limitar resultados para não sobrecarregar
             if len(agentes_coleta) > 10:
@@ -1517,56 +1512,10 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 else:
                     print(f"[AGENTES] ⚠️ Nenhum agente encontrado nas cidades próximas")
             
-            # Se ainda não encontrou, continuar com estratégias existentes
-            if agentes_entrega.empty:
-                # ESTRATÉGIA 1: Buscar QUALQUER agente no estado de destino
-                print(f"[AGENTES] 📍 ESTRATÉGIA 1: Buscando agentes em {uf_destino}...")
-                agentes_entrega = df_agentes[
-                    (df_agentes['UF'] == uf_destino) &
-                    (df_agentes['Tipo'] == 'Agente')
-                ]
-                
-                # ESTRATÉGIA 2: Se ainda vazio, buscar agentes que mencionem o estado
-                if agentes_entrega.empty:
-                    print(f"[AGENTES] 📍 ESTRATÉGIA 2: Busca flexível por {uf_destino}...")
-                    agentes_entrega = df_agentes[
-                        (df_agentes['Base Origem'].str.contains(uf_destino, case=False, na=False) |
-                         df_agentes['Base Destino'].str.contains(uf_destino, case=False, na=False) |
-                         df_agentes['UF'].str.contains(uf_destino, case=False, na=False))
-                    ]
+            # REMOVIDO: Não buscar agentes genéricos em todo o estado
+            # Se não há agentes específicos, manter vazio para rotas parciais
             
-            # ESTRATÉGIA 3: Se ainda vazio, buscar qualquer agente no estado
-            if agentes_entrega.empty:
-                print(f"[AGENTES] 📍 ESTRATÉGIA 3: Buscando qualquer agente em {uf_destino}...")
-                agentes_entrega = df_agentes[
-                    (df_agentes['UF'] == uf_destino) &
-                    (df_agentes['Tipo'] == 'Agente')
-                ]
-            
-            # ESTRATÉGIA 4: Se ainda não tem agentes suficientes, expandir busca
-            if len(agentes_entrega) < 3:
-                print(f"[AGENTES] 📍 ESTRATÉGIA 4: Expandindo busca para estados vizinhos...")
-                
-                # Mapa de estados vizinhos
-                estados_vizinhos = {
-                    'RS': ['SC'],
-                    'SC': ['RS', 'PR'],
-                    'PR': ['SC', 'SP', 'MS'],
-                    'SP': ['PR', 'MG', 'RJ', 'MS'],
-                    'RJ': ['SP', 'MG', 'ES'],
-                    'MG': ['SP', 'RJ', 'ES', 'BA', 'GO']
-                }
-                
-                vizinhos = estados_vizinhos.get(uf_destino, [])
-                for estado_viz in vizinhos[:1]:  # Pegar apenas o vizinho mais próximo
-                    agentes_viz = df_agentes[
-                        (df_agentes['UF'] == estado_viz) &
-                        (df_agentes['Tipo'] == 'Agente')
-                    ].head(5)  # Limitar a 5 agentes
-                    
-                    if not agentes_viz.empty:
-                        print(f"[AGENTES] ✅ Adicionados {len(agentes_viz)} agentes de {estado_viz}")
-                        agentes_entrega = pd.concat([agentes_entrega, agentes_viz])
+            # REMOVIDO: Estratégia 4 - não buscar em estados vizinhos
             
             # Limitar resultados para não sobrecarregar
             if len(agentes_entrega) > 10:
@@ -5485,9 +5434,13 @@ def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=Non
         if tipo_linha == 'Agente':
             fator_cubagem = 250  # kg/m³ para agentes
             tipo_calculo = "Agente (250kg/m³)"
-        elif tipo_linha == 'Transferência' and fornecedor and ('JEM'in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper()) or 'SOL' in str(fornecedor).upper():
+        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper() or 'SOL' in str(fornecedor).upper()):
             fator_cubagem = 166  # kg/m³ para JEM, Concept e SOL
             tipo_calculo = f"Transferência {fornecedor} (166kg/m³)"
+        else:
+            # Padrão para outros tipos
+            fator_cubagem = 250  # kg/m³ padrão
+            tipo_calculo = f"{tipo_linha} (250kg/m³)"
             
         peso_cubado = cubagem * fator_cubagem
         peso_final = max(peso_real, peso_cubado)
