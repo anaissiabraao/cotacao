@@ -1389,15 +1389,11 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)
         ]
         
-        # Se não encontrar agentes na cidade exata, usar estratégia global
+        # Se não encontrar agentes na cidade exata, manter vazio para rotas parciais
         if agentes_coleta.empty:
-            print(f"[AGENTES] 🔍 Busca global de agentes de coleta...")
-            
-            # ESTRATÉGIA 0.5: Buscar agentes em cidades próximas primeiro
-            print(f"[AGENTES] 🗺️ ESTRATÉGIA 0.5: Buscando agentes em cidades próximas a {origem_norm}...")
-            
-            # Mapa de cidades próximas para cidades pequenas
-            cidades_proximas_mapa = {
+            print(f"[AGENTES] ⚠️ Nenhum agente de coleta encontrado em {origem_norm}/{uf_origem}")
+            print(f"[AGENTES] 📋 Permitindo rotas parciais (cliente deve entregar na origem)")
+            # Manter vazio para permitir rotas parciais
                 # RS - Cidades pequenas e suas cidades HUB mais próximas
                 'ARAMBARE': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI', 'NOVO HAMBURGO'],
                 'AGUDO': ['SANTA MARIA', 'SANTA CRUZ DO SUL'],
@@ -1456,71 +1452,18 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             # REMOVIDO: Não buscar agentes genéricos em todo o estado
             # Se não há agentes específicos, manter vazio para rotas parciais
             
-            # Limitar resultados para não sobrecarregar
-            if len(agentes_coleta) > 10:
-                agentes_coleta = agentes_coleta.head(10)
-                print(f"[AGENTES] ⚠️ Limitado a 10 agentes de coleta")
-            
-            print(f"[AGENTES] ✅ Total de agentes de coleta encontrados: {len(agentes_coleta)}")
+        print(f"[AGENTES] ✅ Total de agentes de coleta encontrados: {len(agentes_coleta)}")
         
         # Agentes de entrega - BUSCA GLOBAL E INTELIGENTE
         agentes_entrega = df_agentes[
             df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
         ]
         
-        # Se não encontrar agentes na cidade exata, usar estratégia global
+        # Se não encontrar agentes na cidade exata, manter vazio para rotas parciais
         if agentes_entrega.empty:
-            print(f"[AGENTES] 🔍 Busca global de agentes de entrega...")
-            
-            # ESTRATÉGIA 0.5: Buscar agentes em cidades próximas primeiro
-            print(f"[AGENTES] 🗺️ ESTRATÉGIA 0.5: Buscando agentes em cidades próximas a {destino_norm}...")
-            
-            # Usar o mesmo mapa de cidades próximas
-            cidades_proximas_mapa = {
-                # RS - Cidades pequenas e suas cidades HUB mais próximas
-                'ARAMBARE': ['PORTO ALEGRE', 'CANOAS', 'GRAVATAI', 'NOVO HAMBURGO'],
-                'AGUDO': ['SANTA MARIA', 'SANTA CRUZ DO SUL'],
-                'ALEGRETE': ['URUGUAIANA', 'SANTANA DO LIVRAMENTO'],
-                
-                # SC - Cidades pequenas e suas cidades HUB mais próximas  
-                'AGRONOMICA': ['BLUMENAU', 'POMERODE', 'INDAIAL', 'RIO DO SUL'],
-                'AGUAS MORNAS': ['FLORIANOPOLIS', 'SAO JOSE', 'PALHOCA'],
-                'ALFREDO WAGNER': ['FLORIANOPOLIS', 'LAGES'],
-                
-                # Padrão para qualquer cidade pequena por estado
-                '_DEFAULT_RS': ['PORTO ALEGRE', 'CAXIAS DO SUL', 'CANOAS', 'PELOTAS', 'SANTA MARIA'],
-                '_DEFAULT_SC': ['FLORIANOPOLIS', 'JOINVILLE', 'BLUMENAU', 'ITAJAI', 'CHAPECO'],
-                '_DEFAULT_PR': ['CURITIBA', 'LONDRINA', 'MARINGA', 'CASCAVEL', 'PONTA GROSSA']
-            }
-            
-            # Buscar cidades próximas
-            cidades_proximas = cidades_proximas_mapa.get(destino_norm, [])
-            if not cidades_proximas:
-                # Usar cidades padrão do estado
-                cidades_proximas = cidades_proximas_mapa.get(f'_DEFAULT_{uf_destino}', [])
-            
-            if cidades_proximas:
-                # Buscar agentes em qualquer uma das cidades próximas
-                agentes_entrega = df_agentes[
-                    df_agentes['Origem'].apply(
-                        lambda x: any(cidade in normalizar_cidade_nome(str(x)) for cidade in cidades_proximas)
-                    ) & (df_agentes['Tipo'] == 'Agente')
-                ]
-                
-                if not agentes_entrega.empty:
-                    print(f"[AGENTES] ✅ Encontrados {len(agentes_entrega)} agentes em cidades próximas: {cidades_proximas[:3]}")
-                else:
-                    print(f"[AGENTES] ⚠️ Nenhum agente encontrado nas cidades próximas")
-            
-            # REMOVIDO: Não buscar agentes genéricos em todo o estado
-            # Se não há agentes específicos, manter vazio para rotas parciais
-            
-            # REMOVIDO: Estratégia 4 - não buscar em estados vizinhos
-            
-            # Limitar resultados para não sobrecarregar
-            if len(agentes_entrega) > 10:
-                agentes_entrega = agentes_entrega.head(10)
-                print(f"[AGENTES] ⚠️ Limitado a 10 agentes de entrega")
+            print(f"[AGENTES] ⚠️ Nenhum agente de entrega encontrado em {destino_norm}/{uf_destino}")
+            print(f"[AGENTES] 📋 Permitindo rotas parciais (cliente deve retirar no destino)")
+            # Manter vazio para permitir rotas parciais
             
             print(f"[AGENTES] ✅ Total de agentes de entrega encontrados: {len(agentes_entrega)}")
 
@@ -2099,9 +2042,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             rotas_encontradas.append(rota)
                             print(f"[ROTAS] ✅ Rota DIRETA criada: {rota_bases} - R$ {total:.2f}")
 
-        # Se não há agentes de coleta mas há transferências + agentes de entrega (FALLBACK apenas se não há rotas diretas)
-        elif agentes_coleta.empty and not transferencias_origem_destino.empty and len(rotas_encontradas) == 0:
-            print(f"[ROTAS] 🔄 FALLBACK: Sem agentes de coleta - Calculando: Transferência + Agente Entrega")
+        # Se não há agentes de coleta mas há transferências diretas - criar rotas parciais
+        if agentes_coleta.empty and not transferencias_origem_destino.empty:
+            print(f"[ROTAS] 🔄 Criando rotas parciais: Apenas Transferência (sem coleta)")
             
             for _, transf in transferencias_origem_destino.iterrows():
                 fornecedor_transf = transf.get('Fornecedor', 'N/A')
@@ -2109,6 +2052,70 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 base_destino_transf = transf.get('Base Destino', destino_norm)
                 peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transf.get('Tipo', 'Transferência'), transf.get('Fornecedor'))
                 custo_transferencia = calcular_custo_agente(transf, peso_cubado_transf, valor_nf)
+                
+                if custo_transferencia:
+                    # Se há agentes de entrega, adicionar
+                    if not agentes_entrega.empty:
+                        for _, agente_ent in agentes_entrega.iterrows():
+                            fornecedor_ent = agente_ent.get('Fornecedor', 'N/A')
+                            peso_cubado_ent = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_ent.get('Tipo', 'Agente'), agente_ent.get('Fornecedor'))
+                            custo_entrega = calcular_custo_agente(agente_ent, peso_cubado_ent, valor_nf)
+                            
+                            if custo_entrega:
+                                total = custo_transferencia['total'] + custo_entrega['total']
+                                prazo_total = max(custo_transferencia.get('prazo', 1), custo_entrega.get('prazo', 1))
+                                
+                                rota_parcial = {
+                                    'tipo_rota': 'transferencia_entrega',
+                                    'resumo': f"PARCIAL: Cliente entrega → {fornecedor_transf} → {fornecedor_ent}",
+                                    'total': total,
+                                    'prazo_total': prazo_total,
+                                    'observacoes': 'ATENÇÃO: Sem agente de coleta - cliente deve entregar na origem',
+                                    'status_rota': 'PARCIAL',
+                                    'agente_coleta': {
+                                        'fornecedor': 'SEM AGENTE',
+                                        'total': 0,
+                                        'pedagio': 0,
+                                        'gris': 0,
+                                        'seguro': 0,
+                                        'observacao': f"Cliente deve entregar em {origem}"
+                                    },
+                                    'transferencia': custo_transferencia,
+                                    'agente_entrega': custo_entrega
+                                }
+                                rotas_encontradas.append(rota_parcial)
+                                print(f"[ROTAS] ✅ Rota PARCIAL criada: Cliente entrega → {fornecedor_transf} → {fornecedor_ent} - R$ {total:.2f}")
+                    
+                    # Se não há agentes de entrega, criar rota só com transferência
+                    else:
+                        total = custo_transferencia['total']
+                        rota_parcial = {
+                            'tipo_rota': 'transferencia_direta',
+                            'resumo': f"PARCIAL: Cliente entrega → {fornecedor_transf} → Cliente retira",
+                            'total': total,
+                            'prazo_total': custo_transferencia.get('prazo', 1),
+                            'observacoes': 'ATENÇÃO: Sem agentes - cliente deve entregar na origem e retirar no destino',
+                            'status_rota': 'PARCIAL',
+                            'agente_coleta': {
+                                'fornecedor': 'SEM AGENTE',
+                                'total': 0,
+                                'pedagio': 0,
+                                'gris': 0,
+                                'seguro': 0,
+                                'observacao': f"Cliente deve entregar em {origem}"
+                            },
+                            'transferencia': custo_transferencia,
+                            'agente_entrega': {
+                                'fornecedor': 'SEM AGENTE',
+                                'total': 0,
+                                'pedagio': 0,
+                                'gris': 0,
+                                'seguro': 0,
+                                'observacao': f"Cliente deve retirar em {destino}"
+                            }
+                        }
+                        rotas_encontradas.append(rota_parcial)
+                        print(f"[ROTAS] ✅ Rota PARCIAL criada: Cliente entrega → {fornecedor_transf} → Cliente retira - R$ {total:.2f}")
 
         # 3. ROTAS PARCIAIS: Agente Coleta + Transferência (sem agente de entrega)
         if not agentes_coleta.empty and agentes_entrega.empty:
@@ -3330,7 +3337,7 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
             
             # Extrair custos com múltiplos fallbacks
             def extrair_custo_agente(agente_data):
-                if not agente_data:
+                if not agente_data or not isinstance(agente_data, dict):
                     return 0
                 # Tentar diferentes campos onde o custo pode estar
                 return (
@@ -3342,7 +3349,7 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
                 )
             
             def extrair_pedagio_agente(agente_data):
-                if not agente_data:
+                if not agente_data or not isinstance(agente_data, dict):
                     return 0
                 return (
                     agente_data.get('pedagio', 0) or
@@ -3351,7 +3358,7 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
                 )
             
             def extrair_gris_agente(agente_data):
-                if not agente_data:
+                if not agente_data or not isinstance(agente_data, dict):
                     return 0
                 return (
                     agente_data.get('gris', 0) or
@@ -3360,7 +3367,7 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
                 )
             
             def extrair_seguro_agente(agente_data):
-                if not agente_data:
+                if not agente_data or not isinstance(agente_data, dict):
                     return 0
                 return (
                     agente_data.get('seguro', 0) or
