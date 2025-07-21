@@ -2599,17 +2599,21 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         
         # 🔧 CALCULAR SEGURO SE DISPONÍVEL
         seguro = 0
-        if valor_nf and valor_nf > 0:
-            if 'Seguro' in linha and pd.notna(linha.get('Seguro')):
-                seguro_perc = float(linha.get('Seguro', 0))
-                if seguro_perc > 0:
-                    # Se o valor é menor que 1, assumir que é percentual (ex: 0.15 = 0.15%)
-                    if seguro_perc < 1:
-                        seguro = valor_nf * (seguro_perc / 100)
-                    else:
-                        # Se maior que 1, pode ser valor absoluto ou percentual alto
-                        seguro = valor_nf * (seguro_perc / 100) if seguro_perc < 100 else seguro_perc
-                    print(f"[SEGURO] {fornecedor}: {seguro_perc}% de R$ {valor_nf:,.2f} = R$ {seguro:.2f}")
+        # EXCEÇÃO: GRITSCH não calcula seguro, apenas GRIS
+        if 'GRITSCH' not in fornecedor_upper:
+            if valor_nf and valor_nf > 0:
+                if 'Seguro' in linha and pd.notna(linha.get('Seguro')):
+                    seguro_perc = float(linha.get('Seguro', 0))
+                    if seguro_perc > 0:
+                        # Se o valor é menor que 1, assumir que é percentual (ex: 0.15 = 0.15%)
+                        if seguro_perc < 1:
+                            seguro = valor_nf * (seguro_perc / 100)
+                        else:
+                            # Se maior que 1, pode ser valor absoluto ou percentual alto
+                            seguro = valor_nf * (seguro_perc / 100) if seguro_perc < 100 else seguro_perc
+                        print(f"[SEGURO] {fornecedor}: {seguro_perc}% de R$ {valor_nf:,.2f} = R$ {seguro:.2f}")
+        else:
+            print(f"[SEGURO] {fornecedor}: Não calcula seguro (apenas GRIS)")
         
         # Total
         total = custo_base + gris_valor + pedagio + seguro
@@ -2674,6 +2678,7 @@ def processar_linha_fracionado(linha, peso_cubado, valor_nf, tipo_servico="FRACI
             'custo_base': custo_resultado['custo_base'],
             'pedagio': custo_resultado['pedagio'],
             'gris': custo_resultado['gris'],
+            'seguro': custo_resultado.get('seguro', 0),  # Adicionar seguro no retorno
             'total': custo_resultado['total'],
             'prazo': custo_resultado['prazo'],
             'peso_usado': peso_cubado,
@@ -3405,6 +3410,15 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
                     0
                 )
             
+            def extrair_seguro_agente(agente_data):
+                if not agente_data:
+                    return 0
+                return (
+                    agente_data.get('seguro', 0) or
+                    agente_data.get('insurance', 0) or
+                    0
+                )
+            
             # Extrair custos individuais
             custo_coleta = extrair_custo_agente(agente_coleta)
             custo_transferencia = extrair_custo_agente(transferencia)
@@ -3421,15 +3435,6 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
             gris_entrega = extrair_gris_agente(agente_entrega)
             
             # 🆕 Extrair SEGURO
-            def extrair_seguro_agente(agente_data):
-                if not agente_data:
-                    return 0
-                return (
-                    agente_data.get('seguro', 0) or
-                    agente_data.get('insurance', 0) or
-                    0
-                )
-            
             seguro_coleta = extrair_seguro_agente(agente_coleta)
             seguro_transferencia = extrair_seguro_agente(transferencia)
             seguro_entrega = extrair_seguro_agente(agente_entrega)
