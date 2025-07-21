@@ -1311,33 +1311,33 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         # CÓDIGO ORIGINAL COMENTADO:
         # servicos_diretos = df_diretos[
-            (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
-            (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
-        ]
+        #     (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
+        #     (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
+        # ]
         
-        # Se não encontrar, tentar cidades na mesma UF
-        if servicos_diretos.empty:
-            print(f"[DIRETOS] 🔍 Busca expandida de serviços diretos em {uf_origem} → {uf_destino}...")
-            # Verificando as colunas disponíveis para UF
-            if 'UF Origem' in df_diretos.columns and 'UF Destino' in df_diretos.columns:
-                servicos_diretos = df_diretos[
-                    (df_diretos['UF Origem'] == uf_origem) &
-                    (df_diretos['UF Destino'] == uf_destino)
-                ]
-            else:
-                # Fallback usando a coluna UF e Base Origem/Base Destino para determinar UFs
-                servicos_diretos = df_diretos[
-                    (df_diretos['Base Origem'].str.contains(uf_origem, case=False, na=False)) &
-                    (df_diretos['Base Destino'].str.contains(uf_destino, case=False, na=False))
-                ]
-                if servicos_diretos.empty and 'UF' in df_diretos.columns:
-                    # Tentar usar apenas a coluna UF se disponível
-                    print(f"[DIRETOS] 🔄 Tentando busca alternativa usando coluna UF...")
-                    # A coluna UF geralmente contém pares de UF como "PR-SP"
-                    servicos_diretos = df_diretos[
-                        df_diretos['UF'].apply(lambda x: str(x).startswith(uf_origem) and str(x).endswith(uf_destino))
-                    ]
-            print(f"[DIRETOS] Busca expandida encontrou: {len(servicos_diretos)} serviços")
+        # Se não encontrar, tentar cidades na mesma UF - COMENTADO
+        # if servicos_diretos.empty:
+        #     print(f"[DIRETOS] 🔍 Busca expandida de serviços diretos em {uf_origem} → {uf_destino}...")
+        #     # Verificando as colunas disponíveis para UF
+        #     if 'UF Origem' in df_diretos.columns and 'UF Destino' in df_diretos.columns:
+        #         servicos_diretos = df_diretos[
+        #             (df_diretos['UF Origem'] == uf_origem) &
+        #             (df_diretos['UF Destino'] == uf_destino)
+        #         ]
+        #     else:
+        #         # Fallback usando a coluna UF e Base Origem/Base Destino para determinar UFs
+        #         servicos_diretos = df_diretos[
+        #             (df_diretos['Base Origem'].str.contains(uf_origem, case=False, na=False)) &
+        #             (df_diretos['Base Destino'].str.contains(uf_destino, case=False, na=False))
+        #         ]
+        #         if servicos_diretos.empty and 'UF' in df_diretos.columns:
+        #             # Tentar usar apenas a coluna UF se disponível
+        #             print(f"[DIRETOS] 🔄 Tentando busca alternativa usando coluna UF...")
+        #             # A coluna UF geralmente contém pares de UF como "PR-SP"
+        #             servicos_diretos = df_diretos[
+        #                 df_diretos['UF'].apply(lambda x: str(x).startswith(uf_origem) and str(x).endswith(uf_destino))
+        #             ]
+        #     print(f"[DIRETOS] Busca expandida encontrou: {len(servicos_diretos)} serviços")
         
         # REMOVIDO - Loop de processamento de serviços diretos para evitar duplicação
         # Os serviços diretos já são processados em calcular_frete_fracionado_base_unificada
