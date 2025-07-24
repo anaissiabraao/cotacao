@@ -3352,6 +3352,278 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
             'outros': 0,
             'total_custos': opcao.get('total', 0)
         }
+
+# Rotas da aplicação
+@app.route("/")
+@middleware_auth
+def index():
+    ip_cliente = obter_ip_cliente()
+    usuario = session.get('usuario_logado', 'DESCONHECIDO')
+    log_acesso(usuario, 'ACESSO_HOME', ip_cliente, "Acesso à página principal")
+    
+    df_aereo = ler_gollog_aereo()
+    dados_aereo = []
+    if df_aereo is not None:
+        dados_aereo = df_aereo.to_dict(orient="records")
+    
+    # Passar dados do usuário para o template
+    usuario_dados = usuario_logado()
+    return render_template("index.html", 
+                         dados_aereo=dados_aereo, 
+                         historico=HISTORICO_PESQUISAS,
+                         usuario=usuario_dados)
+
+@app.route("/estados")
+def estados():
+    try:
+        response = requests.get("https://servicodados.ibge.gov.br/api/v1/localidades/estados")
+        response.raise_for_status()
+        data = response.json()
+        estados = [{"id": estado["sigla"], "text": estado["nome"]} for estado in data]
+        return jsonify(sorted(estados, key=lambda x: x["text"]))
+    except Exception as e:
+        print(f"Erro ao obter estados: {e}")
+        return jsonify(ESTADOS_FALLBACK)
+
+@app.route("/municipios/<uf>")
+def municipios(uf):
+    try:
+        # Normalizar o UF
+        uf = str(uf).strip().upper()
+        print(f"[DEBUG] Buscando municípios para UF: {uf}")
+        
+        # Se o UF não estiver no formato padrão, tentar encontrar pela descrição
+        if len(uf) > 2:
+            estados_map = {
+                'ACRE': 'AC', 'ALAGOAS': 'AL', 'AMAPA': 'AP', 'AMAZONAS': 'AM',
+                'BAHIA': 'BA', 'CEARA': 'CE', 'DISTRITO FEDERAL': 'DF',
+                'ESPIRITO SANTO': 'ES', 'GOIAS': 'GO', 'MARANHAO': 'MA',
+                'MATO GROSSO': 'MT', 'MATO GROSSO DO SUL': 'MS', 'MINAS GERAIS': 'MG',
+                'PARA': 'PA', 'PARAIBA': 'PB', 'PARANA': 'PR', 'PERNAMBUCO': 'PE',
+                'PIAUI': 'PI', 'RIO DE JANEIRO': 'RJ', 'RIO GRANDE DO NORTE': 'RN',
+                'RIO GRANDE DO SUL': 'RS', 'RONDONIA': 'RO', 'RORAIMA': 'RR',
+                'SANTA CATARINA': 'SC', 'SAO PAULO': 'SP', 'SERGIPE': 'SE',
+                'TOCANTINS': 'TO'
+            }
+            uf_norm = uf.replace('-', ' ').replace('_', ' ').upper()
+            if uf_norm in estados_map:
+                uf = estados_map[uf_norm]
+                print(f"[DEBUG] UF normalizado para: {uf}")
+        
+        # Se ainda assim o UF não estiver no formato correto, retornar erro
+        if len(uf) != 2:
+            print(f"[ERROR] UF inválido: {uf}")
+            return jsonify([])
+        
+        # Buscar o ID do estado primeiro
+        estados_response = requests.get("https://servicodados.ibge.gov.br/api/v1/localidades/estados", timeout=10)
+        estados_response.raise_for_status()
+        estados_data = estados_response.json()
+        estado_id = None
+        
+        for estado in estados_data:
+            if estado['sigla'] == uf:
+                estado_id = estado['id']
+                break
+        
+        if not estado_id:
+            print(f"[ERROR] Estado não encontrado para UF: {uf}")
+            return jsonify([])
+        
+        # Buscar municípios usando o ID do estado
+        print(f"[DEBUG] Buscando municípios para estado ID: {estado_id}")
+        response = requests.get(f"https://servicodados.ibge.gov.br/api/v1/localidades/estados/{estado_id}/municipios", timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if not data:
+            print(f"[ERROR] Nenhum município encontrado para UF: {uf}")
+            return jsonify([])
+        
+        municipios = [{"id": m["nome"], "text": m["nome"]} for m in data]
+        print(f"[DEBUG] Encontrados {len(municipios)} municípios para UF: {uf}")
+        return jsonify(sorted(municipios, key=lambda x: x["text"]))
+    except requests.exceptions.Timeout:
+        print(f"[ERROR] Timeout ao buscar municípios para UF: {uf}")
+        return jsonify([])
+    except requests.exceptions.RequestException as e:
+        print(f"[ERROR] Erro na requisição HTTP para UF {uf}: {str(e)}")
+        return jsonify([])
+    except Exception as e:
+        print(f"[ERROR] Erro ao obter municípios de {uf}: {str(e)}")
+        return jsonify([])
+
+@app.route("/historico")
+@middleware_auth
+def historico():
+    """Retorna o histórico de pesquisas com dados mais detalhados"""
+    try:
+        # Formatar o histórico para melhor exibição
+        historico_formatado = []
+        
+        for item in HISTORICO_PESQUISAS:
+            if isinstance(item, dict):
+                historico_item = {
+                    'id_historico': item.get('id_historico', 'N/A'),
+                    'tipo': item.get('tipo', 'Cálculo'),
+                    'origem': item.get('origem', 'N/A'),
+                    'destino': item.get('destino', 'N/A'),
+                    'distancia': item.get('distancia', 'N/A'),
+                    'data_hora': item.get('data_hora', 'N/A'),
+                    'duracao_minutos': item.get('duracao_minutos', 'N/A'),
+                    'provider': item.get('provider', 'N/A'),
+                    'custos': item.get('custos', {})
+                }
+                historico_formatado.append(historico_item)
+        
+        return jsonify(historico_formatado)
+    except Exception as e:
+        print(f"[ERROR] Erro ao carregar histórico: {e}")
+        return jsonify([])
+
+@app.route("/api/base-agentes")
+def api_base_agentes():
+    """API endpoint para fornecer dados da Base Unificada para o mapa de agentes"""
+    try:
+        print("[API] Carregando base unificada para mapa de agentes...")
+        
+        # Carregar base unificada
+        df_base = carregar_base_unificada()
+        if df_base is None:
+            print("[API] Erro: Base unificada não disponível")
+            return jsonify({
+                "error": "Base de dados não disponível",
+                "agentes": []
+            })
+        
+        print(f"[API] Base carregada: {len(df_base)} registros")
+        
+        # Mapear estados para UF
+        estados_uf = {
+            'Acre': 'AC', 'Alagoas': 'AL', 'Amapá': 'AP', 'Amazonas': 'AM',
+            'Bahia': 'BA', 'Ceará': 'CE', 'Distrito Federal': 'DF', 'Espírito Santo': 'ES',
+            'Goiás': 'GO', 'Maranhão': 'MA', 'Mato Grosso': 'MT', 'Mato Grosso do Sul': 'MS',
+            'Minas Gerais': 'MG', 'Pará': 'PA', 'Paraíba': 'PB', 'Paraná': 'PR',
+            'Pernambuco': 'PE', 'Piauí': 'PI', 'Rio de Janeiro': 'RJ', 'Rio Grande do Norte': 'RN',
+            'Rio Grande do Sul': 'RS', 'Rondônia': 'RO', 'Roraima': 'RR', 'Santa Catarina': 'SC',
+            'São Paulo': 'SP', 'Sergipe': 'SE', 'Tocantins': 'TO'
+        }
+        
+        # Função para extrair UF de uma cidade
+        def extrair_uf_cidade(cidade_texto):
+            if not cidade_texto or (hasattr(pd, 'isna') and pd.isna(cidade_texto)) or str(cidade_texto).strip() == 'nan':
+                return None
+            
+            cidade_str = str(cidade_texto).strip()
+            
+            # Tentar encontrar UF no final do texto
+            import re
+            
+            # Procurar por padrões como "São Paulo - SP" ou "São Paulo/SP"
+            match = re.search(r'[-/\s]([A-Z]{2})$', cidade_str)
+            if match:
+                return match.group(1)
+            
+            # Procurar por nome de estado completo
+            for estado, uf in estados_uf.items():
+                if estado.lower() in cidade_str.lower():
+                    return uf
+            
+            # Se não encontrou, tentar deduzir por cidades conhecidas
+            cidades_conhecidas = {
+                'São Paulo': 'SP', 'Rio de Janeiro': 'RJ', 'Belo Horizonte': 'MG',
+                'Salvador': 'BA', 'Brasília': 'DF', 'Fortaleza': 'CE',
+                'Recife': 'PE', 'Porto Alegre': 'RS', 'Manaus': 'AM',
+                'Curitiba': 'PR', 'Goiânia': 'GO', 'Belém': 'PA',
+                'Guarulhos': 'SP', 'Campinas': 'SP', 'São Bernardo do Campo': 'SP',
+                'Nova Iguaçu': 'RJ', 'Duque de Caxias': 'RJ', 'São Gonçalo': 'RJ',
+                'Maceió': 'AL', 'Natal': 'RN', 'Campo Grande': 'MS',
+                'Teresina': 'PI', 'São Luís': 'MA', 'João Pessoa': 'PB',
+                'Aracaju': 'SE', 'Cuiabá': 'MT', 'Florianópolis': 'SC',
+                'Vitória': 'ES', 'Palmas': 'TO', 'Macapá': 'AP',
+                'Rio Branco': 'AC', 'Boa Vista': 'RR', 'Porto Velho': 'RO'
+            }
+            
+            for cidade, uf in cidades_conhecidas.items():
+                if cidade.lower() in cidade_str.lower():
+                    return uf
+            
+            return None
+        
+        # Processar dados usando as colunas corretas
+        agentes_processados = []
+        
+        for index, row in df_base.iterrows():
+            try:
+                # Campos básicos usando as colunas corretas - com tratamento de NaN
+                fornecedor = str(row.get('Fornecedor', 'N/A')).strip() if pd.notna(row.get('Fornecedor', 'N/A')) else 'N/A'
+                tipo = str(row.get('Tipo', 'N/A')).strip() if pd.notna(row.get('Tipo', 'N/A')) else 'N/A'
+                origem = str(row.get('Origem', '')).strip() if pd.notna(row.get('Origem', '')) else ''  # Coluna D (município)
+                destino = str(row.get('Destino', '')).strip() if pd.notna(row.get('Destino', '')) else ''
+                base_origem = str(row.get('Base Origem', '')).strip() if pd.notna(row.get('Base Origem', '')) else ''
+                base_destino = str(row.get('Base Destino', '')).strip() if pd.notna(row.get('Base Destino', '')) else ''
+                uf_direto = str(row.get('UF', '')).strip() if pd.notna(row.get('UF', '')) else ''  # Coluna Z (UF)
+                
+                # Usar UF diretamente da coluna Z
+                if uf_direto and uf_direto.upper() not in ['NAN', 'NONE', '']:
+                    uf_final = uf_direto.upper()
+                else:
+                    # Fallback: tentar extrair da origem
+                    uf_final = extrair_uf_cidade(origem)
+                    if not uf_final:
+                        uf_final = extrair_uf_cidade(destino)
+                
+                # Validar UF (deve ter exatamente 2 caracteres e ser alfanumérico)
+                if uf_final and len(str(uf_final)) == 2 and str(uf_final).isalpha():
+                    # Criar entrada do agente - garantir que todos os campos são strings válidas
+                    agente = {
+                        'Fornecedor': fornecedor if fornecedor else 'N/A',
+                        'Tipo': tipo if tipo else 'N/A',
+                        'Origem': origem if origem else '',
+                        'Destino': destino if destino else '',
+                        'Base Origem': base_origem if base_origem else '',
+                        'Base Destino': base_destino if base_destino else '',
+                        'UF': str(uf_final).upper()
+                    }
+                    
+                    agentes_processados.append(agente)
+                    
+            except Exception as e:
+                print(f"[API] Erro ao processar linha {index}: {e}")
+                continue
+        
+        print(f"[API] Processados {len(agentes_processados)} agentes")
+        
+        # Debug: mostrar estatísticas por estado
+        if agentes_processados:
+            from collections import Counter
+            ufs_counter = Counter([agente['UF'] for agente in agentes_processados])
+            print(f"[API] Agentes por UF: {dict(list(ufs_counter.most_common(10)))}")
+        
+        # Retornar apenas os dados necessários
+        return jsonify(agentes_processados)
+        
+    except Exception as e:
+        print(f"[API] Erro ao carregar base de agentes: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "error": f"Erro interno: {str(e)}",
+            "agentes": []
+        })
+
+@app.route("/aereo")
+def aereo():
+    df_aereo = ler_gollog_aereo()
+    if df_aereo is not None:
+        # Ordenar por custo_base, se existir
+        if "custo_base" in df_aereo.columns:
+            df_aereo = df_aereo.sort_values(by="custo_base", ascending=True)
+        dados = df_aereo.to_dict(orient="records")
+        return jsonify(dados)
+    else:
+        return jsonify({"error": "Não foi possível carregar dados aéreos"})
+
 @app.route("/calcular", methods=["POST"])
 @middleware_auth
 def calcular():
