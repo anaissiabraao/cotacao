@@ -1055,6 +1055,11 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             print(f"[FRACIONADO] ✅ {rotas_agentes['total_opcoes']} rotas com agentes encontradas")
             # Adicionar rotas de agentes às opções
             for rota in rotas_agentes.get('rotas', []):
+                # Validar se rota é um dicionário
+                if not isinstance(rota, dict):
+                    print(f"[FRACIONADO] ⚠️ Rota inválida (não é dict): {type(rota)}")
+                    continue
+                    
                 # Extrair fornecedor corretamente
                 resumo = rota.get('resumo', 'N/A')
                 if resumo and resumo != 'N/A' and ' - ' in resumo:
@@ -2055,6 +2060,29 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         rotas_encontradas.sort(key=lambda x: x['total'])
         
         # 🔧 VALIDAÇÃO E CORREÇÃO FINAL DAS ROTAS
+        # Função inline para validar e corrigir rotas
+        def validar_e_corrigir_rota_fracionada(rota):
+            """Valida e corrige campos de uma rota para garantir consistência"""
+            if not isinstance(rota, dict):
+                return rota
+                
+            # Garantir que campos essenciais existam
+            if 'tipo_rota' not in rota:
+                rota['tipo_rota'] = 'transferencia_direta'
+            
+            # Garantir detalhamento_custos
+            if 'detalhamento_custos' not in rota or not isinstance(rota.get('detalhamento_custos'), dict):
+                rota['detalhamento_custos'] = {
+                    'coleta': 0,
+                    'transferencia': 0,
+                    'entrega': 0,
+                    'gris_total': 0,
+                    'pedagio': 0,
+                    'total': rota.get('total', 0)
+                }
+            
+            return rota
+        
         rotas_encontradas = [validar_e_corrigir_rota_fracionada(rota) for rota in rotas_encontradas]
         
         # 🔧 VALIDAÇÃO FINAL - REMOVER DUPLICATAS RESIDUAIS (MELHORADO)
@@ -2126,7 +2154,20 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         print(f"[AGENTES] ❌ Erro: {e}")
         import traceback
         traceback.print_exc()
-        return None
+        # Retornar estrutura vazia ao invés de None
+        return {
+            'rotas': [],
+            'total_opcoes': 0,
+            'origem': f"{origem}/{uf_origem}",
+            'destino': f"{destino}/{uf_destino}",
+            'estatisticas': {
+                'rotas_completas': 0,
+                'rotas_parciais': 0,
+                'fornecedores_unicos': 0
+            },
+            'avisos': [f"Erro ao calcular rotas: {str(e)}"],
+            'agentes_faltando': {'origem': False, 'destino': False}
+        }
 def calcular_custo_agente(linha, peso_cubado, valor_nf):
     """
     Calcula o custo de um agente ou transferência específico
@@ -3100,6 +3141,18 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
     Extrai detalhamento completo de custos de uma opção
     """
     try:
+        # Validar entrada
+        if not isinstance(opcao, dict):
+            print(f"[CUSTOS] ⚠️ Opção não é um dicionário: {type(opcao)}")
+            return {
+                'custo_base_frete': 0,
+                'pedagio': 0,
+                'gris': 0,
+                'seguro': 0,
+                'tda': 0,
+                'outros': 0,
+                'total_custos': 0
+            }
         detalhes = opcao.get('detalhes', {})
         
         # Extrair dados dos agentes primeiro
