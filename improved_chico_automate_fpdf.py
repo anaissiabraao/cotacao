@@ -1311,6 +1311,12 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         #     (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
         #     (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
         # ]
+        
+        # Agentes de coleta - BUSCA GLOBAL E INTELIGENTE
+        agentes_coleta = df_agentes[
+            df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)
+        ]
+        
         # Se não encontrar agentes na cidade exata, manter vazio para rotas parciais
         if agentes_coleta.empty:
             print(f"[AGENTES] ⚠️ Nenhum agente de coleta encontrado em {origem_norm}/{uf_origem}")
@@ -2132,6 +2138,18 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
     - Aplica valor mínimo para pesos até 10kg
     """
     try:
+        # Validar peso_cubado
+        if peso_cubado is None:
+            print(f"[CUSTO] ❌ Erro: peso_cubado é None")
+            return None
+            
+        # Garantir que peso_cubado é float
+        try:
+            peso_cubado = float(peso_cubado)
+        except (ValueError, TypeError):
+            print(f"[CUSTO] ❌ Erro: peso_cubado inválido: {peso_cubado}")
+            return None
+            
         fornecedor = linha.get('Fornecedor', 'N/A')
         prazo_raw = linha.get('Prazo', 1)
         prazo = int(prazo_raw) if prazo_raw and str(prazo_raw).isdigit() else 1
@@ -2218,6 +2236,11 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
             # REUNIDAS usa a mesma lógica de transferências (buscar entre faixas e multiplicar)
             peso_calculo = peso_cubado  # Já é o máximo entre peso real e cubado
             
+            # Validar peso_calculo
+            if peso_calculo is None or peso_calculo <= 0:
+                print(f"[CUSTO-REUNIDAS] ❌ Peso inválido: {peso_calculo}")
+                return None
+                
             # 1. Verificar valor mínimo para até 10kg
             if 'VALOR MÍNIMO ATÉ 10' in linha and pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')):
                 valor_minimo = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
@@ -2268,20 +2291,6 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                 # Se não tiver valor mínimo, começar direto com as faixas
                 print(f"[CUSTO-REUNIDAS] ⚠️ Sem valor mínimo definido, usando faixas direto")
                 custo_base = 0
-            
-        # 🔧 LÓGICA ESPECÍFICA PARA REUNIDAS - USAR MESMA LÓGICA DE TRANSFERÊNCIAS
-        elif 'REUNIDAS' in fornecedor_upper:
-            print(f"[CUSTO-REUNIDAS] 🔧 Aplicando lógica de faixas de peso para REUNIDAS: {fornecedor}")
-            
-            # REUNIDAS usa a mesma lógica de transferências (buscar entre faixas e multiplicar)
-            peso_calculo = peso_cubado  # Já é o máximo entre peso real e cubado
-            
-            # 1. Verificar valor mínimo para até 10kg
-            if 'VALOR MÍNIMO ATÉ 10' in linha and pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')):
-                valor_minimo = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
-                
-                # Se peso for até 10kg, usar valor mínimo
-                if peso_calculo <= 10:
                     valor_base = valor_minimo
                     print(f"[CUSTO-REUNIDAS] ✅ Peso ≤ 10kg: Valor mínimo R$ {valor_base:.2f}")
                     custo_base = valor_base
@@ -2355,6 +2364,11 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         
         else:
             # LÓGICA PADRÃO PARA OUTROS FORNECEDORES
+            # Validar peso_cubado
+            if peso_cubado is None or peso_cubado <= 0:
+                print(f"[CUSTO] ❌ Peso inválido para {fornecedor}: {peso_cubado}")
+                return None
+                
             valor_base = 0
             if 'VALOR MÍNIMO ATÉ 10' in linha and pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')):
                 valor_base = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
@@ -2505,19 +2519,71 @@ def processar_linha_fracionado(linha, peso_cubado, valor_nf, tipo_servico="FRACI
 
 def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=None):
     """
-    Calcula peso cubado aplicando fatores específicos por tipo de serviço
+    Calcula peso cubado aplicando fatores específicos por tipo de serviço:
+    - Agentes (tipo 'Agente'): cubagem × 250
+    - Transferências JEM e Concept: cubagem × 166
     """
     try:
         peso_real = float(peso_real)
         cubagem = float(cubagem) if cubagem else 0
         
         if cubagem <= 0:
-            print(f"[AÉREO] Buscando: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
+            return peso_real
+            
+        # Aplicar fator específico baseado no tipo
+        if tipo_linha == 'Agente':
+            fator_cubagem = 250  # kg/m³ para agentes
+            tipo_calculo = "Agente (250kg/m³)"
+        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper() or 'SOL' in str(fornecedor).upper()):
+            fator_cubagem = 166  # kg/m³ para JEM, Concept e SOL
+            tipo_calculo = f"Transferência {fornecedor} (166kg/m³)"
+        else:
+            # Padrão para outros tipos
+            fator_cubagem = 250  # kg/m³ padrão
+            tipo_calculo = f"{tipo_linha} (250kg/m³)"
+            
+        peso_cubado = cubagem * fator_cubagem
+        peso_final = max(peso_real, peso_cubado)
+        
+        print(f"[PESO_CUBADO] {tipo_calculo}: {peso_real}kg vs {peso_cubado}kg = {peso_final}kg")
+        return peso_final
+        
+    except Exception as e:
+        print(f"[PESO_CUBADO] Erro no cálculo: {e}")
+        return float(peso_real) if peso_real else 0
+
+def calcular_frete_aereo_base_unificada(origem, uf_origem, destino, uf_destino, peso, valor_nf=None):
+    """
+    Calcula frete aéreo usando a Base Unificada
+    """
+    try:
+        print(f"[AÉREO] 📦 Iniciando cálculo: {origem}/{uf_origem} → {destino}/{uf_destino}")
+        print(f"[AÉREO] Peso: {peso}kg, Valor NF: R$ {valor_nf:,}" if valor_nf else f"[AÉREO] Peso: {peso}kg")
+        
+        # Carregar base unificada
+        df_base = carregar_base_unificada()
+        if df_base is None:
+            print("[AÉREO] ❌ Erro: Base unificada não disponível")
+            return []
+            
+        # Filtrar apenas serviços aéreos
+        df_aereo = df_base[df_base['Tipo'] == 'Aéreo'].copy()
+        
+        if df_aereo.empty:
+            print("[AÉREO] ❌ Nenhum serviço aéreo encontrado na base")
+            return []
+            
+        # Normalizar cidades
+        origem_norm = normalizar_cidade_nome(origem)
+        destino_norm = normalizar_cidade_nome(destino)
+        uf_origem_norm = normalizar_uf(uf_origem)
+        uf_destino_norm = normalizar_uf(uf_destino)
+        
+        print(f"[AÉREO] Buscando: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
         
         # Buscar rotas aéreas correspondentes
         opcoes_aereas = []
         
-
         for _, linha in df_aereo.iterrows():
             origem_base = normalizar_cidade_nome(str(linha.get('Origem', '')))
             destino_base = normalizar_cidade_nome(str(linha.get('Destino', '')))
@@ -2593,47 +2659,17 @@ def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=Non
         
         if not opcoes_aereas:
             print(f"[AÉREO] ❌ Nenhuma rota aérea encontrada para {origem_norm} → {destino_norm}")
-            return None
+            return []
         
         # Ordenar por menor custo
         opcoes_aereas.sort(key=lambda x: x['total'])
         
-        # Preparar mensagens de aviso sobre agentes ausentes
-        avisos = []
-        if agentes_faltando['origem']:
-            if agentes_faltando['agentes_proximos_origem']:
-                cidades_proximas = ", ".join([f"{m[0]}/{m[1]} ({m[2]:.1f}km)" for m in agentes_faltando['agentes_proximos_origem']])
-                avisos.append(f"Atenção: Nenhum agente encontrado em {origem}/{uf_origem}. Cidades próximas com agentes: {cidades_proximas}")
-            else:
-                avisos.append(f"Atenção: Nenhum agente encontrado em {origem}/{uf_origem} e não foram encontradas cidades próximas com agentes.")
-        
-        if agentes_faltando['destino']:
-            if agentes_faltando['agentes_proximos_destino']:
-                cidades_proximas = ", ".join([f"{m[0]}/{m[1]} ({m[2]:.1f}km)" for m in agentes_faltando['agentes_proximos_destino']])
-                avisos.append(f"Atenção: Nenhum agente encontrado em {destino}/{uf_destino}. Cidades próximas com agentes: {cidades_proximas}")
-            else:
-                avisos.append(f"Atenção: Nenhum agente encontrado em {destino}/{uf_destino} e não foram encontradas cidades próximas com agentes.")
-        # Preparar resultado final
-        resultado = {
-            'opcoes': opcoes_aereas,
-            'total_opcoes': len(opcoes_aereas),
-            'melhor_opcao': opcoes_aereas[0] if opcoes_aereas else None,
-            'origem': origem,
-            'uf_origem': uf_origem,
-            'destino': destino,
-            'uf_destino': uf_destino,
-            'peso': peso,
-            'valor_nf': valor_nf,
-            'agentes_faltando': agentes_faltando,
-            'avisos': avisos if avisos else None
-        }
-        
         print(f"[AÉREO] ✅ {len(opcoes_aereas)} opções aéreas encontradas")
-        return resultado
+        return opcoes_aereas
         
     except Exception as e:
         print(f"[AÉREO] ❌ Erro no cálculo aéreo: {e}")
-        return None
+        return []
 
 def gerar_pedagios_estimados_mapa(rota_info, tipo_veiculo, valor_total_pedagio, distancia_total):
     """
@@ -3774,12 +3810,9 @@ def calcular_aereo():
         
         custos_aereo = {}
         
-        if resultado_aereo and resultado_aereo.get('opcoes'):
+        if resultado_aereo and isinstance(resultado_aereo, list) and len(resultado_aereo) > 0:
             # Usar dados da base unificada
-            opcoes = resultado_aereo['opcoes']
-            
-            # Agrupar por fornecedor/modalidade
-            for opcao in opcoes:
+            for opcao in resultado_aereo:
                 fornecedor = opcao['fornecedor']
                 custos_aereo[fornecedor] = opcao['total']
         else:
