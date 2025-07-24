@@ -2293,19 +2293,30 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     custo_base = valor_base
                 else:
                     # Para pesos acima de 10kg, buscar faixa apropriada
-                    if peso_calculo > 500:
-                        # Acima de 500kg - usar coluna 'Acima 500'
-                        if 'Acima 500' in linha:
-                            valor_base = float(linha.get('Acima 500', 0))
-                            print(f"[CUSTO-REUNIDAS] ✅ Peso >500kg: Valor fixo R$ {valor_base:.2f}")
+                    if peso_calculo > 200:
+                        # REUNIDAS: Acima de 200kg usa lógica de EXCEDENTE
+                        valor_200 = float(linha.get(200, 0))  # Valor base até 200kg
+                        excedente_por_kg = float(linha.get('EXCEDENTE', 0))  # Valor por kg excedente
+                        
+                        if excedente_por_kg > 0:
+                            peso_excedente = peso_calculo - 200
+                            valor_excedente = peso_excedente * excedente_por_kg
+                            valor_base = valor_200 + valor_excedente
+                            print(f"[CUSTO-REUNIDAS] ✅ Peso >200kg: Base 200kg (R$ {valor_200:.2f}) + Excedente {peso_excedente:.1f}kg × R$ {excedente_por_kg:.4f} = R$ {valor_base:.2f}")
                         else:
-                            # Fallback para coluna 500 se não houver 'Acima 500'
-                            valor_base = float(linha.get(500, 0))
-                            print(f"[CUSTO-REUNIDAS] ✅ Peso >500kg (usando 500): Valor fixo R$ {valor_base:.2f}")
+                            # Se não tiver excedente definido, usar faixa mais próxima
+                            if peso_calculo > 500:
+                                valor_base = float(linha.get('Acima 500', linha.get(500, 0)))
+                                print(f"[CUSTO-REUNIDAS] ⚠️ Sem excedente definido, usando faixa >500kg: R$ {valor_base:.2f}")
+                            elif peso_calculo > 300:
+                                valor_base = float(linha.get(500, 0))
+                                print(f"[CUSTO-REUNIDAS] ⚠️ Sem excedente definido, usando faixa 500kg: R$ {valor_base:.2f}")
+                            else:
+                                valor_base = float(linha.get(300, 0))
+                                print(f"[CUSTO-REUNIDAS] ⚠️ Sem excedente definido, usando faixa 300kg: R$ {valor_base:.2f}")
                     else:
-                        # Para pesos entre 10kg e 500kg, encontrar a faixa correta
-                        # Incluindo todas as faixas possíveis para REUNIDAS
-                        faixas_peso = [20, 30, 50, 70, 100, 150, 200, 300, 500]
+                        # Para pesos entre 10kg e 200kg, usar valor fixo da faixa
+                        faixas_peso = [20, 30, 50, 70, 100, 150, 200]
                         
                         # Encontrar a menor faixa que seja maior ou igual ao peso
                         valor_base = 0
@@ -2321,8 +2332,8 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                         
                         if not faixa_usada:
                             # Se não encontrou faixa válida, usar a última disponível
-                            valor_base = float(linha.get(500, 0))
-                            print(f"[CUSTO-REUNIDAS] ⚠️ Usando faixa 500kg (padrão): Valor fixo R$ {valor_base:.2f}")
+                            valor_base = float(linha.get(200, 0))
+                            print(f"[CUSTO-REUNIDAS] ⚠️ Usando faixa 200kg (padrão): Valor fixo R$ {valor_base:.2f}")
                     
                     custo_base = valor_base
             else:
