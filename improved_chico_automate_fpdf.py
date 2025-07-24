@@ -339,7 +339,6 @@ def clear_cache():
     # Não limpar cookies de sessão
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
-
 # Rotas de autenticação
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -665,7 +664,6 @@ def calcular_distancia_openroute(origem, destino):
     except Exception as e:
         print(f"Erro ao calcular distância OpenRoute: {e}")
         return None
-
 def calcular_distancia_reta(origem, destino):
     """
     Calcula a distância em linha reta entre dois pontos.
@@ -970,7 +968,6 @@ def carregar_base_unificada():
     except Exception as e:
         print(f"[BASE] ❌ Erro ao carregar base unificada: {e}")
         return None
-
 def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None):
     """
     Calcular frete fracionado usando a Base Unificada com lógica correta de agentes
@@ -1314,88 +1311,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         #     (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
         #     (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
         # ]
-        
-        # Se não encontrar, tentar cidades na mesma UF - COMENTADO
-        # if servicos_diretos.empty:
-        #     print(f"[DIRETOS] 🔍 Busca expandida de serviços diretos em {uf_origem} → {uf_destino}...")
-        #     # Verificando as colunas disponíveis para UF
-        #     if 'UF Origem' in df_diretos.columns and 'UF Destino' in df_diretos.columns:
-        #         servicos_diretos = df_diretos[
-        #             (df_diretos['UF Origem'] == uf_origem) &
-        #             (df_diretos['UF Destino'] == uf_destino)
-        #         ]
-        #     else:
-        #         # Fallback usando a coluna UF e Base Origem/Base Destino para determinar UFs
-        #         servicos_diretos = df_diretos[
-        #             (df_diretos['Base Origem'].str.contains(uf_origem, case=False, na=False)) &
-        #             (df_diretos['Base Destino'].str.contains(uf_destino, case=False, na=False))
-        #         ]
-        #         if servicos_diretos.empty and 'UF' in df_diretos.columns:
-        #             # Tentar usar apenas a coluna UF se disponível
-        #             print(f"[DIRETOS] 🔄 Tentando busca alternativa usando coluna UF...")
-        #             # A coluna UF geralmente contém pares de UF como "PR-SP"
-        #             servicos_diretos = df_diretos[
-        #                 df_diretos['UF'].apply(lambda x: str(x).startswith(uf_origem) and str(x).endswith(uf_destino))
-        #             ]
-        #     print(f"[DIRETOS] Busca expandida encontrou: {len(servicos_diretos)} serviços")
-        
-        # REMOVIDO - Loop de processamento de serviços diretos para evitar duplicação
-        # Os serviços diretos já são processados em calcular_frete_fracionado_base_unificada
-        """
-        for _, servico in servicos_diretos.iterrows():
-            try:
-                peso_cubado_servico = calcular_peso_cubado_por_tipo(peso_real, cubagem, servico.get('Tipo', 'Direto'), servico.get('Fornecedor'))
-                opcao = processar_linha_fracionado(servico, peso_cubado_servico, valor_nf, "DIRETO PORTA-A-PORTA")
-                if opcao:
-                    rota = {
-                        'tipo_rota': 'direto_porta_porta',
-                        'resumo': f"{opcao['fornecedor']} - Serviço Direto Porta-a-Porta",
-                        'total': opcao['total'],
-                        'prazo_total': opcao['prazo'],
-                        'maior_peso': peso_cubado,
-                        'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
-                        'rota_bases': f"{origem} → {destino} (Direto)",
-                        'detalhamento_custos': {
-                            'coleta': opcao['custo_base'],  # ✅ DIRETO inclui coleta
-                            'transferencia': 0,             # ✅ DIRETO não tem transferência
-                            'entrega': 0,                   # ✅ DIRETO inclui entrega no custo base
-                            'pedagio': opcao['pedagio'],
-                            'gris_total': opcao['gris']
-                        },
-                        'observacoes': "Serviço direto porta-a-porta (coleta e entrega incluídas)",
-                        'servico_direto': opcao,
-                        'agente_coleta': {
-                            'fornecedor': opcao['fornecedor'],
-                            'funcao': 'Coleta na origem (incluída no serviço direto)',
-                            'total': opcao['custo_base'],
-                            'base_destino': 'Direto para destino'
-                        },
-                        'transferencia': {
-                            'fornecedor': 'Não aplicável',
-                            'rota': f"{origem} → {destino}",
-                            'total': 0,
-                            'observacao': 'Serviço direto sem transferência'
-                        },
-                        'agente_entrega': {
-                            'fornecedor': opcao['fornecedor'],
-                            'funcao': 'Entrega no destino (incluída no serviço direto)',
-                            'total': 0,
-                            'base_origem': 'Direto da origem'
-                        }
-                    }
-                    rotas_encontradas.append(rota)
-                    print(f"[DIRETO] ✅ Serviço direto: {opcao['fornecedor']} - R$ {opcao['total']:.2f}")
-            except Exception as e:
-                print(f"[DIRETO] ❌ Erro ao processar serviço direto: {e}")
-                continue
-        """
-        
-        # 2. BUSCAR ROTAS COM AGENTES + TRANSFERÊNCIAS
-        # Agentes de coleta - BUSCA GLOBAL E INTELIGENTE
-        agentes_coleta = df_agentes[
-            df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)
-        ]
-        
         # Se não encontrar agentes na cidade exata, manter vazio para rotas parciais
         if agentes_coleta.empty:
             print(f"[AGENTES] ⚠️ Nenhum agente de coleta encontrado em {origem_norm}/{uf_origem}")
@@ -1629,7 +1544,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             uf_destino in proximidade_estados.get(estado_inter, [])):
                             estados_proximos.append((estado_inter, 1))
                             break
-            
             # Máximo de estados intermediários a tentar
             max_estados_intermediarios = 2  # Reduzido para focar apenas em rotas diretas
             estados_tentados = 0
@@ -2238,7 +2152,6 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     excede_peso = True
             except (ValueError, TypeError):
                 pass
-        
         # 🔧 LÓGICA ESPECÍFICA PARA TRANSFERÊNCIAS
         fornecedor_upper = str(fornecedor).upper()
         tipo_servico = str(linha.get('Tipo', '')).upper()
@@ -2297,6 +2210,64 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     print(f"[CUSTO-TRANSF] ⚠️ Usando faixa 100kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
             
             custo_base = valor_base
+            
+        # 🔧 LÓGICA ESPECÍFICA PARA REUNIDAS - USAR MESMA LÓGICA DE TRANSFERÊNCIAS
+        elif 'REUNIDAS' in fornecedor_upper:
+            print(f"[CUSTO-REUNIDAS] 🔧 Aplicando lógica de faixas de peso para REUNIDAS: {fornecedor}")
+            
+            # REUNIDAS usa a mesma lógica de transferências (buscar entre faixas e multiplicar)
+            peso_calculo = peso_cubado  # Já é o máximo entre peso real e cubado
+            
+            # 1. Verificar valor mínimo para até 10kg
+            if 'VALOR MÍNIMO ATÉ 10' in linha and pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')):
+                valor_minimo = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
+                
+                # Se peso for até 10kg, usar valor mínimo
+                if peso_calculo <= 10:
+                    valor_base = valor_minimo
+                    print(f"[CUSTO-REUNIDAS] ✅ Peso ≤ 10kg: Valor mínimo R$ {valor_base:.2f}")
+                    custo_base = valor_base
+                else:
+                    # Para pesos acima de 10kg, buscar faixa apropriada
+                    if peso_calculo > 500:
+                        # Acima de 500kg - usar coluna 'Acima 500'
+                        if 'Acima 500' in linha:
+                            valor_por_kg = float(linha.get('Acima 500', 0))
+                            valor_base = peso_calculo * valor_por_kg
+                            print(f"[CUSTO-REUNIDAS] ✅ Peso >500kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
+                        else:
+                            # Fallback para coluna 500 se não houver 'Acima 500'
+                            valor_por_kg = float(linha.get(500, 0))
+                            valor_base = peso_calculo * valor_por_kg
+                            print(f"[CUSTO-REUNIDAS] ✅ Peso >500kg (usando 500): {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
+                    else:
+                        # Para pesos entre 10kg e 500kg, encontrar a faixa correta
+                        # Incluindo todas as faixas possíveis para REUNIDAS
+                        faixas_peso = [20, 30, 50, 70, 100, 300, 500]
+                        
+                        # Encontrar a menor faixa que seja maior ou igual ao peso
+                        valor_base_kg = 0
+                        faixa_usada = None
+                        for faixa in faixas_peso:
+                            if peso_calculo <= faixa:
+                                valor_base_kg = float(linha.get(faixa, 0))
+                                if valor_base_kg > 0:  # Só usar se tiver valor
+                                    valor_base = peso_calculo * valor_base_kg
+                                    faixa_usada = faixa
+                                    print(f"[CUSTO-REUNIDAS] ✅ Peso {peso_calculo}kg na faixa até {faixa}kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
+                                    break
+                        
+                        if not faixa_usada:
+                            # Se não encontrou faixa válida, usar a última disponível
+                            valor_base_kg = float(linha.get(500, 0))
+                            valor_base = peso_calculo * valor_base_kg
+                            print(f"[CUSTO-REUNIDAS] ⚠️ Usando faixa 500kg (padrão): {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
+                    
+                    custo_base = valor_base
+            else:
+                # Se não tiver valor mínimo, começar direto com as faixas
+                print(f"[CUSTO-REUNIDAS] ⚠️ Sem valor mínimo definido, usando faixas direto")
+                custo_base = 0
             
         # 🔧 LÓGICA ESPECÍFICA PARA JEM/DFL - CORREÇÃO DO CÁLCULO
         elif 'JEM' in fornecedor_upper or 'DFL' in fornecedor_upper:
@@ -2584,7 +2555,6 @@ def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=Non
                 avisos.append(f"Atenção: Nenhum agente encontrado em {destino}/{uf_destino}. Cidades próximas com agentes: {cidades_proximas}")
             else:
                 avisos.append(f"Atenção: Nenhum agente encontrado em {destino}/{uf_destino} e não foram encontradas cidades próximas com agentes.")
-        
         # Preparar resultado final
         resultado = {
             'opcoes': opcoes_aereas,
@@ -2929,7 +2899,6 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
             
             info['base_origem'] = base_origem
             info['base_destino'] = base_destino
-            
         elif tipo_rota == 'transferencia_entrega':
             # Buscar dados diretamente na raiz da opção
             transferencia = opcao.get('transferencia', detalhes.get('transferencia', {}))
@@ -3258,7 +3227,6 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
                     custo_coleta = 0.0
                     custo_transferencia = total_opcao
                     custo_entrega = 0.0
-            
             custos = {
                 # Custos detalhados por etapa
                 'custo_coleta': custo_coleta,
@@ -3326,265 +3294,6 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
             'outros': 0,
             'total_custos': opcao.get('total', 0)
         }
-# Rotas da aplicação
-@app.route("/")
-@middleware_auth
-def index():
-    ip_cliente = obter_ip_cliente()
-    usuario = session.get('usuario_logado', 'DESCONHECIDO')
-    log_acesso(usuario, 'ACESSO_HOME', ip_cliente, "Acesso à página principal")
-    
-    df_aereo = ler_gollog_aereo()
-    dados_aereo = []
-    if df_aereo is not None:
-        dados_aereo = df_aereo.to_dict(orient="records")
-    
-    # Passar dados do usuário para o template
-    usuario_dados = usuario_logado()
-    return render_template("index.html", 
-                         dados_aereo=dados_aereo, 
-                         historico=HISTORICO_PESQUISAS,
-                         usuario=usuario_dados)
-
-@app.route("/estados")
-def estados():
-    try:
-        response = requests.get("https://servicodados.ibge.gov.br/api/v1/localidades/estados")
-        response.raise_for_status()
-        data = response.json()
-        estados = [{"id": estado["sigla"], "text": estado["nome"]} for estado in data]
-        return jsonify(sorted(estados, key=lambda x: x["text"]))
-    except Exception as e:
-        print(f"Erro ao obter estados: {e}")
-        return jsonify(ESTADOS_FALLBACK)
-
-@app.route("/municipios/<uf>")
-def municipios(uf):
-    try:
-        # Normalizar o UF
-        uf = str(uf).strip().upper()
-        print(f"[DEBUG] Buscando municípios para UF: {uf}")
-        
-        # Se o UF não estiver no formato padrão, tentar encontrar pela descrição
-        if len(uf) > 2:
-            estados_map = {
-                'ACRE': 'AC', 'ALAGOAS': 'AL', 'AMAPA': 'AP', 'AMAZONAS': 'AM',
-                'BAHIA': 'BA', 'CEARA': 'CE', 'DISTRITO FEDERAL': 'DF',
-                'ESPIRITO SANTO': 'ES', 'GOIAS': 'GO', 'MARANHAO': 'MA',
-                'MATO GROSSO': 'MT', 'MATO GROSSO DO SUL': 'MS', 'MINAS GERAIS': 'MG',
-                'PARA': 'PA', 'PARAIBA': 'PB', 'PARANA': 'PR', 'PERNAMBUCO': 'PE',
-                'PIAUI': 'PI', 'RIO DE JANEIRO': 'RJ', 'RIO GRANDE DO NORTE': 'RN',
-                'RIO GRANDE DO SUL': 'RS', 'RONDONIA': 'RO', 'RORAIMA': 'RR',
-                'SANTA CATARINA': 'SC', 'SAO PAULO': 'SP', 'SERGIPE': 'SE',
-                'TOCANTINS': 'TO'
-            }
-            uf_norm = uf.replace('-', ' ').replace('_', ' ').upper()
-            if uf_norm in estados_map:
-                uf = estados_map[uf_norm]
-                print(f"[DEBUG] UF normalizado para: {uf}")
-        
-        # Se ainda assim o UF não estiver no formato correto, retornar erro
-        if len(uf) != 2:
-            print(f"[ERROR] UF inválido: {uf}")
-            return jsonify([])
-        
-        # Buscar o ID do estado primeiro
-        estados_response = requests.get("https://servicodados.ibge.gov.br/api/v1/localidades/estados", timeout=10)
-        estados_response.raise_for_status()
-        estados_data = estados_response.json()
-        estado_id = None
-        
-        for estado in estados_data:
-            if estado['sigla'] == uf:
-                estado_id = estado['id']
-                break
-        
-        if not estado_id:
-            print(f"[ERROR] Estado não encontrado para UF: {uf}")
-            return jsonify([])
-        
-        # Buscar municípios usando o ID do estado
-        print(f"[DEBUG] Buscando municípios para estado ID: {estado_id}")
-        response = requests.get(f"https://servicodados.ibge.gov.br/api/v1/localidades/estados/{estado_id}/municipios", timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        
-        if not data:
-            print(f"[ERROR] Nenhum município encontrado para UF: {uf}")
-            return jsonify([])
-        
-        municipios = [{"id": m["nome"], "text": m["nome"]} for m in data]
-        print(f"[DEBUG] Encontrados {len(municipios)} municípios para UF: {uf}")
-        return jsonify(sorted(municipios, key=lambda x: x["text"]))
-    except requests.exceptions.Timeout:
-        print(f"[ERROR] Timeout ao buscar municípios para UF: {uf}")
-        return jsonify([])
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Erro na requisição HTTP para UF {uf}: {str(e)}")
-        return jsonify([])
-    except Exception as e:
-        print(f"[ERROR] Erro ao obter municípios de {uf}: {str(e)}")
-        return jsonify([])
-
-@app.route("/api/base-agentes")
-def api_base_agentes():
-    """API endpoint para fornecer dados da Base Unificada para o mapa de agentes"""
-    try:
-        print("[API] Carregando base unificada para mapa de agentes...")
-        
-        # Carregar base unificada
-        df_base = carregar_base_unificada()
-        if df_base is None:
-            print("[API] Erro: Base unificada não disponível")
-            return jsonify({
-                "error": "Base de dados não disponível",
-                "agentes": []
-            })
-        
-        print(f"[API] Base carregada: {len(df_base)} registros")
-        
-        # Mapear estados para UF
-        estados_uf = {
-            'Acre': 'AC', 'Alagoas': 'AL', 'Amapá': 'AP', 'Amazonas': 'AM',
-            'Bahia': 'BA', 'Ceará': 'CE', 'Distrito Federal': 'DF', 'Espírito Santo': 'ES',
-            'Goiás': 'GO', 'Maranhão': 'MA', 'Mato Grosso': 'MT', 'Mato Grosso do Sul': 'MS',
-            'Minas Gerais': 'MG', 'Pará': 'PA', 'Paraíba': 'PB', 'Paraná': 'PR',
-            'Pernambuco': 'PE', 'Piauí': 'PI', 'Rio de Janeiro': 'RJ', 'Rio Grande do Norte': 'RN',
-            'Rio Grande do Sul': 'RS', 'Rondônia': 'RO', 'Roraima': 'RR', 'Santa Catarina': 'SC',
-            'São Paulo': 'SP', 'Sergipe': 'SE', 'Tocantins': 'TO'
-        }
-        
-        # Função para extrair UF de uma cidade
-        def extrair_uf_cidade(cidade_texto):
-            if not cidade_texto or (hasattr(pd, 'isna') and pd.isna(cidade_texto)) or str(cidade_texto).strip() == 'nan':
-                return None
-            
-            cidade_str = str(cidade_texto).strip()
-            
-            # Tentar encontrar UF no final do texto
-            import re
-            
-            # Procurar por padrões como "São Paulo - SP" ou "São Paulo/SP"
-            match = re.search(r'[-/\s]([A-Z]{2})$', cidade_str)
-            if match:
-                return match.group(1)
-            
-            # Procurar por nome de estado completo
-            for estado, uf in estados_uf.items():
-                if estado.lower() in cidade_str.lower():
-                    return uf
-            
-            # Se não encontrou, tentar deduzir por cidades conhecidas
-            cidades_conhecidas = {
-                'São Paulo': 'SP', 'Rio de Janeiro': 'RJ', 'Belo Horizonte': 'MG',
-                'Salvador': 'BA', 'Brasília': 'DF', 'Fortaleza': 'CE',
-                'Recife': 'PE', 'Porto Alegre': 'RS', 'Manaus': 'AM',
-                'Curitiba': 'PR', 'Goiânia': 'GO', 'Belém': 'PA',
-                'Guarulhos': 'SP', 'Campinas': 'SP', 'São Bernardo do Campo': 'SP',
-                'Nova Iguaçu': 'RJ', 'Duque de Caxias': 'RJ', 'São Gonçalo': 'RJ',
-                'Maceió': 'AL', 'Natal': 'RN', 'Campo Grande': 'MS',
-                'Teresina': 'PI', 'São Luís': 'MA', 'João Pessoa': 'PB',
-                'Aracaju': 'SE', 'Cuiabá': 'MT', 'Florianópolis': 'SC',
-                'Vitória': 'ES', 'Palmas': 'TO', 'Macapá': 'AP',
-                'Rio Branco': 'AC', 'Boa Vista': 'RR', 'Porto Velho': 'RO'
-            }
-            
-            for cidade, uf in cidades_conhecidas.items():
-                if cidade.lower() in cidade_str.lower():
-                    return uf
-            
-            return None
-        
-        # Processar dados usando as colunas corretas
-        agentes_processados = []
-        
-        for index, row in df_base.iterrows():
-            try:
-                # Campos básicos usando as colunas corretas - com tratamento de NaN
-                fornecedor = str(row.get('Fornecedor', 'N/A')).strip() if pd.notna(row.get('Fornecedor', 'N/A')) else 'N/A'
-                tipo = str(row.get('Tipo', 'N/A')).strip() if pd.notna(row.get('Tipo', 'N/A')) else 'N/A'
-                origem = str(row.get('Origem', '')).strip() if pd.notna(row.get('Origem', '')) else ''  # Coluna D (município)
-                destino = str(row.get('Destino', '')).strip() if pd.notna(row.get('Destino', '')) else ''
-                base_origem = str(row.get('Base Origem', '')).strip() if pd.notna(row.get('Base Origem', '')) else ''
-                base_destino = str(row.get('Base Destino', '')).strip() if pd.notna(row.get('Base Destino', '')) else ''
-                uf_direto = str(row.get('UF', '')).strip() if pd.notna(row.get('UF', '')) else ''  # Coluna Z (UF)
-                
-                # Usar UF diretamente da coluna Z
-                if uf_direto and uf_direto.upper() not in ['NAN', 'NONE', '']:
-                    uf_final = uf_direto.upper()
-                else:
-                    # Fallback: tentar extrair da origem
-                    uf_final = extrair_uf_cidade(origem)
-                    if not uf_final:
-                        uf_final = extrair_uf_cidade(destino)
-                
-                # Validar UF (deve ter exatamente 2 caracteres e ser alfanumérico)
-                if uf_final and len(str(uf_final)) == 2 and str(uf_final).isalpha():
-                    # Criar entrada do agente - garantir que todos os campos são strings válidas
-                    agente = {
-                        'Fornecedor': fornecedor if fornecedor else 'N/A',
-                        'Tipo': tipo if tipo else 'N/A',
-                        'Origem': origem if origem else '',
-                        'Destino': destino if destino else '',
-                        'Base Origem': base_origem if base_origem else '',
-                        'Base Destino': base_destino if base_destino else '',
-                        'UF': str(uf_final).upper()
-                    }
-                    
-                    agentes_processados.append(agente)
-                    
-            except Exception as e:
-                print(f"[API] Erro ao processar linha {index}: {e}")
-                continue
-        
-        print(f"[API] Processados {len(agentes_processados)} agentes")
-        
-        # Debug: mostrar estatísticas por estado
-        if agentes_processados:
-            from collections import Counter
-            ufs_counter = Counter([agente['UF'] for agente in agentes_processados])
-            print(f"[API] Agentes por UF: {dict(list(ufs_counter.most_common(10)))}")
-        
-        # Retornar apenas os dados necessários
-        return jsonify(agentes_processados)
-        
-    except Exception as e:
-        print(f"[API] Erro ao carregar base de agentes: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            "error": f"Erro interno: {str(e)}",
-            "agentes": []
-        })
-
-@app.route("/historico")
-@middleware_auth
-def historico():
-    """Retorna o histórico de pesquisas com dados mais detalhados"""
-    try:
-        # Formatar o histórico para melhor exibição
-        historico_formatado = []
-        
-        for item in HISTORICO_PESQUISAS:
-            if isinstance(item, dict):
-                historico_item = {
-                    'id_historico': item.get('id_historico', 'N/A'),
-                    'tipo': item.get('tipo', 'Cálculo'),
-                    'origem': item.get('origem', 'N/A'),
-                    'destino': item.get('destino', 'N/A'),
-                    'distancia': item.get('distancia', 'N/A'),
-                    'data_hora': item.get('data_hora', 'N/A'),
-                    'duracao_minutos': item.get('duracao_minutos', 'N/A'),
-                    'provider': item.get('provider', 'N/A'),
-                    'custos': item.get('custos', {})
-                }
-                historico_formatado.append(historico_item)
-        
-        return jsonify(historico_formatado)
-    except Exception as e:
-        print(f"[ERROR] Erro ao carregar histórico: {e}")
-        return jsonify([])
-
 @app.route("/calcular", methods=["POST"])
 @middleware_auth
 def calcular():
@@ -3916,7 +3625,6 @@ def log_debug(msg):
     DEBUG = False  # Mudar para True para ativar logs
     if DEBUG:
         print(msg)
-
 def sanitizar_json(obj):
     """
     Sanitiza objeto Python para ser convertido em JSON válido.
@@ -3941,314 +3649,6 @@ def sanitizar_json(obj):
         return sanitizar_json(obj.to_dict())
     else:
         return obj
-def encontrar_municipios_proximos(municipio, uf, raio_km=100, limite=5):
-    """
-    Encontra municípios próximos ao município especificado dentro de um raio em km.
-    Retorna uma lista de tuplas (municipio, uf, distancia_km) ordenada por distância.
-    """
-    try:
-        # Primeiro, obter as coordenadas do município de origem
-        origem_coords = geocode(municipio, uf)
-        if not origem_coords:
-            print(f"[GEO] ❌ Não foi possível obter coordenadas para {municipio}/{uf}")
-            return []
-            
-        # Carregar todos os municípios do estado
-        municipios_estado = obter_municipios_uf(uf)
-        if not municipios_estado:
-            print(f"[GEO] ❌ Não foi possível carregar municípios para {uf}")
-            return []
-            
-        # Calcular distância para cada município
-        municipios_com_distancia = []
-        
-        for muni in municipios_estado:
-            if muni['nome'].lower() == municipio.lower():
-                continue  # Pular o próprio município
-                
-            # Obter coordenadas do município de destino
-            dest_coords = geocode(muni['nome'], uf)
-            if not dest_coords:
-                continue
-                
-            # Calcular distância em km (fórmula de Haversine)
-            lat1, lon1 = origem_coords
-            lat2, lon2 = dest_coords
-            
-            # Raio da Terra em km
-            R = 6371.0
-            
-            # Converter graus para radianos
-            lat1_rad = math.radians(lat1)
-            lon1_rad = math.radians(lon1)
-            lat2_rad = math.radians(lat2)
-            lon2_rad = math.radians(lon2)
-            
-            # Diferença das coordenadas
-            dlat = lat2_rad - lat1_rad
-            dlon = lon2_rad - lon1_rad
-            
-            # Fórmula de Haversine
-            a = math.sin(dlat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon/2)**2
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-            distancia = R * c
-            
-            # Adicionar à lista se estiver dentro do raio
-            if distancia <= raio_km:
-                municipios_com_distancia.append((muni['nome'], uf, round(distancia, 1)))
-        
-        # Ordenar por distância e limitar o número de resultados
-        municipios_com_distancia.sort(key=lambda x: x[2])
-        return municipios_com_distancia[:limite]
-        
-    except Exception as e:
-        print(f"[GEO] ❌ Erro ao buscar municípios próximos: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return []
-
-
-def validar_e_corrigir_rota_fracionada(rota):
-    """
-    Valida e corrige dados de uma rota fracionada para garantir consistência
-    """
-    try:
-        # Verificar se a rota tem os campos obrigatórios
-        if not isinstance(rota, dict):
-            return rota
-            
-        # Verificar tipo da rota
-        tipo_rota = rota.get('tipo_rota', '')
-        
-        # Corrigir agente de coleta se necessário
-        agente_coleta = rota.get('agente_coleta', {})
-        if isinstance(agente_coleta, dict):
-            if ('Cliente entrega na origem' in str(agente_coleta.get('fornecedor', '')) or 
-                agente_coleta.get('sem_agente', False)):
-                # Garantir que todos os valores estão zerados
-                agente_coleta.update({
-                    'custo': 0,
-                    'total': 0,
-                    'pedagio': 0,
-                    'gris': 0,
-                    'seguro': 0,
-                    'prazo': 0,
-                    'sem_agente': True
-                })
-        
-        # Corrigir agente de entrega se necessário  
-        agente_entrega = rota.get('agente_entrega', {})
-        if isinstance(agente_entrega, dict):
-            if ('Cliente retira no destino' in str(agente_entrega.get('fornecedor', '')) or 
-                agente_entrega.get('sem_agente', False)):
-                # Garantir que todos os valores estão zerados
-                agente_entrega.update({
-                    'custo': 0,
-                    'total': 0,
-                    'pedagio': 0,
-                    'gris': 0,
-                    'seguro': 0,
-                    'prazo': 0,
-                    'sem_agente': True
-                })
-        
-        # Validar detalhamento de custos
-        detalhamento = rota.get('detalhamento_custos', {})
-        if isinstance(detalhamento, dict):
-            # Se não há agente de coleta, garantir que coleta está zerada
-            if agente_coleta.get('sem_agente', False):
-                detalhamento['coleta'] = 0
-            
-            # Se não há agente de entrega, garantir que entrega está zerada
-            if agente_entrega.get('sem_agente', False):
-                detalhamento['entrega'] = 0
-        
-        print(f"[VALIDACAO] ✅ Rota {tipo_rota} validada e corrigida")
-        return rota
-        
-    except Exception as e:
-        print(f"[VALIDACAO] ❌ Erro ao validar rota: {e}")
-        return rota
-
-@app.route("/teste-municipios")
-def teste_municipios():
-    """Página de teste para verificar o carregamento de municípios"""
-    return '''<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teste de Municípios</title>
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"/>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/i18n/pt-BR.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .form-group { margin: 15px 0; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        select { width: 300px; }
-        .status { margin: 10px 0; padding: 10px; border-radius: 5px; }
-        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-    </style>
-</head>
-<body>
-    <h1>🧪 Teste de Carregamento de Municípios</h1>
-    <p><a href="/" target="_blank">← Voltar para o sistema principal</a></p>
-    
-    <div class="form-group">
-        <label for="estado">Estado:</label>
-        <select id="estado" name="estado">
-            <option value="">Carregando estados...</option>
-        </select>
-    </div>
-    
-    <div class="form-group">
-        <label for="municipio">Município:</label>
-        <select id="municipio" name="municipio">
-            <option value="">Selecione primeiro um estado</option>
-        </select>
-    </div>
-    
-    <div id="status" class="status info">
-        Aguardando carregamento dos estados...
-    </div>
-
-    <script>
-        console.log('🧪 Iniciando teste de municípios...');
-        
-        function updateStatus(message, type = 'info') {
-            const statusDiv = document.getElementById('status');
-            statusDiv.textContent = message;
-            statusDiv.className = `status ${type}`;
-            console.log(`[${type.toUpperCase()}] ${message}`);
-        }
-
-        async function carregarEstados() {
-            try {
-                updateStatus('Carregando estados...', 'info');
-                
-                const response = await fetch('/estados');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const estados = await response.json();
-                console.log('Estados recebidos:', estados);
-                
-                const select = document.getElementById('estado');
-                select.innerHTML = '<option value="">Selecione o estado</option>';
-                
-                estados.forEach(estado => {
-                    const option = document.createElement('option');
-                    option.value = estado.id;
-                    option.textContent = estado.text;
-                    select.appendChild(option);
-                });
-                
-                $('#estado').select2({
-                    language: 'pt-BR',
-                    placeholder: 'Digite para buscar...',
-                    allowClear: true,
-                    width: '100%'
-                });
-                
-                updateStatus(`✅ ${estados.length} estados carregados com sucesso!`, 'success');
-                
-            } catch (error) {
-                console.error('Erro ao carregar estados:', error);
-                updateStatus(`❌ Erro ao carregar estados: ${error.message}`, 'error');
-            }
-        }
-
-        async function carregarMunicipios(uf) {
-            try {
-                updateStatus(`Carregando municípios de ${uf}...`, 'info');
-                
-                const response = await fetch(`/municipios/${encodeURIComponent(uf)}`);
-                console.log(`Status da resposta: ${response.status}`);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const municipios = await response.json();
-                console.log(`Municípios recebidos (${municipios.length}):`, municipios.slice(0, 5));
-                
-                if (!Array.isArray(municipios)) {
-                    throw new Error(`Resposta não é um array: ${typeof municipios}`);
-                }
-                
-                const select = document.getElementById('municipio');
-                
-                if ($(select).hasClass('select2-hidden-accessible')) {
-                    $('#municipio').select2('destroy');
-                }
-                
-                select.innerHTML = '<option value="">Selecione o município</option>';
-                
-                municipios.forEach(municipio => {
-                    const option = document.createElement('option');
-                    option.value = municipio.id;
-                    option.textContent = municipio.text;
-                    select.appendChild(option);
-                });
-                
-                $('#municipio').select2({
-                    language: 'pt-BR',
-                    placeholder: 'Digite para buscar...',
-                    allowClear: true,
-                    width: '100%'
-                });
-                
-                updateStatus(`✅ ${municipios.length} municípios de ${uf} carregados com sucesso!`, 'success');
-                
-            } catch (error) {
-                console.error(`Erro ao carregar municípios de ${uf}:`, error);
-                updateStatus(`❌ Erro ao carregar municípios de ${uf}: ${error.message}`, 'error');
-            }
-        }
-
-        document.getElementById('estado').addEventListener('change', function() {
-            const uf = this.value;
-            if (uf) {
-                carregarMunicipios(uf);
-            } else {
-                const municipioSelect = document.getElementById('municipio');
-                if ($(municipioSelect).hasClass('select2-hidden-accessible')) {
-                    $('#municipio').select2('destroy');
-                }
-                municipioSelect.innerHTML = '<option value="">Selecione primeiro um estado</option>';
-                updateStatus('Selecione um estado para carregar os municípios', 'info');
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', function() {
-            carregarEstados();
-        });
-    </script>
-</body>
-</html>'''
-
-@app.route("/aereo")
-def aereo():
-    df_aereo = ler_gollog_aereo()
-    if df_aereo is not None:
-        # Ordenar por custo_base, se existir
-        if "custo_base" in df_aereo.columns:
-            df_aereo = df_aereo.sort_values(by="custo_base", ascending=True)
-        dados = df_aereo.to_dict(orient="records")
-        return jsonify(dados)
-    else:
-        return jsonify({"error": "Não foi possível carregar dados aéreos"})
-
-@app.route("/debug-municipios")
-def debug_municipios():
-    """Página de debug para testar carregamento de municípios"""
-    return send_file('test_municipios_debug.html')
-
 @app.route("/gerar-pdf", methods=["POST"])
 def gerar_pdf():
     try:
@@ -4513,86 +3913,6 @@ def exportar_excel():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Erro ao exportar Excel: {str(e)}"})
-# APIs para cálculo de pedágios reais
-GOOGLE_ROUTES_API_KEY = os.getenv("GOOGLE_ROUTES_API_KEY", "SUA_CHAVE_AQUI")
-TOLLGURU_API_KEY = os.getenv("TOLLGURU_API_KEY", "SUA_CHAVE_TOLLGURU")
-OPENROUTE_API_KEY = "5b3ce3597851110001cf6248a355ae5a9ee94a6ca9c6d876c7e4d534"  # Chave pública
-def calcular_pedagios_reais(origem, destino, peso_veiculo=1000):
-    """
-    Sistema inteligente de cálculo de pedágios usando múltiplas APIs
-    Prioridade: TollGuru (especializada) > Google Routes > OpenRoute + Estimativa Brasileira
-    """
-    try:
-        print(f"[PEDÁGIO] 🎯 Calculando pedágios reais: {origem} -> {destino} (peso: {peso_veiculo}kg)")
-        
-        # 1. Tentar TollGuru primeiro (mais especializada em pedágios)
-        result = calcular_pedagios_tollguru(origem, destino, peso_veiculo)
-        if result:
-            print(f"[PEDÁGIO] ✅ TollGuru bem-sucedida: R$ {result['pedagio_real']:.2f}")
-            return result
-        
-        # 2. Fallback para Google Routes
-        result = calcular_pedagios_google_routes(origem, destino, peso_veiculo)
-        if result:
-            print(f"[PEDÁGIO] ✅ Google Routes bem-sucedida: R$ {result['pedagio_real']:.2f}")
-            return result
-        
-        # 3. Fallback final: OpenRoute + Estimativa Brasileira
-        print(f"[PEDÁGIO] ⚠️ APIs externas indisponíveis - usando OpenRoute + estimativa brasileira")
-        
-        # Obter rota real usando OpenRoute
-        rota_info = calcular_distancia_openroute_detalhada(origem, destino)
-        if not rota_info:
-            # Se OpenRoute falhar, usar OSRM
-            rota_info = calcular_distancia_osrm(origem, destino)
-        
-        if not rota_info:
-            print(f"[PEDÁGIO] ❌ Não foi possível obter rota - usando distância estimada")
-            # Cálculo de distância aproximada usando haversine
-            import math
-            lat1, lon1 = origem[0], origem[1]
-            lat2, lon2 = destino[0], destino[1]
-            
-            # Fórmula haversine
-            R = 6371  # Raio da Terra em km
-            dlat = math.radians(lat2 - lat1)
-            dlon = math.radians(lon2 - lon1)
-            a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-            distancia = R * c
-            
-            rota_info = {
-                "distancia": distancia,
-                "duracao": distancia / 80 * 60,  # Assumir 80 km/h média
-                "provider": "Cálculo Aproximado"
-            }
-        
-        distancia = rota_info.get("distancia", 0)
-        
-        # Estimativa brasileira avançada de pedágios por tipo de veículo e distância
-        estimativas_pedagio = {
-            "FIORINO": {"base": 0.03, "mult_dist": 1.0},      # R$ 0.03/km base
-            "VAN": {"base": 0.05, "mult_dist": 1.1},          # R$ 0.05/km base + 10% em longas distâncias
-            "3/4": {"base": 0.07, "mult_dist": 1.2},          # R$ 0.07/km base + 20%
-            "TOCO": {"base": 0.10, "mult_dist": 1.3},         # R$ 0.10/km base + 30%
-            "TRUCK": {"base": 0.14, "mult_dist": 1.4},        # R$ 0.14/km base + 40%
-            "CARRETA": {"base": 0.18, "mult_dist": 1.5}       # R$ 0.18/km base + 50%
-        }
-        
-        # Determinar tipo de veículo baseado no peso
-        if peso_veiculo <= 500:
-            tipo_veiculo = "FIORINO"
-        elif peso_veiculo <= 1500:
-            tipo_veiculo = "VAN"
-        elif peso_veiculo <= 3500:
-            tipo_veiculo = "3/4"
-        elif peso_veiculo <= 7000:
-            tipo_veiculo = "TOCO"
-        elif peso_veiculo <= 12000:
-            tipo_veiculo = "TRUCK"
-        elif peso_veiculo <= 28000:
-            tipo_veiculo = "CARRETA"
-        
         config = estimativas_pedagio.get(tipo_veiculo, estimativas_pedagio["TOCO"])
         taxa_base = config["base"]
         
@@ -5243,47 +4563,11 @@ def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_
         }
         
         return resultado_formatado
-        
     except Exception as e:
         print(f"[RANKING DEDICADO] Erro ao gerar ranking: {e}")
         import traceback
         traceback.print_exc()
         return None
-
-def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=None):
-    """
-    Calcula peso cubado aplicando fatores específicos por tipo de serviço:
-    - Agentes (tipo 'Agente'): cubagem × 250
-    - Transferências JEM e Concept: cubagem × 166
-    """
-    try:
-        peso_real = float(peso_real)
-        cubagem = float(cubagem) if cubagem else 0
-        
-        if cubagem <= 0:
-            return peso_real
-            
-        # Aplicar fator específico baseado no tipo
-        if tipo_linha == 'Agente':
-            fator_cubagem = 250  # kg/m³ para agentes
-            tipo_calculo = "Agente (250kg/m³)"
-        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper() or 'SOL' in str(fornecedor).upper()):
-            fator_cubagem = 166  # kg/m³ para JEM, Concept e SOL
-            tipo_calculo = f"Transferência {fornecedor} (166kg/m³)"
-        else:
-            # Padrão para outros tipos
-            fator_cubagem = 250  # kg/m³ padrão
-            tipo_calculo = f"{tipo_linha} (250kg/m³)"
-            
-        peso_cubado = cubagem * fator_cubagem
-        peso_final = max(peso_real, peso_cubado)
-        
-        print(f"[PESO_CUBADO] {tipo_calculo}: {peso_real}kg vs {peso_cubado}kg = {peso_final}kg")
-        return peso_final
-        
-    except Exception as e:
-        print(f"[PESO_CUBADO] Erro no cálculo: {e}")
-        return float(peso_real) if peso_real else 0
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
