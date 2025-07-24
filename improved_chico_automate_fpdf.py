@@ -2291,50 +2291,6 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                 # Se não tiver valor mínimo, começar direto com as faixas
                 print(f"[CUSTO-REUNIDAS] ⚠️ Sem valor mínimo definido, usando faixas direto")
                 custo_base = 0
-                    valor_base = valor_minimo
-                    print(f"[CUSTO-REUNIDAS] ✅ Peso ≤ 10kg: Valor mínimo R$ {valor_base:.2f}")
-                    custo_base = valor_base
-                else:
-                    # Para pesos acima de 10kg, buscar faixa apropriada
-                    if peso_calculo > 500:
-                        # Acima de 500kg - usar coluna 'Acima 500'
-                        if 'Acima 500' in linha:
-                            valor_por_kg = float(linha.get('Acima 500', 0))
-                            valor_base = peso_calculo * valor_por_kg
-                            print(f"[CUSTO-REUNIDAS] ✅ Peso >500kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
-                        else:
-                            # Fallback para coluna 500 se não houver 'Acima 500'
-                            valor_por_kg = float(linha.get(500, 0))
-                            valor_base = peso_calculo * valor_por_kg
-                            print(f"[CUSTO-REUNIDAS] ✅ Peso >500kg (usando 500): {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
-                    else:
-                        # Para pesos entre 10kg e 500kg, encontrar a faixa correta
-                        # Incluindo todas as faixas possíveis para REUNIDAS
-                        faixas_peso = [20, 30, 50, 70, 100, 300, 500]
-                        
-                        # Encontrar a menor faixa que seja maior ou igual ao peso
-                        valor_base_kg = 0
-                        faixa_usada = None
-                        for faixa in faixas_peso:
-                            if peso_calculo <= faixa:
-                                valor_base_kg = float(linha.get(faixa, 0))
-                                if valor_base_kg > 0:  # Só usar se tiver valor
-                                    valor_base = peso_calculo * valor_base_kg
-                                    faixa_usada = faixa
-                                    print(f"[CUSTO-REUNIDAS] ✅ Peso {peso_calculo}kg na faixa até {faixa}kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
-                                    break
-                        
-                        if not faixa_usada:
-                            # Se não encontrou faixa válida, usar a última disponível
-                            valor_base_kg = float(linha.get(500, 0))
-                            valor_base = peso_calculo * valor_base_kg
-                            print(f"[CUSTO-REUNIDAS] ⚠️ Usando faixa 500kg (padrão): {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
-                    
-                    custo_base = valor_base
-            else:
-                # Se não tiver valor mínimo, começar direto com as faixas
-                print(f"[CUSTO-REUNIDAS] ⚠️ Sem valor mínimo definido, usando faixas direto")
-                custo_base = 0
                 
         # 🔧 LÓGICA ESPECÍFICA PARA JEM/DFL - CORREÇÃO DO CÁLCULO
         elif 'JEM' in fornecedor_upper or 'DFL' in fornecedor_upper:
