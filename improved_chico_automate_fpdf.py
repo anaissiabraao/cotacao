@@ -2305,7 +2305,7 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     else:
                         # Para pesos entre 10kg e 500kg, encontrar a faixa correta
                         # Incluindo todas as faixas possíveis para REUNIDAS
-                        faixas_peso = [20, 30, 50, 70, 100, 300, 500]
+                        faixas_peso = [20, 30, 50, 70, 100, 150, 200, 300, 500]
                         
                         # Encontrar a menor faixa que seja maior ou igual ao peso
                         valor_base = 0
