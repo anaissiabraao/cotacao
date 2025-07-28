@@ -464,6 +464,11 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('[FRACIONADO] Resposta:', data);
 
             if (data.error) {
+                // 🔧 CORREÇÃO: Verificar se é erro de "sem opções"
+                if (data.sem_opcoes || data.error.includes('Não há nenhuma opção')) {
+                    showNoOptionsMessage(data.error);
+                    return;
+                }
                 throw new Error(data.error);
             }
 
@@ -593,6 +598,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         console.log('[ALL IN FRAC] Dados recebidos:', data);
+        
+        // 🔧 CORREÇÃO: Verificar se é erro de "sem opções"
+        if (data.sem_opcoes || (data.error && data.error.includes('Não há nenhuma opção'))) {
+            showNoOptionsMessage(data.error || 'Não há nenhuma opção para a rota solicitada');
+            container.innerHTML = '<div class="no-results">Nenhuma opção encontrada para esta rota.</div>';
+            return;
+        }
         
         let html = '<div class="fracionado-all-in-layout">';
         
@@ -3494,4 +3506,54 @@ document.addEventListener('DOMContentLoaded', function() {
             showError('Erro ao gerar Excel. Por favor, tente novamente.');
         }
     }
+
+    // 🔧 FUNÇÃO PARA EXIBIR MENSAGEM FLUTUANTE - Não há opções
+    function showNoOptionsMessage(message) {
+        // Remover mensagens existentes
+        const existingMessage = document.querySelector('.no-options-message');
+        const existingOverlay = document.querySelector('.overlay');
+        if (existingMessage) existingMessage.remove();
+        if (existingOverlay) existingOverlay.remove();
+
+        // Criar overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'overlay';
+        document.body.appendChild(overlay);
+
+        // Criar mensagem
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'no-options-message';
+        messageDiv.innerHTML = `
+            <span class="icon">🚫</span>
+            <div class="message">${message}</div>
+            <button class="close-btn" onclick="closeNoOptionsMessage()">Entendi</button>
+        `;
+        document.body.appendChild(messageDiv);
+
+        // Fechar ao clicar no overlay
+        overlay.addEventListener('click', closeNoOptionsMessage);
+
+        // Auto-fechar após 8 segundos
+        setTimeout(() => {
+            closeNoOptionsMessage();
+        }, 8000);
+    }
+
+    // 🔧 FUNÇÃO PARA FECHAR MENSAGEM FLUTUANTE
+    function closeNoOptionsMessage() {
+        const message = document.querySelector('.no-options-message');
+        const overlay = document.querySelector('.overlay');
+        if (message) {
+            message.style.animation = 'slideInDown 0.3s ease-out reverse';
+            setTimeout(() => message.remove(), 300);
+        }
+        if (overlay) {
+            overlay.style.animation = 'fadeIn 0.3s ease-out reverse';
+            setTimeout(() => overlay.remove(), 300);
+        }
+    }
+
+    // 🔧 EXPORTAÇÃO DA FUNÇÃO PARA USO GLOBAL
+    window.showNoOptionsMessage = showNoOptionsMessage;
+    window.closeNoOptionsMessage = closeNoOptionsMessage;
 });

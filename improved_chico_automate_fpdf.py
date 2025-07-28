@@ -1076,8 +1076,46 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             
             print(f"[FRACIONADO] Encontrados {len(servicos_diretos_completos)} serviços diretos porta-porta (incluindo ML e GRITSCH)")
             
-            # Processar cada serviço direto
+            # VALIDAÇÃO RIGOROSA: Verificar se os serviços realmente atendem a rota
+            servicos_validos = []
             for _, servico in servicos_diretos_completos.iterrows():
+                try:
+                    # Normalizar origem e destino do serviço
+                    servico_origem = normalizar_cidade_nome(str(servico['Origem']))
+                    servico_destino = normalizar_cidade_nome(str(servico['Destino']))
+                    
+                    # 🔧 CORREÇÃO: Validação mais rigorosa - apenas correspondência exata ou muito próxima
+                    origem_valida = (
+                        servico_origem == origem_norm or
+                        (origem_norm in servico_origem and len(origem_norm) >= 4) or  # Mínimo 4 caracteres para evitar falsos positivos
+                        (servico_origem in origem_norm and len(servico_origem) >= 4)
+                    )
+                    
+                    destino_valido = (
+                        servico_destino == destino_norm or
+                        (destino_norm in servico_destino and len(destino_norm) >= 4) or  # Mínimo 4 caracteres para evitar falsos positivos
+                        (servico_destino in destino_norm and len(servico_destino) >= 4)
+                    )
+                    
+                    # 🔧 CORREÇÃO ADICIONAL: Verificar se não são cidades diferentes
+                    # Exemplo: "PRADO" não deve corresponder a "ANTONIO PRADO" ou "PRADO FERREIRA"
+                    if destino_norm == 'PRADO':
+                        if 'ANTONIO PRADO' in servico_destino or 'PRADO FERREIRA' in servico_destino:
+                            destino_valido = False
+                            print(f"[FRACIONADO] ❌ Rejeitando cidade diferente: {servico_destino} (solicitado: {destino_norm})")
+                    
+                    if origem_valida and destino_valido:
+                        servicos_validos.append(servico)
+                        print(f"[FRACIONADO] ✅ Serviço válido: {servico['Fornecedor']} - {servico_origem} → {servico_destino}")
+                    else:
+                        print(f"[FRACIONADO] ❌ Serviço inválido: {servico['Fornecedor']} - {servico_origem} → {servico_destino} (solicitado: {origem_norm} → {destino_norm})")
+                        
+                except Exception as e:
+                    print(f"[FRACIONADO] ❌ Erro ao validar serviço {servico['Fornecedor']}: {e}")
+                    continue
+            
+            # Processar apenas serviços válidos
+            for servico in servicos_validos:
                 try:
                     peso_real = float(peso)
                     peso_cubado = calcular_peso_cubado_por_tipo(peso_real, cubagem, 'Direto', servico.get('Fornecedor'))
@@ -1102,7 +1140,10 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                             'gris': opcao['gris'],
                             'pedagio': opcao['pedagio'],
                             'seguro': opcao.get('seguro', 0),
-                            'servico_direto': True
+                            'servico_direto': True,
+                            # 🔧 CORREÇÃO: Adicionar dados reais da base
+                            'peso_maximo_transportado': servico.get('PESO MÁXIMO TRANSPORTADO', 'N/A'),
+                            'prazo_real': servico.get('Prazo', 'N/A')
                         }
                         todas_opcoes.append(opcao_formatada)
                         print(f"[FRACIONADO] ✅ Direto adicionado: {opcao['fornecedor']} - R$ {opcao['total']:.2f}")
@@ -1118,63 +1159,27 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             peso, valor_nf, cubagem
         )
         
-        # 3. BUSCA ALTERNATIVA: Se não encontrou nada, tentar busca mais ampla
+        # 🔧 CORREÇÃO: REMOVIDA BUSCA ALTERNATIVA - Ser conservador, apenas rotas reais da base
+        # 3. VERIFICAR SE HÁ OPÇÕES VÁLIDAS
         if len(todas_opcoes) == 0 and (rotas_agentes is None or rotas_agentes.get('total_opcoes', 0) == 0):
-            print(f"[FRACIONADO] 🔍 Busca alternativa: Nenhuma rota encontrada, tentando busca mais ampla...")
+            print(f"[FRACIONADO] ❌ Nenhuma opção válida encontrada na base de dados")
+            print(f"[FRACIONADO] ❌ Não há serviços diretos, ML/GRITSCH, ou rotas com agentes para {origem_norm} → {destino_norm}")
             
-            # Buscar qualquer serviço que conecte os estados
-            df_base = carregar_base_unificada()
-            if df_base is not None:
-                # Buscar serviços que conectem SP e RJ
-                servicos_sp_rj = df_base[
-                    (df_base['Origem'].str.contains(uf_origem_norm, case=False, na=False)) &
-                    (df_base['Destino'].str.contains(uf_destino_norm, case=False, na=False))
-                ]
-                
-                print(f"[FRACIONADO] 🔍 Encontrados {len(servicos_sp_rj)} serviços conectando {uf_origem_norm} → {uf_destino_norm}")
-                
-                if len(servicos_sp_rj) > 0:
-                    # Processar os primeiros 5 serviços encontrados
-                    for _, servico in servicos_sp_rj.head(5).iterrows():
-                        try:
-                            peso_real = float(peso)
-                            peso_cubado = calcular_peso_cubado_por_tipo(peso_real, cubagem, servico.get('Tipo', 'Direto'), servico.get('Fornecedor'))
-                            opcao = processar_linha_fracionado(servico, peso_cubado, valor_nf, "ALTERNATIVO")
-                            
-                            if opcao:
-                                opcao_formatada = {
-                                    'fornecedor': opcao['fornecedor'],
-                                    'origem': servico.get('Origem', origem),
-                                    'destino': servico.get('Destino', destino),
-                                    'total': opcao['total'],
-                                    'prazo': opcao['prazo'],
-                                    'peso_cubado': peso_cubado,
-                                    'peso_usado': peso_cubado,
-                                    'modalidade': 'ALTERNATIVO',
-                                    'tipo': 'alternativo',
-                                    'tipo_rota': 'alternativo',
-                                    'resumo': f"{opcao['fornecedor']} - Rota Alternativa ({servico.get('Origem', origem)} → {servico.get('Destino', destino)})",
-                                    'detalhes': opcao,
-                                    'custo_base': opcao['custo_base'],
-                                    'gris': opcao['gris'],
-                                    'pedagio': opcao['pedagio'],
-                                    'seguro': opcao.get('seguro', 0),
-                                    'servico_direto': False,
-                                    'observacao': 'Rota alternativa - pode não ser exata'
-                                }
-                                todas_opcoes.append(opcao_formatada)
-                                print(f"[FRACIONADO] ✅ Alternativa adicionada: {opcao['fornecedor']} - R$ {opcao['total']:.2f}")
-                        except Exception as e:
-                            print(f"[FRACIONADO] ❌ Erro ao processar alternativa: {e}")
-                            continue
-                
-                # 4. BUSCA POR ROTAS PARCIAIS: Quando não há agentes em uma das pontas
-                if len(todas_opcoes) == 0:
-                    print(f"[FRACIONADO] 🔍 Buscando rotas parciais quando não há agentes em uma das pontas...")
+            # Retornar mensagem de "sem opções"
+            return {
+                'sem_opcoes': True,
+                'mensagem': 'Não há nenhuma opção para a rota solicitada',
+                'detalhes': f'Não há serviços disponíveis para {origem_norm} → {destino_norm}'
+            }
+        
+        # 4. BUSCA POR ROTAS PARCIAIS: APENAS quando há agentes em pelo menos uma das pontas
+        if len(todas_opcoes) == 0:
+                    print(f"[FRACIONADO] 🔍 Verificando se há agentes para rotas parciais...")
                     
-                    # Verificar se há agentes na origem ou destino
+                    # Verificar se há agentes na origem ou destino (EXATAMENTE nas cidades solicitadas)
                     df_agentes = df_base[df_base['Tipo'] == 'Agente']
                     
+                    # 🔧 CORREÇÃO: Busca rigorosa - apenas agentes na cidade exata
                     agentes_origem = df_agentes[
                         (df_agentes['Origem'].str.contains(origem_norm, case=False, na=False)) |
                         (df_agentes['Origem'].str.contains(origem, case=False, na=False))
@@ -1185,11 +1190,25 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                         (df_agentes['Origem'].str.contains(destino, case=False, na=False))
                     ]
                     
-                    print(f"[FRACIONADO] 🔍 Agentes na origem: {len(agentes_origem)}, Agentes no destino: {len(agentes_destino)}")
+                    print(f"[FRACIONADO] 🔍 Agentes na origem ({origem_norm}): {len(agentes_origem)}")
+                    print(f"[FRACIONADO] 🔍 Agentes no destino ({destino_norm}): {len(agentes_destino)}")
                     
-                    # Se há agentes em pelo menos uma ponta, buscar transferências parciais
+                    # 🔧 CORREÇÃO: Só buscar rotas parciais se há agentes em PELO MENOS UMA das pontas
                     if len(agentes_origem) > 0 or len(agentes_destino) > 0:
+                        print(f"[FRACIONADO] ✅ Há agentes em pelo menos uma ponta - buscando rotas parciais...")
                         print(f"[FRACIONADO] 🔍 Buscando transferências parciais...")
+                    else:
+                        print(f"[FRACIONADO] ❌ NÃO HÁ AGENTES EM NENHUMA DAS PONTAS - NÃO BUSCAR ROTAS PARCIAIS")
+                        print(f"[FRACIONADO] ❌ Origem ({origem_norm}): {len(agentes_origem)} agentes")
+                        print(f"[FRACIONADO] ❌ Destino ({destino_norm}): {len(agentes_destino)} agentes")
+                        print(f"[FRACIONADO] ❌ Nenhuma opção encontrada (diretos ou agentes)")
+                        
+                        # Retornar mensagem de "sem opções"
+                        return {
+                            'sem_opcoes': True,
+                            'mensagem': 'Não há nenhuma opção para a rota solicitada',
+                            'detalhes': f'Não há agentes em {origem_norm} nem em {destino_norm}'
+                        }
                         
                         # Buscar transferências que conectem com os agentes disponíveis
                         df_transferencias = df_base[df_base['Tipo'] == 'Transferência']
@@ -1256,8 +1275,35 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                                                     'tipo_parcial': 'coleta'
                                                 }
                                                 
-                                                todas_opcoes.append(opcao_formatada)
-                                                print(f"[FRACIONADO] ✅ Rota parcial (coleta) adicionada: {agente_nome} + {transferencia['Fornecedor']} - R$ {total:.2f}")
+                                                # 🔧 CORREÇÃO: VALIDAÇÃO RIGOROSA - A rota parcial deve atender EXATAMENTE a origem solicitada
+                                                origem_parcial = origem
+                                                destino_parcial = transferencia.get('Destino', destino)
+                                                
+                                                # Normalizar para comparação
+                                                origem_parcial_norm = normalizar_cidade_nome(str(origem_parcial))
+                                                destino_parcial_norm = normalizar_cidade_nome(str(destino_parcial))
+                                                
+                                                # 🔧 CORREÇÃO: Para rota parcial de coleta, a origem DEVE ser exata
+                                                # O destino pode ser diferente (é uma rota parcial)
+                                                origem_valida = (
+                                                    origem_parcial_norm == origem_norm or
+                                                    (origem_norm in origem_parcial_norm and len(origem_norm) >= 4)
+                                                )
+                                                
+                                                # Para rota parcial, o destino da transferência deve estar na UF de destino
+                                                destino_uf_valido = (
+                                                    destino_parcial_norm.endswith(f'/{uf_destino}') or
+                                                    destino_parcial_norm.endswith(f'/{uf_destino_norm}') or
+                                                    (destino_parcial_norm in destino_norm and len(destino_parcial_norm) >= 4)
+                                                )
+                                                
+                                                rota_valida = origem_valida and destino_uf_valido
+                                                
+                                                if rota_valida:
+                                                    todas_opcoes.append(opcao_formatada)
+                                                    print(f"[FRACIONADO] ✅ Rota parcial (coleta) adicionada: {agente_nome} + {transferencia['Fornecedor']} - R$ {total:.2f}")
+                                                else:
+                                                    print(f"[FRACIONADO] ❌ Rota parcial inválida: {agente_nome} + {transferencia['Fornecedor']} - {origem_parcial_norm} → {destino_parcial_norm} (solicitado: {origem_norm} → {destino_norm})")
                                                 
                                         except Exception as e:
                                             print(f"[FRACIONADO] ❌ Erro ao processar rota parcial (coleta): {e}")
@@ -1325,8 +1371,35 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                                                     'tipo_parcial': 'entrega'
                                                 }
                                                 
-                                                todas_opcoes.append(opcao_formatada)
-                                                print(f"[FRACIONADO] ✅ Rota parcial (entrega) adicionada: {transferencia['Fornecedor']} + {agente_nome} - R$ {total:.2f}")
+                                                # 🔧 CORREÇÃO: VALIDAÇÃO RIGOROSA - Para rota parcial de entrega, o destino DEVE ser exato
+                                                origem_parcial = transferencia.get('Origem', origem)
+                                                destino_parcial = destino  # Para entrega, o destino é sempre o solicitado
+                                                
+                                                # Normalizar para comparação
+                                                origem_parcial_norm = normalizar_cidade_nome(str(origem_parcial))
+                                                destino_parcial_norm = normalizar_cidade_nome(str(destino_parcial))
+                                                
+                                                # 🔧 CORREÇÃO: Para rota parcial de entrega, o destino DEVE ser exato
+                                                # A origem pode ser diferente (é uma rota parcial)
+                                                destino_valido = (
+                                                    destino_parcial_norm == destino_norm or
+                                                    (destino_norm in destino_parcial_norm and len(destino_norm) >= 4)
+                                                )
+                                                
+                                                # Para rota parcial, a origem da transferência deve estar na UF de origem
+                                                origem_uf_valida = (
+                                                    origem_parcial_norm.endswith(f'/{uf_origem}') or
+                                                    origem_parcial_norm.endswith(f'/{uf_origem_norm}') or
+                                                    (origem_parcial_norm in origem_norm and len(origem_parcial_norm) >= 4)
+                                                )
+                                                
+                                                rota_valida = origem_uf_valida and destino_valido
+                                                
+                                                if rota_valida:
+                                                    todas_opcoes.append(opcao_formatada)
+                                                    print(f"[FRACIONADO] ✅ Rota parcial (entrega) adicionada: {transferencia['Fornecedor']} + {agente_nome} - R$ {total:.2f}")
+                                                else:
+                                                    print(f"[FRACIONADO] ❌ Rota parcial inválida: {transferencia['Fornecedor']} + {agente_nome} - {origem_parcial_norm} → {destino_parcial_norm} (solicitado: {origem_norm} → {destino_norm})")
                                                 
                                         except Exception as e:
                                             print(f"[FRACIONADO] ❌ Erro ao processar rota parcial (entrega): {e}")
@@ -1374,7 +1447,21 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         
         if not todas_opcoes:
             print("[FRACIONADO] ❌ Nenhuma opção encontrada (diretos ou agentes)")
-            return None
+            return {
+                'opcoes': [],
+                'total_opcoes': 0,
+                'melhor_opcao': None,
+                'origem': origem,
+                'uf_origem': uf_origem,
+                'destino': destino,
+                'uf_destino': uf_destino,
+                'peso': peso,
+                'cubagem': cubagem,
+                'peso_cubado': max(float(peso), float(cubagem) * 300),
+                'valor_nf': valor_nf,
+                'mensagem': 'Não há nenhuma opção para a rota solicitada',
+                'sem_opcoes': True
+            }
         
         # Calcular peso cubado
         peso_float = float(peso)
@@ -1563,60 +1650,22 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             df_agentes_destino_uf['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
         ]
         
-        # Verificar se faltam agentes exatos
+        # 🔧 CORREÇÃO: Verificar se faltam agentes exatos - SER CONSERVADOR
         if agentes_origem.empty:
             agentes_faltando['origem'] = True
-            print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {origem_norm}/{uf_origem}")
+            print(f"[AGENTES] ❌ Nenhum agente encontrado em {origem_norm}/{uf_origem}")
+            print(f"[AGENTES] ❌ NÃO BUSCAR AGENTES PRÓXIMOS - Ser conservador")
             
-            # Buscar agentes próximos na mesma UF
-            print(f"[AGENTES] 🔍 Buscando agentes próximos em {uf_origem}...")
-            agentes_proximos_origem = df_agentes[
-                (df_agentes['UF'] == uf_origem) &
-                (df_agentes['Origem'] != origem_norm)
-            ]
-            
-            if len(agentes_proximos_origem) > 0:
-                agentes_faltando['agentes_proximos_origem'] = agentes_proximos_origem['Fornecedor'].tolist()[:3]
-                print(f"[AGENTES] 📍 Agentes próximos em {uf_origem}: {', '.join(agentes_faltando['agentes_proximos_origem'])}")
-                avisos.append(f"Sem agente em {origem_norm}, mas há agentes próximos: {', '.join(agentes_faltando['agentes_proximos_origem'][:2])}")
-            
-            # Buscar bases de transferência no estado
-            print(f"[AGENTES] 🔍 Buscando bases de transferência em {uf_origem}...")
-            bases_transferencia_origem = df_transferencias[
-                (df_transferencias['UF'].str.contains(uf_origem, case=False, na=False)) |
-                (df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False))
-            ]['Base Origem'].unique()
-            
-            if len(bases_transferencia_origem) > 0:
-                print(f"[AGENTES] 📍 Bases de transferência disponíveis em {uf_origem}: {', '.join(bases_transferencia_origem[:5])}")
-                avisos.append(f"Sem agente em {origem_norm}, mas há bases de transferência no estado: {', '.join(bases_transferencia_origem[:3])}")
+            # 🔧 CORREÇÃO: Não buscar agentes próximos - apenas informar
+            avisos.append(f"Não há agente de coleta em {origem_norm}")
         
         if agentes_destino.empty:
             agentes_faltando['destino'] = True
-            print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {destino_norm}/{uf_destino}")
+            print(f"[AGENTES] ❌ Nenhum agente encontrado em {destino_norm}/{uf_destino}")
+            print(f"[AGENTES] ❌ NÃO BUSCAR AGENTES PRÓXIMOS - Ser conservador")
             
-            # Buscar agentes próximos na mesma UF
-            print(f"[AGENTES] 🔍 Buscando agentes próximos em {uf_destino}...")
-            agentes_proximos_destino = df_agentes[
-                (df_agentes['UF'] == uf_destino) &
-                (df_agentes['Origem'] != destino_norm)
-            ]
-            
-            if len(agentes_proximos_destino) > 0:
-                agentes_faltando['agentes_proximos_destino'] = agentes_proximos_destino['Fornecedor'].tolist()[:3]
-                print(f"[AGENTES] 📍 Agentes próximos em {uf_destino}: {', '.join(agentes_faltando['agentes_proximos_destino'])}")
-                avisos.append(f"Sem agente em {destino_norm}, mas há agentes próximos: {', '.join(agentes_faltando['agentes_proximos_destino'][:2])}")
-            
-            # Buscar bases de transferência no estado
-            print(f"[AGENTES] 🔍 Buscando bases de transferência em {uf_destino}...")
-            bases_transferencia_destino = df_transferencias[
-                (df_transferencias['UF'].str.contains(uf_destino, case=False, na=False)) |
-                (df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False))
-            ]['Base Destino'].unique()
-            
-            if len(bases_transferencia_destino) > 0:
-                print(f"[AGENTES] 📍 Bases de transferência disponíveis em {uf_destino}: {', '.join(bases_transferencia_destino[:5])}")
-                avisos.append(f"Sem agente em {destino_norm}, mas há bases de transferência no estado: {', '.join(bases_transferencia_destino[:3])}")
+            # 🔧 CORREÇÃO: Não buscar agentes próximos - apenas informar
+            avisos.append(f"Não há agente de entrega em {destino_norm}")
         
         # REMOVIDO: Serviços diretos - já são processados em calcular_frete_fracionado_base_unificada
         # para evitar duplicação
@@ -3097,43 +3146,188 @@ def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, 
                 tipo_servico = f"SERVIÇO DIRETO PORTA-A-PORTA - {agentes_info['fornecedor_principal']}"
                 rota_bases = opcao.get('rota_bases', f"{origem} → {destino} (Direto)")
                 descricao = f"ROTA: {rota_bases}<br/>Coleta e entrega incluídas no serviço"
+                
+                # 🔧 CORREÇÃO: Usar capacidades reais do fornecedor da base de dados
+                detalhes_opcao = opcao.get('detalhes', {})
+                peso_maximo = detalhes_opcao.get('peso_maximo_transportado', 'N/A')
+                prazo_real = detalhes_opcao.get('prazo', 'N/A')
+                
+                # Converter peso máximo para formato legível
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        peso_max_kg = float(peso_maximo)
+                        if peso_max_kg >= 1000:
+                            peso_max_str = f"{peso_max_kg/1000:.1f} ton"
+                        else:
+                            peso_max_str = f"{peso_max_kg:.0f}kg"
+                    except:
+                        peso_max_str = f"{peso_maximo}kg"
+                else:
+                    peso_max_str = "500kg"  # Default
+                
+                # Calcular volume máximo baseado no peso (aproximação: 1m³ = 300kg)
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        volume_max_m3 = float(peso_maximo) / 300
+                        volume_max_str = f"{volume_max_m3:.1f}m³"
+                    except:
+                        volume_max_str = "15m³"  # Default
+                else:
+                    volume_max_str = "15m³"  # Default
+                
                 capacidade_info = {
-                    'peso_max': '500kg',
-                    'volume_max': '15m³',
-                    'descricao': 'Serviço porta-a-porta completo'
+                    'peso_max': peso_max_str,
+                    'volume_max': volume_max_str,
+                    'descricao': f'Serviço porta-a-porta - Prazo: {prazo_real} dias'
                 }
             elif tipo_rota == 'agente_direto':
                 tipo_servico = f"AGENTE DIRETO - {agentes_info['fornecedor_principal']}"
                 descricao = f"Porta-a-porta direto via {agentes_info['fornecedor_principal']}"
+                
+                # 🔧 CORREÇÃO: Usar capacidades reais do agente
+                detalhes_opcao = opcao.get('detalhes', {})
+                peso_maximo = detalhes_opcao.get('peso_maximo_transportado', 'N/A')
+                prazo_real = detalhes_opcao.get('prazo', 'N/A')
+                
+                # Converter peso máximo para formato legível
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        peso_max_kg = float(peso_maximo)
+                        if peso_max_kg >= 1000:
+                            peso_max_str = f"{peso_max_kg/1000:.1f} ton"
+                        else:
+                            peso_max_str = f"{peso_max_kg:.0f}kg"
+                    except:
+                        peso_max_str = f"{peso_maximo}kg"
+                else:
+                    peso_max_str = "500kg"  # Default
+                
+                # Calcular volume máximo baseado no peso
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        volume_max_m3 = float(peso_maximo) / 300
+                        volume_max_str = f"{volume_max_m3:.1f}m³"
+                    except:
+                        volume_max_str = "15m³"  # Default
+                else:
+                    volume_max_str = "15m³"  # Default
+                
                 capacidade_info = {
-                    'peso_max': '500kg',
-                    'volume_max': '15m³',
-                    'descricao': 'Coleta e entrega direta'
+                    'peso_max': peso_max_str,
+                    'volume_max': volume_max_str,
+                    'descricao': f'Agente direto - Prazo: {prazo_real} dias'
                 }
             elif tipo_rota == 'cliente_entrega_transferencia_agente_entrega':
                 tipo_servico = f"CLIENTE ENTREGA + TRANSFERÊNCIA + AGENTE ENTREGA"
                 rota_bases = opcao.get('rota_bases', 'Rota não definida')
                 descricao = f"ROTA: {rota_bases}<br/>Cliente entrega na base → Transferência → Agente entrega no destino"
+                
+                # 🔧 CORREÇÃO: Usar capacidades reais da rota
+                detalhes_opcao = opcao.get('detalhes', {})
+                peso_maximo = detalhes_opcao.get('peso_maximo_transportado', 'N/A')
+                prazo_real = detalhes_opcao.get('prazo', 'N/A')
+                
+                # Converter peso máximo para formato legível
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        peso_max_kg = float(peso_maximo)
+                        if peso_max_kg >= 1000:
+                            peso_max_str = f"{peso_max_kg/1000:.1f} ton"
+                        else:
+                            peso_max_str = f"{peso_max_kg:.0f}kg"
+                    except:
+                        peso_max_str = f"{peso_maximo}kg"
+                else:
+                    peso_max_str = "300kg"  # Default
+                
+                # Calcular volume máximo baseado no peso
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        volume_max_m3 = float(peso_maximo) / 300
+                        volume_max_str = f"{volume_max_m3:.1f}m³"
+                    except:
+                        volume_max_str = "10m³"  # Default
+                else:
+                    volume_max_str = "10m³"  # Default
+                
                 capacidade_info = {
-                    'peso_max': '300kg',
-                    'volume_max': '10m³',
-                    'descricao': 'Cliente entrega + transferência + agente entrega'
+                    'peso_max': peso_max_str,
+                    'volume_max': volume_max_str,
+                    'descricao': f'Rota completa - Prazo: {prazo_real} dias'
                 }
             elif tipo_rota == 'coleta_transferencia':
                 tipo_servico = f"COLETA + TRANSFERÊNCIA"
                 descricao = f"COLETA: {agentes_info['agente_coleta']} → TRANSFERÊNCIA: {agentes_info['transferencia']}"
+                
+                # 🔧 CORREÇÃO: Usar capacidades reais da rota
+                detalhes_opcao = opcao.get('detalhes', {})
+                peso_maximo = detalhes_opcao.get('peso_maximo_transportado', 'N/A')
+                prazo_real = detalhes_opcao.get('prazo', 'N/A')
+                
+                # Converter peso máximo para formato legível
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        peso_max_kg = float(peso_maximo)
+                        if peso_max_kg >= 1000:
+                            peso_max_str = f"{peso_max_kg/1000:.1f} ton"
+                        else:
+                            peso_max_str = f"{peso_max_kg:.0f}kg"
+                    except:
+                        peso_max_str = f"{peso_maximo}kg"
+                else:
+                    peso_max_str = "300kg"  # Default
+                
+                # Calcular volume máximo baseado no peso
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        volume_max_m3 = float(peso_maximo) / 300
+                        volume_max_str = f"{volume_max_m3:.1f}m³"
+                    except:
+                        volume_max_str = "10m³"  # Default
+                else:
+                    volume_max_str = "10m³"  # Default
+                
                 capacidade_info = {
-                    'peso_max': '300kg',
-                    'volume_max': '10m³',
-                    'descricao': 'Coleta local + transferência'
+                    'peso_max': peso_max_str,
+                    'volume_max': volume_max_str,
+                    'descricao': f'Coleta + transferência - Prazo: {prazo_real} dias'
                 }
             elif tipo_rota == 'transferencia_entrega':
                 tipo_servico = f"TRANSFERÊNCIA + ENTREGA"
                 descricao = f"TRANSFERÊNCIA: {agentes_info['transferencia']} → ENTREGA: {agentes_info['agente_entrega']}"
+                
+                # 🔧 CORREÇÃO: Usar capacidades reais da rota
+                detalhes_opcao = opcao.get('detalhes', {})
+                peso_maximo = detalhes_opcao.get('peso_maximo_transportado', 'N/A')
+                prazo_real = detalhes_opcao.get('prazo', 'N/A')
+                
+                # Converter peso máximo para formato legível
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        peso_max_kg = float(peso_maximo)
+                        if peso_max_kg >= 1000:
+                            peso_max_str = f"{peso_max_kg/1000:.1f} ton"
+                        else:
+                            peso_max_str = f"{peso_max_kg:.0f}kg"
+                    except:
+                        peso_max_str = f"{peso_maximo}kg"
+                else:
+                    peso_max_str = "300kg"  # Default
+                
+                # Calcular volume máximo baseado no peso
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        volume_max_m3 = float(peso_maximo) / 300
+                        volume_max_str = f"{volume_max_m3:.1f}m³"
+                    except:
+                        volume_max_str = "10m³"  # Default
+                else:
+                    volume_max_str = "10m³"  # Default
+                
                 capacidade_info = {
-                    'peso_max': '300kg',
-                    'volume_max': '10m³',
-                    'descricao': 'Transferência + entrega local'
+                    'peso_max': peso_max_str,
+                    'volume_max': volume_max_str,
+                    'descricao': f'Transferência + entrega - Prazo: {prazo_real} dias'
                 }
             elif tipo_rota == 'coleta_transferencia_entrega':
                 # 🆕 VERIFICAR SE A ROTA É COMPLETA OU PARCIAL
@@ -3143,26 +3337,113 @@ def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, 
                 if status_rota == 'PARCIAL' or transferencia_info.get('fornecedor') == 'SEM TRANSFERÊNCIA':
                     tipo_servico = f"ROTA PARCIAL (FALTA TRANSFERÊNCIA)"
                     descricao = f"COLETA: {agentes_info['agente_coleta']} → ⚠️ SEM TRANSFERÊNCIA → ENTREGA: {agentes_info['agente_entrega']}"
+                    
+                    # 🔧 CORREÇÃO: Usar capacidades reais da rota parcial
+                    detalhes_opcao = opcao.get('detalhes', {})
+                    peso_maximo = detalhes_opcao.get('peso_maximo_transportado', 'N/A')
+                    prazo_real = detalhes_opcao.get('prazo', 'N/A')
+                    
+                    # Converter peso máximo para formato legível
+                    if peso_maximo and peso_maximo != 'N/A':
+                        try:
+                            peso_max_kg = float(peso_maximo)
+                            if peso_max_kg >= 1000:
+                                peso_max_str = f"{peso_max_kg/1000:.1f} ton"
+                            else:
+                                peso_max_str = f"{peso_max_kg:.0f}kg"
+                        except:
+                            peso_max_str = f"{peso_maximo}kg"
+                    else:
+                        peso_max_str = "300kg"  # Default
+                    
+                    # Calcular volume máximo baseado no peso
+                    if peso_maximo and peso_maximo != 'N/A':
+                        try:
+                            volume_max_m3 = float(peso_maximo) / 300
+                            volume_max_str = f"{volume_max_m3:.1f}m³"
+                        except:
+                            volume_max_str = "10m³"  # Default
+                    else:
+                        volume_max_str = "10m³"  # Default
+                    
                     capacidade_info = {
-                        'peso_max': '300kg',
-                        'volume_max': '10m³',
-                        'descricao': 'Rota incompleta - falta transferência entre bases'
+                        'peso_max': peso_max_str,
+                        'volume_max': volume_max_str,
+                        'descricao': f'Rota incompleta - Prazo: {prazo_real} dias'
                     }
                 else:
                     tipo_servico = f"ROTA COMPLETA (3 ETAPAS)"
                     descricao = f"COLETA: {agentes_info['agente_coleta']} → TRANSFERÊNCIA: {agentes_info['transferencia']} → ENTREGA: {agentes_info['agente_entrega']}"
+                    
+                    # 🔧 CORREÇÃO: Usar capacidades reais da rota completa
+                    detalhes_opcao = opcao.get('detalhes', {})
+                    peso_maximo = detalhes_opcao.get('peso_maximo_transportado', 'N/A')
+                    prazo_real = detalhes_opcao.get('prazo', 'N/A')
+                    
+                    # Converter peso máximo para formato legível
+                    if peso_maximo and peso_maximo != 'N/A':
+                        try:
+                            peso_max_kg = float(peso_maximo)
+                            if peso_max_kg >= 1000:
+                                peso_max_str = f"{peso_max_kg/1000:.1f} ton"
+                            else:
+                                peso_max_str = f"{peso_max_kg:.0f}kg"
+                        except:
+                            peso_max_str = f"{peso_maximo}kg"
+                    else:
+                        peso_max_str = "300kg"  # Default
+                    
+                    # Calcular volume máximo baseado no peso
+                    if peso_maximo and peso_maximo != 'N/A':
+                        try:
+                            volume_max_m3 = float(peso_maximo) / 300
+                            volume_max_str = f"{volume_max_m3:.1f}m³"
+                        except:
+                            volume_max_str = "10m³"  # Default
+                    else:
+                        volume_max_str = "10m³"  # Default
+                    
                     capacidade_info = {
-                        'peso_max': '300kg',
-                        'volume_max': '10m³',
-                        'descricao': 'Rota completa com agentes'
+                        'peso_max': peso_max_str,
+                        'volume_max': volume_max_str,
+                        'descricao': f'Rota completa - Prazo: {prazo_real} dias'
                     }
             else:
                 tipo_servico = f"FRETE FRACIONADO - {agentes_info['fornecedor_principal']}"
                 descricao = resumo_original or f"Frete fracionado via {agentes_info['fornecedor_principal']}"
+                
+                # 🔧 CORREÇÃO: Usar capacidades reais do fornecedor
+                detalhes_opcao = opcao.get('detalhes', {})
+                peso_maximo = detalhes_opcao.get('peso_maximo_transportado', 'N/A')
+                prazo_real = detalhes_opcao.get('prazo', 'N/A')
+                
+                # Converter peso máximo para formato legível
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        peso_max_kg = float(peso_maximo)
+                        if peso_max_kg >= 1000:
+                            peso_max_str = f"{peso_max_kg/1000:.1f} ton"
+                        else:
+                            peso_max_str = f"{peso_max_kg:.0f}kg"
+                    except:
+                        peso_max_str = f"{peso_maximo}kg"
+                else:
+                    peso_max_str = "300kg"  # Default
+                
+                # Calcular volume máximo baseado no peso
+                if peso_maximo and peso_maximo != 'N/A':
+                    try:
+                        volume_max_m3 = float(peso_maximo) / 300
+                        volume_max_str = f"{volume_max_m3:.1f}m³"
+                    except:
+                        volume_max_str = "10m³"  # Default
+                else:
+                    volume_max_str = "10m³"  # Default
+                
                 capacidade_info = {
-                    'peso_max': '300kg',
-                    'volume_max': '10m³',
-                    'descricao': 'Frete fracionado padrão'
+                    'peso_max': peso_max_str,
+                    'volume_max': volume_max_str,
+                    'descricao': f'Frete fracionado - Prazo: {prazo_real} dias'
                 }
             
             # Determinar ícone baseado na posição
@@ -4219,9 +4500,25 @@ def calcular_frete_fracionado():
                 "detalhes": "Não há agentes de entrega disponíveis na cidade de destino. Verifique se há cobertura na região."
             })
         
-        if not resultado_fracionado or not resultado_fracionado.get('opcoes'):
+        if not resultado_fracionado:
             return jsonify({
-                "error": "Nenhuma opção de frete fracionado encontrada para esta rota",
+                "error": "Erro ao calcular frete fracionado",
+                "ranking_fracionado": None,
+                "tipo": "Fracionado"
+            })
+        
+        # Verificar se há mensagem específica quando não há opções
+        if resultado_fracionado.get('sem_opcoes'):
+            return jsonify({
+                "error": resultado_fracionado.get('mensagem', 'Não há nenhuma opção para a rota solicitada'),
+                "ranking_fracionado": None,
+                "tipo": "Fracionado",
+                "sem_opcoes": True
+            })
+        
+        if not resultado_fracionado.get('opcoes'):
+            return jsonify({
+                "error": "Não há nenhuma opção para a rota solicitada",
                 "ranking_fracionado": None,
                 "tipo": "Fracionado"
             })
