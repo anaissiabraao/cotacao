@@ -1014,10 +1014,40 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             df_diretos = df_base[df_base['Tipo'] == 'Direto']
             
             # Buscar serviços diretos com busca otimizada
+            # Adicionar debug para verificar normalização
+            print(f"[DEBUG] Origem normalizada: '{origem_norm}'")
+            print(f"[DEBUG] Destino normalizado: '{destino_norm}'")
+            
+            # Estratégia 1: Busca exata com normalização
             servicos_diretos = df_diretos[
                 (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
                 (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
             ]
+            
+            print(f"[DEBUG] Estratégia 1 - Busca exata: {len(servicos_diretos)} encontrados")
+            
+            # Estratégia 2: Busca flexível se exata falhar
+            if len(servicos_diretos) == 0:
+                print(f"[DEBUG] Estratégia 2 - Tentando busca flexível...")
+                servicos_diretos_flex = df_diretos[
+                    (df_diretos['Origem'].str.contains(origem_norm, case=False, na=False)) &
+                    (df_diretos['Destino'].str.contains(destino_norm, case=False, na=False))
+                ]
+                print(f"[DEBUG] Busca flexível encontrou: {len(servicos_diretos_flex)}")
+                if len(servicos_diretos_flex) > 0:
+                    servicos_diretos = servicos_diretos_flex
+            
+            # Estratégia 3: Busca por similaridade se ainda não encontrou
+            if len(servicos_diretos) == 0:
+                print(f"[DEBUG] Estratégia 3 - Tentando busca por similaridade...")
+                # Buscar qualquer serviço direto que contenha parte do nome
+                servicos_diretos_sim = df_diretos[
+                    (df_diretos['Origem'].str.contains(origem_norm[:5], case=False, na=False)) &
+                    (df_diretos['Destino'].str.contains(destino_norm[:5], case=False, na=False))
+                ]
+                print(f"[DEBUG] Busca por similaridade encontrou: {len(servicos_diretos_sim)}")
+                if len(servicos_diretos_sim) > 0:
+                    servicos_diretos = servicos_diretos_sim
             
             # ADICIONAR: Buscar ML e GRITSCH mesmo que estejam como Agente (tratamento especial)
             # Otimização: Pré-filtrar por fornecedor para melhorar performance
@@ -1027,6 +1057,18 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                 (df_ml_gritsch['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
                 (df_ml_gritsch['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
             ]
+            
+            print(f"[DEBUG] ML/GRITSCH encontrados: {len(ml_gritsch_services)}")
+            if len(ml_gritsch_services) == 0:
+                # Tentar busca mais flexível para ML/GRITSCH
+                print(f"[DEBUG] Tentando busca flexível para ML/GRITSCH...")
+                ml_gritsch_flex = df_ml_gritsch[
+                    (df_ml_gritsch['Origem'].str.contains(origem_norm, case=False, na=False)) &
+                    (df_ml_gritsch['Destino'].str.contains(destino_norm, case=False, na=False))
+                ]
+                print(f"[DEBUG] Busca flexível ML/GRITSCH encontrou: {len(ml_gritsch_flex)}")
+                if len(ml_gritsch_flex) > 0:
+                    ml_gritsch_services = ml_gritsch_flex
             
             # Combinar resultados (serviços diretos + ML + GRITSCH)
             import pandas as pd
@@ -1075,6 +1117,220 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             destino, uf_destino,
             peso, valor_nf, cubagem
         )
+        
+        # 3. BUSCA ALTERNATIVA: Se não encontrou nada, tentar busca mais ampla
+        if len(todas_opcoes) == 0 and (rotas_agentes is None or rotas_agentes.get('total_opcoes', 0) == 0):
+            print(f"[FRACIONADO] 🔍 Busca alternativa: Nenhuma rota encontrada, tentando busca mais ampla...")
+            
+            # Buscar qualquer serviço que conecte os estados
+            df_base = carregar_base_unificada()
+            if df_base is not None:
+                # Buscar serviços que conectem SP e RJ
+                servicos_sp_rj = df_base[
+                    (df_base['Origem'].str.contains(uf_origem_norm, case=False, na=False)) &
+                    (df_base['Destino'].str.contains(uf_destino_norm, case=False, na=False))
+                ]
+                
+                print(f"[FRACIONADO] 🔍 Encontrados {len(servicos_sp_rj)} serviços conectando {uf_origem_norm} → {uf_destino_norm}")
+                
+                if len(servicos_sp_rj) > 0:
+                    # Processar os primeiros 5 serviços encontrados
+                    for _, servico in servicos_sp_rj.head(5).iterrows():
+                        try:
+                            peso_real = float(peso)
+                            peso_cubado = calcular_peso_cubado_por_tipo(peso_real, cubagem, servico.get('Tipo', 'Direto'), servico.get('Fornecedor'))
+                            opcao = processar_linha_fracionado(servico, peso_cubado, valor_nf, "ALTERNATIVO")
+                            
+                            if opcao:
+                                opcao_formatada = {
+                                    'fornecedor': opcao['fornecedor'],
+                                    'origem': servico.get('Origem', origem),
+                                    'destino': servico.get('Destino', destino),
+                                    'total': opcao['total'],
+                                    'prazo': opcao['prazo'],
+                                    'peso_cubado': peso_cubado,
+                                    'peso_usado': peso_cubado,
+                                    'modalidade': 'ALTERNATIVO',
+                                    'tipo': 'alternativo',
+                                    'tipo_rota': 'alternativo',
+                                    'resumo': f"{opcao['fornecedor']} - Rota Alternativa ({servico.get('Origem', origem)} → {servico.get('Destino', destino)})",
+                                    'detalhes': opcao,
+                                    'custo_base': opcao['custo_base'],
+                                    'gris': opcao['gris'],
+                                    'pedagio': opcao['pedagio'],
+                                    'seguro': opcao.get('seguro', 0),
+                                    'servico_direto': False,
+                                    'observacao': 'Rota alternativa - pode não ser exata'
+                                }
+                                todas_opcoes.append(opcao_formatada)
+                                print(f"[FRACIONADO] ✅ Alternativa adicionada: {opcao['fornecedor']} - R$ {opcao['total']:.2f}")
+                        except Exception as e:
+                            print(f"[FRACIONADO] ❌ Erro ao processar alternativa: {e}")
+                            continue
+                
+                # 4. BUSCA POR ROTAS PARCIAIS: Quando não há agentes em uma das pontas
+                if len(todas_opcoes) == 0:
+                    print(f"[FRACIONADO] 🔍 Buscando rotas parciais quando não há agentes em uma das pontas...")
+                    
+                    # Verificar se há agentes na origem ou destino
+                    df_agentes = df_base[df_base['Tipo'] == 'Agente']
+                    
+                    agentes_origem = df_agentes[
+                        (df_agentes['Origem'].str.contains(origem_norm, case=False, na=False)) |
+                        (df_agentes['Origem'].str.contains(origem, case=False, na=False))
+                    ]
+                    
+                    agentes_destino = df_agentes[
+                        (df_agentes['Origem'].str.contains(destino_norm, case=False, na=False)) |
+                        (df_agentes['Origem'].str.contains(destino, case=False, na=False))
+                    ]
+                    
+                    print(f"[FRACIONADO] 🔍 Agentes na origem: {len(agentes_origem)}, Agentes no destino: {len(agentes_destino)}")
+                    
+                    # Se há agentes em pelo menos uma ponta, buscar transferências parciais
+                    if len(agentes_origem) > 0 or len(agentes_destino) > 0:
+                        print(f"[FRACIONADO] 🔍 Buscando transferências parciais...")
+                        
+                        # Buscar transferências que conectem com os agentes disponíveis
+                        df_transferencias = df_base[df_base['Tipo'] == 'Transferência']
+                        
+                        # Estratégia 1: Se há agente na origem, buscar transferências da origem
+                        if len(agentes_origem) > 0:
+                            print(f"[FRACIONADO] 🔍 Estratégia 1: Buscando transferências da origem...")
+                            
+                            for _, agente in agentes_origem.iterrows():
+                                agente_nome = agente['Fornecedor']
+                                agente_origem = agente['Origem']
+                                
+                                # Buscar transferências que saem da origem do agente
+                                transferencias_origem = df_transferencias[
+                                    (df_transferencias['Base Origem'].str.contains(agente_origem, case=False, na=False)) |
+                                    (df_transferencias['Origem'].str.contains(agente_origem, case=False, na=False))
+                                ]
+                                
+                                if len(transferencias_origem) > 0:
+                                    print(f"[FRACIONADO] ✅ Encontradas {len(transferencias_origem)} transferências para agente {agente_nome}")
+                                    
+                                    # Processar as primeiras 3 transferências
+                                    for _, transferencia in transferencias_origem.head(3).iterrows():
+                                        try:
+                                            peso_real = float(peso)
+                                            peso_cubado = max(peso_real, float(cubagem) * 300) if cubagem else peso_real
+                                            
+                                            # Calcular custo do agente (coleta)
+                                            custo_agente = calcular_custo_agente(agente, peso_cubado, valor_nf)
+                                            
+                                            # Calcular custo da transferência
+                                            custo_transferencia = processar_linha_fracionado(transferencia, peso_cubado, valor_nf, "TRANSFERÊNCIA")
+                                            
+                                            if custo_agente and custo_transferencia:
+                                                total = custo_agente['total'] + custo_transferencia['total']
+                                                prazo = custo_agente['prazo'] + custo_transferencia['prazo']
+                                                
+                                                opcao_formatada = {
+                                                    'fornecedor': f"{agente_nome} + {transferencia['Fornecedor']}",
+                                                    'origem': origem,
+                                                    'destino': transferencia.get('Destino', destino),
+                                                    'total': total,
+                                                    'prazo': prazo,
+                                                    'peso_cubado': peso_cubado,
+                                                    'peso_usado': peso_cubado,
+                                                    'modalidade': 'PARCIAL_COLETA',
+                                                    'tipo': 'parcial_coleta',
+                                                    'tipo_rota': 'parcial_coleta',
+                                                    'resumo': f"Rota Parcial: {agente_nome} (coleta) + {transferencia['Fornecedor']} (transferência)",
+                                                    'detalhes': {
+                                                        'agente_coleta': agente_nome,
+                                                        'transferencia': transferencia['Fornecedor'],
+                                                        'custo_agente': custo_agente['total'],
+                                                        'custo_transferencia': custo_transferencia['total'],
+                                                        'destino_parcial': transferencia.get('Destino', destino)
+                                                    },
+                                                    'custo_base': custo_agente['custo_base'] + custo_transferencia['custo_base'],
+                                                    'gris': custo_agente['gris'] + custo_transferencia['gris'],
+                                                    'pedagio': custo_agente['pedagio'] + custo_transferencia['pedagio'],
+                                                    'seguro': custo_agente.get('seguro', 0) + custo_transferencia.get('seguro', 0),
+                                                    'servico_direto': False,
+                                                    'observacao': f'Rota parcial - coleta em {origem}, entrega em {transferencia.get("Destino", destino)}',
+                                                    'rota_parcial': True,
+                                                    'tipo_parcial': 'coleta'
+                                                }
+                                                
+                                                todas_opcoes.append(opcao_formatada)
+                                                print(f"[FRACIONADO] ✅ Rota parcial (coleta) adicionada: {agente_nome} + {transferencia['Fornecedor']} - R$ {total:.2f}")
+                                                
+                                        except Exception as e:
+                                            print(f"[FRACIONADO] ❌ Erro ao processar rota parcial (coleta): {e}")
+                                            continue
+                        
+                        # Estratégia 2: Se há agente no destino, buscar transferências para o destino
+                        if len(agentes_destino) > 0:
+                            print(f"[FRACIONADO] 🔍 Estratégia 2: Buscando transferências para o destino...")
+                            
+                            for _, agente in agentes_destino.iterrows():
+                                agente_nome = agente['Fornecedor']
+                                agente_destino = agente['Origem']  # Agente está na origem da tabela
+                                
+                                # Buscar transferências que chegam no destino do agente
+                                transferencias_destino = df_transferencias[
+                                    (df_transferencias['Base Destino'].str.contains(agente_destino, case=False, na=False)) |
+                                    (df_transferencias['Destino'].str.contains(agente_destino, case=False, na=False))
+                                ]
+                                
+                                if len(transferencias_destino) > 0:
+                                    print(f"[FRACIONADO] ✅ Encontradas {len(transferencias_destino)} transferências para agente {agente_nome}")
+                                    
+                                    # Processar as primeiras 3 transferências
+                                    for _, transferencia in transferencias_destino.head(3).iterrows():
+                                        try:
+                                            peso_real = float(peso)
+                                            peso_cubado = max(peso_real, float(cubagem) * 300) if cubagem else peso_real
+                                            
+                                            # Calcular custo da transferência
+                                            custo_transferencia = processar_linha_fracionado(transferencia, peso_cubado, valor_nf, "TRANSFERÊNCIA")
+                                            
+                                            # Calcular custo do agente (entrega)
+                                            custo_agente = calcular_custo_agente(agente, peso_cubado, valor_nf)
+                                            
+                                            if custo_transferencia and custo_agente:
+                                                total = custo_transferencia['total'] + custo_agente['total']
+                                                prazo = custo_transferencia['prazo'] + custo_agente['prazo']
+                                                
+                                                opcao_formatada = {
+                                                    'fornecedor': f"{transferencia['Fornecedor']} + {agente_nome}",
+                                                    'origem': transferencia.get('Origem', origem),
+                                                    'destino': destino,
+                                                    'total': total,
+                                                    'prazo': prazo,
+                                                    'peso_cubado': peso_cubado,
+                                                    'peso_usado': peso_cubado,
+                                                    'modalidade': 'PARCIAL_ENTREGA',
+                                                    'tipo': 'parcial_entrega',
+                                                    'tipo_rota': 'parcial_entrega',
+                                                    'resumo': f"Rota Parcial: {transferencia['Fornecedor']} (transferência) + {agente_nome} (entrega)",
+                                                    'detalhes': {
+                                                        'transferencia': transferencia['Fornecedor'],
+                                                        'agente_entrega': agente_nome,
+                                                        'custo_transferencia': custo_transferencia['total'],
+                                                        'custo_agente': custo_agente['total'],
+                                                        'origem_parcial': transferencia.get('Origem', origem)
+                                                    },
+                                                    'custo_base': custo_transferencia['custo_base'] + custo_agente['custo_base'],
+                                                    'gris': custo_transferencia['gris'] + custo_agente['gris'],
+                                                    'pedagio': custo_transferencia['pedagio'] + custo_agente['pedagio'],
+                                                    'seguro': custo_transferencia.get('seguro', 0) + custo_agente.get('seguro', 0),
+                                                    'servico_direto': False,
+                                                    'observacao': f'Rota parcial - coleta em {transferencia.get("Origem", origem)}, entrega em {destino}',
+                                                    'rota_parcial': True,
+                                                    'tipo_parcial': 'entrega'
+                                                }
+                                                
+                                                todas_opcoes.append(opcao_formatada)
+                                                print(f"[FRACIONADO] ✅ Rota parcial (entrega) adicionada: {transferencia['Fornecedor']} + {agente_nome} - R$ {total:.2f}")
+                                                
+                                        except Exception as e:
+                                            print(f"[FRACIONADO] ❌ Erro ao processar rota parcial (entrega): {e}")
+                                            continue
         
         if rotas_agentes and rotas_agentes.get('total_opcoes', 0) > 0:
             print(f"[FRACIONADO] ✅ {rotas_agentes['total_opcoes']} rotas com agentes encontradas")
@@ -1312,6 +1568,18 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             agentes_faltando['origem'] = True
             print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {origem_norm}/{uf_origem}")
             
+            # Buscar agentes próximos na mesma UF
+            print(f"[AGENTES] 🔍 Buscando agentes próximos em {uf_origem}...")
+            agentes_proximos_origem = df_agentes[
+                (df_agentes['UF'] == uf_origem) &
+                (df_agentes['Origem'] != origem_norm)
+            ]
+            
+            if len(agentes_proximos_origem) > 0:
+                agentes_faltando['agentes_proximos_origem'] = agentes_proximos_origem['Fornecedor'].tolist()[:3]
+                print(f"[AGENTES] 📍 Agentes próximos em {uf_origem}: {', '.join(agentes_faltando['agentes_proximos_origem'])}")
+                avisos.append(f"Sem agente em {origem_norm}, mas há agentes próximos: {', '.join(agentes_faltando['agentes_proximos_origem'][:2])}")
+            
             # Buscar bases de transferência no estado
             print(f"[AGENTES] 🔍 Buscando bases de transferência em {uf_origem}...")
             bases_transferencia_origem = df_transferencias[
@@ -1326,6 +1594,18 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         if agentes_destino.empty:
             agentes_faltando['destino'] = True
             print(f"[AGENTES] ⚠️ Nenhum agente encontrado em {destino_norm}/{uf_destino}")
+            
+            # Buscar agentes próximos na mesma UF
+            print(f"[AGENTES] 🔍 Buscando agentes próximos em {uf_destino}...")
+            agentes_proximos_destino = df_agentes[
+                (df_agentes['UF'] == uf_destino) &
+                (df_agentes['Origem'] != destino_norm)
+            ]
+            
+            if len(agentes_proximos_destino) > 0:
+                agentes_faltando['agentes_proximos_destino'] = agentes_proximos_destino['Fornecedor'].tolist()[:3]
+                print(f"[AGENTES] 📍 Agentes próximos em {uf_destino}: {', '.join(agentes_faltando['agentes_proximos_destino'])}")
+                avisos.append(f"Sem agente em {destino_norm}, mas há agentes próximos: {', '.join(agentes_faltando['agentes_proximos_destino'][:2])}")
             
             # Buscar bases de transferência no estado
             print(f"[AGENTES] 🔍 Buscando bases de transferência em {uf_destino}...")
