@@ -1610,7 +1610,10 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             (df_base['Tipo'] == 'Agente') & 
             (~df_base['Fornecedor'].str.contains('ML|GRITSCH|EXPRESSO S\. MIGUEL', case=False, na=False))  # EXCLUIR ML, GRITSCH e EXPRESSO S. MIGUEL (são DIRETOS)
         ].copy()
-        df_transferencias = df_base[df_base['Tipo'] == 'Transferência'].copy()
+        df_transferencias = df_base[
+            (df_base['Tipo'] == 'Transferência') & 
+            (~df_base['Fornecedor'].str.contains('EXPRESSO S\. MIGUEL', case=False, na=False))  # EXCLUIR EXPRESSO S. MIGUEL das transferências (é DIRETO)
+        ].copy()
         df_diretos = df_base[df_base['Tipo'] == 'Direto'].copy()
         
         print(f"[AGENTES] Agentes carregados (ML, GRITSCH e EXPRESSO S. MIGUEL excluídos - são diretos): {len(df_agentes)}")
@@ -2727,6 +2730,77 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
             print(f"[CUSTO-JEM] Fornecedor: {fornecedor}, Peso: {peso_cubado}kg, Base: R$ {valor_base:.2f}")
             custo_base = valor_base
         
+        # 🔧 LÓGICA ESPECÍFICA PARA EXPRESSO S. MIGUEL - COLUNAS G, P, Q, S
+        elif 'EXPRESSO S. MIGUEL' in fornecedor_upper:
+            print(f"[CUSTO-EXPRESSO] 🔧 Aplicando lógica específica para EXPRESSO S. MIGUEL: {fornecedor}")
+            
+            # EXPRESSO S. MIGUEL usa colunas específicas:
+            # - Coluna G: Valor mínimo (VALOR MÍNIMO ATÉ 10)
+            # - Coluna P: Excedente até 500kg
+            # - Coluna Q: Excedente 500-1000kg
+            # - Coluna S: Excedente acima de 1000kg
+            
+            valor_base = 0
+            
+            # 1. Verificar valor mínimo (Coluna G)
+            valor_minimo = linha.get('VALOR MÍNIMO ATÉ 10', 0)
+            if pd.notna(valor_minimo):
+                valor_minimo = float(valor_minimo)
+                
+                # 2. Determinar qual coluna usar baseado no peso
+                if peso_cubado <= 10:
+                    # Usar apenas valor mínimo
+                    valor_base = valor_minimo
+                    print(f"[CUSTO-EXPRESSO] ✅ Peso ≤ 10kg: Valor mínimo (Coluna G) R$ {valor_base:.2f}")
+                
+                elif peso_cubado <= 500:
+                    # Calcular excedente: peso_total × valor_por_kg (Coluna P)
+                    valor_por_kg = linha.get('Acima 500', 0)  # Coluna P
+                    if pd.notna(valor_por_kg):
+                        valor_por_kg = float(valor_por_kg)
+                        valor_calculado = peso_cubado * valor_por_kg
+                        
+                        # Se o valor calculado for menor que o mínimo, usar o mínimo
+                        if valor_calculado < valor_minimo:
+                            valor_base = valor_minimo
+                            print(f"[CUSTO-EXPRESSO] ✅ Peso {peso_cubado}kg (≤500kg): {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {valor_calculado:.2f} < mínimo R$ {valor_minimo:.2f} → Usar mínimo R$ {valor_base:.2f}")
+                        else:
+                            valor_base = valor_calculado
+                            print(f"[CUSTO-EXPRESSO] ✅ Peso {peso_cubado}kg (≤500kg): {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
+                
+                elif peso_cubado <= 1000:
+                    # Calcular excedente: peso_total × valor_por_kg (Coluna Q)
+                    valor_por_kg = linha.get('Acima 1000', 0)  # Coluna Q
+                    if pd.notna(valor_por_kg):
+                        valor_por_kg = float(valor_por_kg)
+                        valor_calculado = peso_cubado * valor_por_kg
+                        
+                        # Se o valor calculado for menor que o mínimo, usar o mínimo
+                        if valor_calculado < valor_minimo:
+                            valor_base = valor_minimo
+                            print(f"[CUSTO-EXPRESSO] ✅ Peso {peso_cubado}kg (500-1000kg): {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {valor_calculado:.2f} < mínimo R$ {valor_minimo:.2f} → Usar mínimo R$ {valor_base:.2f}")
+                        else:
+                            valor_base = valor_calculado
+                            print(f"[CUSTO-EXPRESSO] ✅ Peso {peso_cubado}kg (500-1000kg): {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
+                
+                else:
+                    # Calcular excedente: peso_total × valor_por_kg (Coluna S)
+                    valor_por_kg = linha.get('Acima 2000', 0)  # Coluna S
+                    if pd.notna(valor_por_kg):
+                        valor_por_kg = float(valor_por_kg)
+                        valor_calculado = peso_cubado * valor_por_kg
+                        
+                        # Se o valor calculado for menor que o mínimo, usar o mínimo
+                        if valor_calculado < valor_minimo:
+                            valor_base = valor_minimo
+                            print(f"[CUSTO-EXPRESSO] ✅ Peso {peso_cubado}kg (>1000kg): {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {valor_calculado:.2f} < mínimo R$ {valor_minimo:.2f} → Usar mínimo R$ {valor_base:.2f}")
+                        else:
+                            valor_base = valor_calculado
+                            print(f"[CUSTO-EXPRESSO] ✅ Peso {peso_cubado}kg (>1000kg): {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
+            
+            print(f"[CUSTO-EXPRESSO] Fornecedor: {fornecedor}, Peso: {peso_cubado}kg, Base: R$ {valor_base:.2f}")
+            custo_base = valor_base
+        
         else:
             # LÓGICA PADRÃO PARA OUTROS FORNECEDORES
             # Validar peso_cubado
@@ -2789,8 +2863,9 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         
         # 🔧 CALCULAR SEGURO SE DISPONÍVEL
         seguro = 0
-        # EXCEÇÃO: ML, GRITSCH e EXPRESSO S. MIGUEL não calculam seguro, apenas GRIS
-        if 'ML' not in fornecedor_upper and 'GRITSCH' not in fornecedor_upper and 'EXPRESSO S. MIGUEL' not in fornecedor_upper:
+        # EXCEÇÃO: ML e GRITSCH não calculam seguro, apenas GRIS
+        # EXPRESSO S. MIGUEL CALCULA SEGURO normalmente
+        if 'ML' not in fornecedor_upper and 'GRITSCH' not in fornecedor_upper:
             if valor_nf and valor_nf > 0:
                 if 'Seguro' in linha and pd.notna(linha.get('Seguro')):
                     seguro_perc = float(linha.get('Seguro', 0))
