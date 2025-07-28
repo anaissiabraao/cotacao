@@ -996,18 +996,18 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                 (df_base['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
             ]
             
-            # ADICIONAR: Buscar GRITSCH mesmo que esteja como Agente (tratamento especial)
-            gritsch_services = df_base[
-                (df_base['Fornecedor'].str.contains('GRITSCH', case=False, na=False)) &
+            # ADICIONAR: Buscar ML e GRITSCH mesmo que estejam como Agente (tratamento especial)
+            ml_gritsch_services = df_base[
+                (df_base['Fornecedor'].str.contains('ML|GRITSCH', case=False, na=False)) &
                 (df_base['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
                 (df_base['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
             ]
             
-            # Combinar resultados (serviços diretos + GRITSCH)
+            # Combinar resultados (serviços diretos + ML + GRITSCH)
             import pandas as pd
-            servicos_diretos_completos = pd.concat([servicos_diretos, gritsch_services]).drop_duplicates()
+            servicos_diretos_completos = pd.concat([servicos_diretos, ml_gritsch_services]).drop_duplicates()
             
-            print(f"[FRACIONADO] Encontrados {len(servicos_diretos_completos)} serviços diretos porta-porta (incluindo GRITSCH)")
+            print(f"[FRACIONADO] Encontrados {len(servicos_diretos_completos)} serviços diretos porta-porta (incluindo ML e GRITSCH)")
             
             # Processar cada serviço direto
             for _, servico in servicos_diretos_completos.iterrows():
@@ -1234,16 +1234,15 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             print("[AGENTES] Erro: Não foi possível carregar a base de dados")
             return None
 
-        # Separar tipos e filtrar agente ML (agente especial)
+        # Separar tipos - ML e GRITSCH tratados como agentes diretos porta-porta
         df_agentes = df_base[
             (df_base['Tipo'] == 'Agente') & 
-            (df_base['Fornecedor'] != 'ML') &
-            (~df_base['Fornecedor'].str.contains('GRITSCH', case=False, na=False))  # EXCLUIR GRITSCH (agora é DIRETO)
+            (~df_base['Fornecedor'].str.contains('ML|GRITSCH', case=False, na=False))  # EXCLUIR ML e GRITSCH (são DIRETOS)
         ].copy()
         df_transferencias = df_base[df_base['Tipo'] == 'Transferência'].copy()
         df_diretos = df_base[df_base['Tipo'] == 'Direto'].copy()
         
-        print(f"[AGENTES] Agentes carregados (excluindo ML e GRITSCH): {len(df_agentes)}")
+        print(f"[AGENTES] Agentes carregados (ML e GRITSCH excluídos - são diretos): {len(df_agentes)}")
         print(f"[AGENTES] Transferências carregadas: {len(df_transferencias)}")
         print(f"[AGENTES] Diretos carregados: {len(df_diretos)}")
         
@@ -2429,8 +2428,8 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         
         # 🔧 CALCULAR SEGURO SE DISPONÍVEL
         seguro = 0
-        # EXCEÇÃO: GRITSCH não calcula seguro, apenas GRIS
-        if 'GRITSCH' not in fornecedor_upper:
+        # EXCEÇÃO: ML e GRITSCH não calculam seguro, apenas GRIS
+        if 'ML' not in fornecedor_upper and 'GRITSCH' not in fornecedor_upper:
             if valor_nf and valor_nf > 0:
                 if 'Seguro' in linha and pd.notna(linha.get('Seguro')):
                     seguro_perc = float(linha.get('Seguro', 0))
@@ -2486,8 +2485,8 @@ def processar_linha_fracionado(linha, peso_cubado, valor_nf, tipo_servico="FRACI
     try:
         fornecedor = linha.get('Fornecedor', 'N/A')
         
-        # TRATAMENTO ESPECIAL PARA GRITSCH - forçar como DIRETO
-        if 'GRITSCH' in fornecedor.upper():
+        # TRATAMENTO ESPECIAL PARA ML E GRITSCH - forçar como DIRETO
+        if 'ML' in fornecedor.upper() or 'GRITSCH' in fornecedor.upper():
             tipo_servico = "DIRETO PORTA-A-PORTA"
             # Forçar tipo como Direto para processamento correto
             linha_temp = linha.copy() if hasattr(linha, 'copy') else dict(linha)
