@@ -29,6 +29,11 @@ except ImportError as e:
     print(f"[PostgreSQL] ⚠️ PostgreSQL não disponível: {e}")
     print("[PostgreSQL] Usando fallback para logs em arquivo")
 
+# Cache global para base unificada
+_BASE_UNIFICADA_CACHE = None
+_ULTIMO_CARREGAMENTO_BASE = 0
+_CACHE_VALIDADE_BASE = 300  # 5 minutos
+
 # Cache global para agentes
 _BASE_AGENTES_CACHE = None
 _ULTIMO_CARREGAMENTO = 0
@@ -296,9 +301,11 @@ def normalizar_uf(uf):
     
     return ""
 
+@lru_cache(maxsize=1000)
 def normalizar_cidade_nome(cidade):
     """
     Normaliza o nome da cidade, removendo a parte após o hífen.
+    Com cache para melhorar performance
     """
     if not cidade:
         return ""
@@ -940,9 +947,18 @@ def ler_gollog_aereo():
 
 def carregar_base_unificada():
     """
-    Carrega a Base Unificada completa para cálculos de frete
+    Carrega a Base Unificada completa para cálculos de frete com cache
     """
+    global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE
+    
     try:
+        # Verificar se o cache ainda é válido
+        tempo_atual = time.time()
+        if (_BASE_UNIFICADA_CACHE is not None and 
+            (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE):
+            print(f"[BASE] ✅ Usando cache da base unificada ({len(_BASE_UNIFICADA_CACHE)} registros)")
+            return _BASE_UNIFICADA_CACHE
+        
         if not BASE_UNIFICADA_FILE:
             print("[BASE] ❌ BASE_UNIFICADA_FILE não está definido")
             return None
@@ -960,6 +976,10 @@ def carregar_base_unificada():
             print("[BASE] ⚠️ Arquivo carregado está vazio")
             return None
         
+        # Atualizar cache
+        _BASE_UNIFICADA_CACHE = df_base
+        _ULTIMO_CARREGAMENTO_BASE = tempo_atual
+        
         print(f"[BASE] ✅ Base carregada com sucesso: {len(df_base)} registros")
         print(f"[BASE] Colunas disponíveis: {list(df_base.columns)}")
         
@@ -973,6 +993,7 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
     Calcular frete fracionado usando a Base Unificada com lógica correta de agentes
     """
     try:
+        tempo_inicio = time.time()
         print(f"[FRACIONADO] 📦 Iniciando cálculo: {origem}/{uf_origem} → {destino}/{uf_destino}")
         print(f"[FRACIONADO] Peso: {peso}kg, Cubagem: {cubagem}m³, Valor NF: R$ {valor_nf:,}" if valor_nf else f"[FRACIONADO] Peso: {peso}kg, Cubagem: {cubagem}m³")
         
@@ -989,18 +1010,22 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             uf_origem_norm = normalizar_uf(uf_origem)
             uf_destino_norm = normalizar_uf(uf_destino)
             
-            # Buscar serviços diretos
-            servicos_diretos = df_base[
-                (df_base['Tipo'] == 'Direto') &
-                (df_base['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
-                (df_base['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
+            # Otimização: Pré-filtrar por tipo para melhorar performance
+            df_diretos = df_base[df_base['Tipo'] == 'Direto']
+            
+            # Buscar serviços diretos com busca otimizada
+            servicos_diretos = df_diretos[
+                (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
+                (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
             ]
             
             # ADICIONAR: Buscar ML e GRITSCH mesmo que estejam como Agente (tratamento especial)
-            ml_gritsch_services = df_base[
-                (df_base['Fornecedor'].str.contains('ML|GRITSCH', case=False, na=False)) &
-                (df_base['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
-                (df_base['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
+            # Otimização: Pré-filtrar por fornecedor para melhorar performance
+            df_ml_gritsch = df_base[df_base['Fornecedor'].str.contains('ML|GRITSCH', case=False, na=False)]
+            
+            ml_gritsch_services = df_ml_gritsch[
+                (df_ml_gritsch['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
+                (df_ml_gritsch['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
             ]
             
             # Combinar resultados (serviços diretos + ML + GRITSCH)
@@ -1118,6 +1143,9 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             'peso_cubado': peso_cubado,
             'valor_nf': valor_nf
         }
+        
+        tempo_total = time.time() - tempo_inicio
+        print(f"[FRACIONADO] ⏱️ Tempo total de processamento: {tempo_total:.2f} segundos")
         
         return resultado
         
@@ -1258,21 +1286,25 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         rotas_encontradas = []
         rotas_processadas = set()  # Controle de duplicatas
-        MAX_ROTAS = 50  # Limite máximo de rotas para evitar processamento excessivo
+        MAX_ROTAS = 30  # Reduzido para melhorar performance
+        MAX_ITERACOES = 1000  # Limite para evitar loops infinitos
+        contador_iteracoes = 0
         
         def gerar_chave_rota(agente_col_forn, transf_forn, agente_ent_forn):
             """Gera chave única para controle de duplicatas"""
             return f"{agente_col_forn}+{transf_forn}+{agente_ent_forn}"
         
         # Verificar se existem agentes na origem/destino exatos
-        agentes_origem = df_agentes[
-            (df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
-            (df_agentes['UF'] == uf_origem)
+        # Otimização: Pré-filtrar por UF para melhorar performance
+        df_agentes_origem_uf = df_agentes[df_agentes['UF'] == uf_origem]
+        df_agentes_destino_uf = df_agentes[df_agentes['UF'] == uf_destino]
+        
+        agentes_origem = df_agentes_origem_uf[
+            df_agentes_origem_uf['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)
         ]
         
-        agentes_destino = df_agentes[
-            (df_agentes['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)) &
-            (df_agentes['UF'] == uf_destino)
+        agentes_destino = df_agentes_destino_uf[
+            df_agentes_destino_uf['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
         ]
         
         # Verificar se faltam agentes exatos
@@ -4292,433 +4324,6 @@ def exportar_excel():
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Erro ao exportar Excel: {str(e)}"})
-        config = estimativas_pedagio.get(tipo_veiculo, estimativas_pedagio["TOCO"])
-        taxa_base = config["base"]
-        
-        # Ajustar taxa para longas distâncias (mais pedágios em rodovias principais)
-        if distancia > 300:
-            taxa_final = taxa_base * config["mult_dist"]
-            ajuste_info = f"Longa distância ({distancia:.1f}km) - taxa aumentada {config['mult_dist']}x"
-        else:
-            taxa_final = taxa_base
-            ajuste_info = "Distância normal - taxa base"
-        
-        pedagio_estimado = distancia * taxa_final
-        
-        # Gerar localizações estimadas de pedágios ao longo da rota
-        pedagios_mapa = gerar_pedagios_estimados_mapa(rota_info, tipo_veiculo, pedagio_estimado, distancia)
-
-        result = {
-            "pedagio_real": pedagio_estimado,
-            "moeda": "BRL",
-            "distancia": distancia,
-            "duracao": rota_info.get("duracao", 0),
-            "fonte": f"{rota_info.get('provider', 'OpenRoute/OSRM')} + Estimativa Brasileira Avançada",
-            "detalhes_pedagio": {
-                "veiculo_tipo": tipo_veiculo,
-                "peso_veiculo": peso_veiculo,
-                "taxa_base_km": taxa_base,
-                "taxa_final_km": taxa_final,
-                "ajuste_distancia": ajuste_info,
-                "calculo": f"{distancia:.1f} km × R$ {taxa_final:.3f}/km = R$ {pedagio_estimado:.2f}",
-                "metodo": "Estimativa brasileira por peso/distância",
-                "fonte_rota": rota_info.get('provider', 'Aproximação'),
-                "fonte": "Sistema Integrado - Estimativa Brasileira",
-                "num_pedagios": len(pedagios_mapa),
-                "pedagios_detalhados": True,
-                "pedagios_mapa": pedagios_mapa
-            }
-        }
-        
-        print(f"[PEDÁGIO] ✅ Estimativa brasileira: R$ {pedagio_estimado:.2f} ({tipo_veiculo})")
-        return result
-        
-    except Exception as e:
-        print(f"[PEDÁGIO] ❌ Erro geral no cálculo de pedágios: {e}")
-        return None
-
-def calcular_pedagios_google_routes(origem, destino, peso_veiculo=1000):
-    """
-    Calcula pedágios usando Google Routes API
-    """
-    try:
-        if not GOOGLE_ROUTES_API_KEY or GOOGLE_ROUTES_API_KEY == "SUA_CHAVE_AQUI":
-            print(f"[GOOGLE] ⚠️ Chave da Google Routes API não configurada")
-            return None
-            
-        print(f"[GOOGLE] Tentando calcular pedágios: {origem} -> {destino}")
-        
-        url = "https://routes.googleapis.com/directions/v2:computeRoutes"
-        
-        headers = {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": GOOGLE_ROUTES_API_KEY,
-            "X-Goog-FieldMask": "routes.duration,routes.distanceMeters,routes.travelAdvisory.tollInfo,routes.legs.steps.localizedValues"
-        }
-        
-        # Configurar veículo baseado no peso
-        if peso_veiculo <= 1000:
-            vehicle_type = "TWO_WHEELER"
-        elif peso_veiculo <= 3500:
-            vehicle_type = "LIGHT_VEHICLE" 
-        elif peso_veiculo <= 7500:
-            vehicle_type = "MEDIUM_VEHICLE"
-        else:
-            vehicle_type = "HEAVY_VEHICLE"
-        
-        payload = {
-            "origin": {
-                "location": {
-                    "latLng": {
-                        "latitude": origem[0],
-                        "longitude": origem[1]
-                    }
-                }
-            },
-            "destination": {
-                "location": {
-                    "latLng": {
-                        "latitude": destino[0],
-                        "longitude": destino[1]
-                    }
-                }
-            },
-            "travelMode": "DRIVE",
-            "routeModifiers": {
-                "vehicleInfo": {
-                    "emissionType": "GASOLINE"
-                },
-                "tollPasses": [
-                    "BR_AUTOPASS",  # Passe de pedágio brasileiro
-                    "BR_CONECTCAR",
-                    "BR_SEM_PARAR"
-                ]
-            },
-            "extraComputations": ["TOLLS"],
-            "units": "METRIC"
-        }
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=15)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            if "routes" in data and len(data["routes"]) > 0:
-                route = data["routes"][0]
-                
-                # Extrair informações de pedágio
-                toll_info = route.get("travelAdvisory", {}).get("tollInfo", {})
-                estimated_price = toll_info.get("estimatedPrice", [])
-                
-                total_toll = 0.0
-                currency = "BRL"
-                
-                if estimated_price:
-                    for price in estimated_price:
-                        if price.get("currencyCode") == "BRL":
-                            units = float(price.get("units", 0))
-                            nanos = float(price.get("nanos", 0)) / 1000000000
-                            total_toll += units + nanos
-                            currency = price.get("currencyCode", "BRL")
-                            break
-            
-                # Extrair distância e duração
-                distance_meters = route.get("distanceMeters", 0)
-                duration_seconds = route.get("duration", "0s")
-                
-                # Converter duração de string para segundos
-                if isinstance(duration_seconds, str):
-                    duration_seconds = int(duration_seconds.replace("s", ""))
-                
-                result = {
-                    "pedagio_real": total_toll,
-                    "moeda": currency,
-                    "distancia": distance_meters / 1000,  # Converter para km
-                    "duracao": duration_seconds / 60,  # Converter para minutos
-                    "fonte": "Google Routes API",
-                    "detalhes_pedagio": {
-                        "veiculo_tipo": vehicle_type,
-                        "passes_tentados": ["BR_AUTOPASS", "BR_CONECTCAR", "BR_SEM_PARAR"],
-                        "preco_estimado": estimated_price
-                    }
-                }
-                
-                print(f"[GOOGLE] ✅ Pedágio calculado: R$ {total_toll:.2f}")
-                return result
-            else:
-                print(f"[GOOGLE] ❌ Nenhuma rota encontrada")
-                return None
-                
-        else:
-            print(f"[GOOGLE] ❌ Erro na API: {response.status_code}")
-            return None
-            
-    except Exception as e:
-        print(f"[GOOGLE] ❌ Erro: {e}")
-        return None
-
-def calcular_pedagios_fallback_brasil(distancia_km, tipo_veiculo="CARRETA"):
-    """
-    Fallback para cálculo de pedágios baseado em estimativas brasileiras
-    Usando dados médios de pedágio por km no Brasil
-    """
-    try:
-        # Valores médios de pedágio por km no Brasil (2024)
-        valores_km = {
-            "FIORINO": 0.03,      # R$ 0,03/km
-            "VAN": 0.04,          # R$ 0,04/km  
-            "3/4": 0.05,          # R$ 0,05/km
-            "TOCO": 0.08,         # R$ 0,08/km
-            "TRUCK": 0.12,        # R$ 0,12/km
-            "CARRETA": 0.15       # R$ 0,15/km
-        }
-        
-        valor_por_km = valores_km.get(tipo_veiculo, 0.08)  # Default para TOCO
-        pedagio_estimado = distancia_km * valor_por_km
-        
-        return {
-            "pedagio_real": pedagio_estimado,
-            "moeda": "BRL",
-            "distancia": distancia_km,
-            "fonte": "Estimativa Brasil (fallback)",
-            "detalhes_pedagio": {
-                "valor_por_km": valor_por_km,
-                "tipo_veiculo": tipo_veiculo,
-                "calculo": f"{distancia_km:.1f} km × R$ {valor_por_km:.3f}/km"
-            }
-        }
-        
-    except Exception as e:
-        print(f"[PEDÁGIO] Erro no fallback: {e}")
-        return None
-
-def calcular_pedagios_tollguru(origem, destino, peso_veiculo=1000):
-    """
-    Calcula pedágios reais usando TollGuru API - especializada em pedágios
-    Mais precisa que Google Routes para cálculos de pedágio
-    """
-    try:
-        if not TOLLGURU_API_KEY or TOLLGURU_API_KEY == "SUA_CHAVE_TOLLGURU":
-            print(f"[TOLLGURU] ⚠️ Chave TollGuru não configurada")
-            return None
-            
-        print(f"[TOLLGURU] Calculando pedágios reais: {origem} -> {destino}")
-        
-        # Primeiro obter rota do OpenRouteService
-        rota_info = calcular_distancia_openroute_detalhada(origem, destino)
-        if not rota_info or not rota_info.get('polyline'):
-            print(f"[TOLLGURU] ❌ Não foi possível obter rota detalhada")
-            return None
-        
-        # Configurar tipo de veículo baseado no peso
-        if peso_veiculo <= 1000:
-            vehicle_type = "2AxlesAuto"
-        elif peso_veiculo <= 3500:
-            vehicle_type = "2AxlesTruck" 
-        elif peso_veiculo <= 7500:
-            vehicle_type = "3AxlesTruck"
-        elif peso_veiculo <= 15000:
-            vehicle_type = "4AxlesTruck"
-        else:
-            vehicle_type = "5AxlesTruck"
-        
-        # Chamar TollGuru API
-        url = "https://apis.tollguru.com/toll/v2"
-        
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-key": TOLLGURU_API_KEY
-        }
-        
-        payload = {
-            "source": "openroute",
-            "polyline": rota_info['polyline'],
-            "vehicleType": vehicle_type,
-            "departure_time": datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
-            "country": "BR"  # Brasil
-        }
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=15)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            if data.get('route'):
-                route = data['route']
-                costs = route.get('costs', {})
-                tolls = costs.get('tolls', [])
-                
-                total_toll = 0.0
-                currency = "BRL"
-                toll_details = []
-                
-                for toll in tolls:
-                    if toll.get('currency') == 'BRL':
-                        total_toll += float(toll.get('cost', 0))
-                        toll_details.append({
-                            'name': toll.get('name', 'Desconhecido'),
-                            'cost': toll.get('cost', 0),
-                            'currency': toll.get('currency', 'BRL')
-                        })
-                               
-                result = {
-                    "pedagio_real": total_toll,
-                    "moeda": currency,
-                    "distancia": route.get('distance', {}).get('value', 0) / 1000,
-                    "duracao": route.get('duration', {}).get('value', 0) / 60,
-                    "fonte": "TollGuru API (Especializada)",
-                    "detalhes_pedagio": {
-                        "veiculo_tipo": vehicle_type,
-                        "num_pedagios": len(tolls),
-                        "pedagios_detalhados": toll_details,
-                        "rota_fonte": "OpenRouteService"
-                    }
-                }
-                
-                print(f"[TOLLGURU] ✅ Pedágio real: R$ {total_toll:.2f} ({len(tolls)} pedágios)")
-                return result
-            else:
-                print(f"[TOLLGURU] ❌ Resposta inválida da API")
-                return None
-                
-        else:
-            print(f"[TOLLGURU] ❌ Erro na API: {response.status_code}")
-            print(f"[TOLLGURU] Resposta: {response.text}")
-            return None
-            
-    except Exception as e:
-        print(f"[TOLLGURU] ❌ Erro: {e}")
-        return None
-
-def gerar_pedagios_estimados_mapa(rota_info, tipo_veiculo, valor_total_pedagio, distancia_total):
-    """
-    Gera localizações estimadas de pedágios ao longo da rota para exibir no mapa
-    """
-    try:
-        pedagios_mapa = []
-        
-        # Se não temos pontos da rota, não podemos gerar localizações
-        if not rota_info.get("rota_pontos") or len(rota_info["rota_pontos"]) < 2:
-            return []
-        
-        rota_pontos = rota_info["rota_pontos"]
-        
-        # Estimar número de pedágios baseado na distância (aproximadamente a cada 120-180km)
-        num_pedagios_estimado = max(1, int(distancia_total / 150))
-        
-        # Se a rota é muito curta, pode não ter pedágios
-        if distancia_total < 80:
-            return []
-        
-        # Calcular valor médio por pedágio
-        valor_por_pedagio = valor_total_pedagio / num_pedagios_estimado if num_pedagios_estimado > 0 else 0
-        
-        # Distribuir pedágios ao longo da rota
-        total_pontos = len(rota_pontos)
-        
-        for i in range(num_pedagios_estimado):
-            # Posicionar pedágios em intervalos regulares ao longo da rota
-            # Evitar muito próximo do início e fim
-            posicao_percentual = 0.15 + (i * 0.7 / max(1, num_pedagios_estimado - 1))
-            if num_pedagios_estimado == 1:
-                posicao_percentual = 0.5  # No meio da rota
-            
-            indice_ponto = int(posicao_percentual * (total_pontos - 1))
-            indice_ponto = max(0, min(indice_ponto, total_pontos - 1))
-            
-            lat, lon = rota_pontos[indice_ponto]
-            
-            # Variação no valor do pedágio baseada no tipo de estrada/região
-            variacao = 0.8 + (i * 0.4 / max(1, num_pedagios_estimado - 1))  # Entre 80% e 120%
-            valor_pedagio = valor_por_pedagio * variacao
-            
-            # Determinar nome estimado do pedágio baseado na posição
-            nomes_estimados = [
-                f"Pedágio {i+1} - Rodovia Principal",
-                f"Praça {i+1} - Via Expressa", 
-                f"Pedágio {i+1} - Concessionária",
-                f"Posto {i+1} - Rodovia Federal"
-            ]
-            nome_pedagio = nomes_estimados[i % len(nomes_estimados)]
-            
-            pedagio_info = {
-                "id": f"pedagio_{i+1}",
-                "nome": nome_pedagio,
-                "lat": lat,
-                "lon": lon,
-                "valor": valor_pedagio,
-                "tipo_veiculo": tipo_veiculo,
-                "distancia_origem": (i + 1) * (distancia_total / (num_pedagios_estimado + 1)),
-                "concessionaria": f"Concessionária {chr(65 + i)}",  # A, B, C, etc.
-                "tipo_estrada": "Rodovia Federal" if i % 2 == 0 else "Rodovia Estadual"
-            }
-            
-            pedagios_mapa.append(pedagio_info)
-        
-        print(f"[PEDÁGIO_MAPA] Gerados {len(pedagios_mapa)} pedágios estimados para o mapa")
-        return pedagios_mapa
-        
-    except Exception as e:
-        print(f"[PEDÁGIO_MAPA] Erro ao gerar pedágios para mapa: {e}")
-        return []
-
-def calcular_distancia_openroute_detalhada(origem, destino):
-    """
-    Versão detalhada do cálculo de distância usando OpenRoute Service
-    que inclui informações de polyline para APIs de pedágio
-    """
-    try:
-        url = "https://api.openrouteservice.org/v2/directions/driving-car"
-        headers = {
-            "Authorization": OPENROUTE_API_KEY
-        }
-        params = {
-            "start": f"{origem[1]},{origem[0]}",
-            "end": f"{destino[1]},{destino[0]}",
-            "format": "geojson"
-        }
-        
-        response = requests.get(url, headers=headers, params=params, timeout=15)
-        data = response.json()
-        
-        if "features" in data and data["features"]:
-            route = data["features"][0]
-            segments = route.get("properties", {}).get("segments", [{}])[0]
-            distance = segments.get("distance", 0) / 1000  # Converter para km
-            duration = segments.get("duration", 0) / 60  # Converter para minutos
-            geometry = route.get("geometry")
-            
-            # Extrair polyline para usar com APIs de pedágio
-            coordinates = geometry.get("coordinates", [])
-            polyline_encoded = None
-            
-            # Tentar gerar polyline (simplificado)
-            if coordinates:
-                try:
-                    import polyline
-                    # Converter coordenadas para formato lat,lng
-                    points = [[coord[1], coord[0]] for coord in coordinates]
-                    polyline_encoded = polyline.encode(points)
-                except:
-                    polyline_encoded = None
-            
-            route_points = [[coord[1], coord[0]] for coord in coordinates]
-            
-            return {
-                "distancia": distance,
-                "duracao": duration,
-                "rota_pontos": route_points,
-                "polyline": polyline_encoded,
-                "consumo_combustivel": distance * 0.12,
-                "pedagio_estimado": distance * 0.05,
-                "provider": "OpenRoute Service"
-            }
-        
-        return None
-        
-    except Exception as e:
-        print(f"[OPENROUTE] Erro ao calcular distância detalhada: {e}")
-        return None
 
 @app.route("/analisar-base")
 def analisar_base():
@@ -4814,6 +4419,7 @@ def analisar_base():
     except Exception as e:
         print(f"Erro na análise: {e}")
         return jsonify({'error': str(e)}), 500
+
 def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_nf=None):
     """
     Gera ranking das opções de frete dedicado no formato "all in"
