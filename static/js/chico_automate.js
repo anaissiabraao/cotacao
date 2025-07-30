@@ -487,6 +487,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (loading) loading.style.display = 'block';
 
         try {
+            console.log('[DEDICADO] Iniciando cálculo de frete dedicado');
+            
             const formData = {
                 uf_origem: document.getElementById('uf_origem').value,
                 municipio_origem: document.getElementById('municipio_origem').value,
@@ -498,28 +500,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
             console.log('[DEDICADO] Dados do formulário:', formData);
 
+            // Validar dados obrigatórios
+            if (!formData.uf_origem || !formData.municipio_origem || !formData.uf_destino || !formData.municipio_destino) {
+                throw new Error('Origem e destino são obrigatórios');
+            }
+
+            console.log('[DEDICADO] Enviando requisição para /calcular');
             const response = await fetch('/calcular', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
             });
 
-                if (!response.ok) {
-                    throw new Error(`Erro HTTP: ${response.status}`);
-                }
+            console.log('[DEDICADO] Status da resposta:', response.status);
+            console.log('[DEDICADO] Headers da resposta:', Object.fromEntries(response.headers.entries()));
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('[DEDICADO] Erro na resposta:', errorText);
+                throw new Error(`Erro HTTP: ${response.status} - ${errorText}`);
+            }
 
             const data = await response.json();
-            console.log('[DEDICADO] Resposta:', data);
+            console.log('[DEDICADO] Resposta recebida:', data);
                 
-                if (data.error) {
+            if (data.error) {
+                console.error('[DEDICADO] Erro nos dados:', data.error);
                 throw new Error(data.error);
             }
 
+            console.log('[DEDICADO] Chamando exibirResultadoDedicado');
             exibirResultadoDedicado(data);
 
         } catch (error) {
             console.error('[DEDICADO] Erro:', error);
-            showError(`Erro no cálculo dedicado: ${error.message}`);
+            showError(`Erro no cálculo dedicado: ${error.message}`, 'resultados-dedicado');
         } finally {
             if (loading) loading.style.display = 'none';
         }
@@ -1538,9 +1553,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             R$ ${opcao.custo_total.toFixed(2)}
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
-                            <strong>Peso:</strong> ${opcao.capacidade.peso_max}<br>
-                            <strong>Volume:</strong> ${opcao.capacidade.volume_max}<br>
-                            <span style="color: #007bff;">📅 ${opcao.prazo} dias</span>
+                            <strong>Peso Máximo Transportado:</strong> ${opcao.peso_maximo_agente || 'N/A'}<br>
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
                             <button class="btn btn-info btn-sm" onclick="toggleDetalhesOpcao(${index})" style="background: #17a2b8; border: none; color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem;">
@@ -1568,6 +1581,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 const detalhes = opcao.detalhes_expandidos || {};
                 const agentes = detalhes.agentes_info || {};
                 const rota_info = detalhes.rota_info || {};
+                
+                // Debug: verificar se os dados dos agentes estão chegando
+                console.log(`[DEBUG] Dados dos agentes para opção ${index}:`, agentes);
+                console.log(`[DEBUG] Dados da rota para opção ${index}:`, rota_info);
                 
                 if (agentes.agente_coleta && agentes.agente_coleta !== 'N/A') {
                     html += `
@@ -1602,52 +1619,148 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 html += `
                                         <div style="margin-top: 10px; padding: 8px; background: #f0f0f0; border-radius: 4px;">
-                                            <strong>⚖️ Peso Utilizado:</strong> ${rota_info.peso_cubado || opcao.peso_usado}kg<br>
-                                            <small>Tipo: ${rota_info.tipo_peso_usado || opcao.peso_usado_tipo} 
-                                            (Real: ${rota_info.peso_real || 'N/A'}kg, Cubado: ${(rota_info.cubagem || 0) * 300}kg)</small>
+                                            <strong>⚖️ Peso Utilizado:</strong> 
+                                            ${rota_info.peso_cubado ? rota_info.peso_cubado + ' kg' : (opcao.peso_usado ? opcao.peso_usado.replace('kg', '').trim() + ' kg' : 'N/A')}
+                                            <br>
+                                            <small>
+                                                Tipo: ${(rota_info.tipo_peso_usado || opcao.peso_usado_tipo) ? (rota_info.tipo_peso_usado || opcao.peso_usado_tipo) : 'Desconhecido'}
+                                                (Real: ${rota_info.peso_real ? rota_info.peso_real + ' kg' : 'N/A'}, Cubado: ${rota_info.cubagem ? (rota_info.cubagem * 300) + ' kg' : 'N/A'})
+                                            </small>
                                         </div>
                                     </div>
                                     
                                     <!-- Detalhamento de Custos -->
                                     <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;">
                                         <h5 style="color: #007bff; margin-bottom: 15px; font-size: 1rem;">
-                                            💰 Detalhamento de Custos
+                                            💰 Detalhamento de Custos por Agente
                                         </h5>
                                         <div id="custos-container-${index}">
                 `;
                 
-                // Exibir breakdown de custos
+                // Exibir breakdown de custos detalhado por agente
                 const custos = detalhes.custos_detalhados || {};
+                const dadosAgentes = detalhes.dados_agentes || {};
                 
+                // Agente de Coleta
+                if (agentes.agente_coleta && agentes.agente_coleta !== 'N/A') {
+                    const dadosColeta = dadosAgentes.agente_coleta || {};
+                    html += `
+                                        <div style="margin-bottom: 15px; padding: 12px; background: #e8f5e8; border-radius: 6px; border-left: 4px solid #28a745;">
+                                            <h6 style="color: #28a745; margin: 0 0 8px 0; font-weight: bold;">🚛 Agente de Coleta: ${agentes.agente_coleta}</h6>
+                                            <div style="font-family: 'Courier New', monospace; font-size: 0.85rem;">
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>💼 Custo Base:</span>
+                                                    <span>R$ ${(custos.custo_coleta || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>🛣️ Pedágio:</span>
+                                                    <span>R$ ${(custos.pedagio_coleta || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>📊 GRIS:</span>
+                                                    <span>R$ ${(custos.gris_coleta || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>🛡️ Seguro:</span>
+                                                    <span>R$ ${(custos.seguro_coleta || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 4px 0; margin-top: 4px; background: rgba(40, 167, 69, 0.1); border-radius: 3px; font-weight: bold;">
+                                                    <span>💰 Subtotal Coleta:</span>
+                                                    <span>R$ ${((custos.custo_coleta || 0) + (custos.pedagio_coleta || 0) + (custos.gris_coleta || 0) + (custos.seguro_coleta || 0)).toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                    `;
+                }
+                
+                // Transferência
+                if (agentes.transferencia && agentes.transferencia !== 'N/A') {
+                    const dadosTransferencia = dadosAgentes.transferencia || {};
+                    html += `
+                                        <div style="margin-bottom: 15px; padding: 12px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
+                                            <h6 style="color: #2196f3; margin: 0 0 8px 0; font-weight: bold;">🚚 Transferência: ${agentes.transferencia}</h6>
+                                            <div style="font-family: 'Courier New', monospace; font-size: 0.85rem;">
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>💼 Custo Base:</span>
+                                                    <span>R$ ${(custos.custo_transferencia || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>🛣️ Pedágio:</span>
+                                                    <span>R$ ${(custos.pedagio_transferencia || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>📊 GRIS:</span>
+                                                    <span>R$ ${(custos.gris_transferencia || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>🛡️ Seguro:</span>
+                                                    <span>R$ ${(custos.seguro_transferencia || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 4px 0; margin-top: 4px; background: rgba(33, 150, 243, 0.1); border-radius: 3px; font-weight: bold;">
+                                                    <span>💰 Subtotal Transferência:</span>
+                                                    <span>R$ ${((custos.custo_transferencia || 0) + (custos.pedagio_transferencia || 0) + (custos.gris_transferencia || 0) + (custos.seguro_transferencia || 0)).toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                    `;
+                }
+                
+                // Agente de Entrega
+                if (agentes.agente_entrega && agentes.agente_entrega !== 'N/A') {
+                    const dadosEntrega = dadosAgentes.agente_entrega || {};
+                    html += `
+                                        <div style="margin-bottom: 15px; padding: 12px; background: #fff3e0; border-radius: 6px; border-left: 4px solid #ff9800;">
+                                            <h6 style="color: #ff9800; margin: 0 0 8px 0; font-weight: bold;">🚛 Agente de Entrega: ${agentes.agente_entrega}</h6>
+                                            <div style="font-family: 'Courier New', monospace; font-size: 0.85rem;">
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>💼 Custo Base:</span>
+                                                    <span>R$ ${(custos.custo_entrega || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>🛣️ Pedágio:</span>
+                                                    <span>R$ ${(custos.pedagio_entrega || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>📊 GRIS:</span>
+                                                    <span>R$ ${(custos.gris_entrega || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 2px 0;">
+                                                    <span>🛡️ Seguro:</span>
+                                                    <span>R$ ${(custos.seguro_entrega || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 4px 0; margin-top: 4px; background: rgba(255, 152, 0, 0.1); border-radius: 3px; font-weight: bold;">
+                                                    <span>💰 Subtotal Entrega:</span>
+                                                    <span>R$ ${((custos.custo_entrega || 0) + (custos.pedagio_entrega || 0) + (custos.gris_entrega || 0) + (custos.seguro_entrega || 0)).toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                    `;
+                }
+                
+                // Total Geral
                 html += `
-                                        <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
-                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                                                <span>💼 Custo Base Frete:</span>
-                                                <span><strong>R$ ${(custos.custo_base_frete || 0).toFixed(2)}</strong></span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                                                <span>🛣️ Pedágio:</span>
-                                                <span>R$ ${(custos.pedagio || 0).toFixed(2)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                                                <span>📊 GRIS:</span>
-                                                <span>R$ ${(custos.gris || 0).toFixed(2)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                                                <span>🛡️ Seguro:</span>
-                                                <span>R$ ${(custos.seguro || 0).toFixed(2)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                                                <span>💳 ICMS:</span>
-                                                <span>R$ ${(custos.icms || 0).toFixed(2)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
-                                                <span>📋 Outros:</span>
-                                                <span>R$ ${(custos.outros || 0).toFixed(2)}</span>
-                                            </div>
-                                            <div style="display: flex; justify-content: space-between; padding: 8px 0; margin-top: 10px; background: #e8f5e8; border-radius: 4px; font-weight: bold; font-size: 1rem;">
-                                                <span>💰 TOTAL:</span>
-                                                <span style="color: #28a745;">R$ ${opcao.custo_total.toFixed(2)}</span>
+                                        <div style="margin-top: 15px; padding: 12px; background: #e8f5e8; border-radius: 6px; border: 2px solid #28a745;">
+                                            <h6 style="color: #28a745; margin: 0 0 8px 0; font-weight: bold;">💰 RESUMO GERAL</h6>
+                                            <div style="font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                                                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                    <span>💼 Custo Base Total:</span>
+                                                    <span><strong>R$ ${(custos.custo_base_frete || 0).toFixed(2)}</strong></span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                    <span>🛣️ Pedágio Total:</span>
+                                                    <span>R$ ${(custos.pedagio || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                    <span>📊 GRIS Total:</span>
+                                                    <span>R$ ${(custos.gris || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted #ccc;">
+                                                    <span>🛡️ Seguro Total:</span>
+                                                    <span>R$ ${(custos.seguro || 0).toFixed(2)}</span>
+                                                </div>
+                                                <div style="display: flex; justify-content: space-between; padding: 6px 0; margin-top: 8px; background: #28a745; color: white; border-radius: 4px; font-weight: bold; font-size: 1rem;">
+                                                    <span>💰 TOTAL GERAL:</span>
+                                                    <span>R$ ${opcao.custo_total.toFixed(2)}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -1771,6 +1884,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const rankingData = window.ultimoRankingFracionado;
         if (!rankingData || !rankingData.ranking_opcoes || !rankingData.ranking_opcoes[opcaoIndex]) {
             console.error('[AGENTE-CLICK] Dados da opção não encontrados');
+            console.error('[AGENTE-CLICK] rankingData:', rankingData);
+            console.error('[AGENTE-CLICK] ranking_opcoes:', rankingData?.ranking_opcoes);
             return;
         }
         
@@ -1778,6 +1893,12 @@ document.addEventListener('DOMContentLoaded', function() {
         const detalhes = opcao.detalhes_expandidos || {};
         const agentes = detalhes.agentes_info || {};
         const rota_info = detalhes.rota_info || {};
+        
+        // Debug: verificar estrutura dos dados
+        console.log(`[AGENTE-CLICK] Estrutura da opção:`, opcao);
+        console.log(`[AGENTE-CLICK] Detalhes expandidos:`, detalhes);
+        console.log(`[AGENTE-CLICK] Agentes info:`, agentes);
+        console.log(`[AGENTE-CLICK] Rota info:`, rota_info);
         
         // Preparar informações específicas do agente clicado
         let agenteInfo = {};
@@ -2031,45 +2152,111 @@ document.addEventListener('DOMContentLoaded', function() {
         const mapaSection = document.getElementById('mapa-section-dedicado');
         const mapContainer = document.getElementById('map-dedicado');
         
+        console.log('[DEDICADO] Iniciando exibição de resultados');
+        console.log('[DEDICADO] Container encontrado:', !!container);
+        console.log('[DEDICADO] Dados recebidos:', data);
+
         if (!container) {
             console.error('[DEDICADO] Container resultados-dedicado não encontrado');
+            showError('Container de resultados não encontrado. Recarregue a página.', 'resultados-dedicado');
             return;
         }
 
-        console.log('[DEDICADO] Dados recebidos:', data);
+        // Verificar se temos dados válidos
+        if (!data) {
+            console.error('[DEDICADO] Dados vazios recebidos');
+            showError('Nenhum dado recebido do servidor.', 'resultados-dedicado');
+            return;
+        }
 
         // Verificar se temos dados de ranking (novo formato All In)
         if (data.ranking_dedicado && data.ranking_dedicado.ranking_opcoes) {
+            console.log('[DEDICADO] Usando formato All In');
             exibirResultadoAllInDedicado(data);
             return;
         }
 
-        // Formato antigo - exibir seção All In customizada
-        const allInSection = container.querySelector('.all-in-section');
-        if (allInSection) {
-            allInSection.style.display = 'block';
-            
-            // Preparar dados para o formato All In
-            const veiculosOrdenados = Object.entries(data.custos || {}).sort(([,a], [,b]) => a - b);
-            const melhorOpcao = veiculosOrdenados[0];
-            const totalOpcoes = veiculosOrdenados.length;
-            
-            // Atualizar estatísticas
-            document.getElementById('total-opcoes-dedicado').textContent = totalOpcoes;
-            document.getElementById('melhor-opcao-dedicado').textContent = melhorOpcao ? melhorOpcao[0] : '-';
-            
-            // Calcular economia (diferença entre pior e melhor)
-            if (veiculosOrdenados.length > 1) {
-                const piorPreco = veiculosOrdenados[veiculosOrdenados.length - 1][1];
-                const melhorPreco = melhorOpcao[1];
-                const economia = ((piorPreco - melhorPreco) / piorPreco * 100).toFixed(1);
-                document.getElementById('economia-dedicado').textContent = `${economia}%`;
-            } else {
-                document.getElementById('economia-dedicado').textContent = '-';
-            }
-            
-            // Criar lista de ranking
-            const rankingList = document.getElementById('ranking-list-dedicado');
+        // Verificar se temos custos básicos
+        if (!data.custos || Object.keys(data.custos).length === 0) {
+            console.error('[DEDICADO] Nenhum custo encontrado nos dados');
+            showError('Nenhum custo de frete encontrado para esta rota.', 'resultados-dedicado');
+            return;
+        }
+
+        console.log('[DEDICADO] Custos encontrados:', data.custos);
+
+        // Criar estrutura HTML se não existir
+        let allInSection = container.querySelector('.all-in-section');
+        if (!allInSection) {
+            console.log('[DEDICADO] Criando estrutura HTML para resultados');
+            container.innerHTML = `
+                <div class="all-in-section" style="display: block;">
+                    <div class="card">
+                        <h3><i class="fa-solid fa-trophy"></i> Ranking de Veículos - Frete Dedicado</h3>
+                        
+                        <!-- Estatísticas -->
+                        <div class="stats-container" style="display: flex; justify-content: space-around; margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                            <div class="stat-item">
+                                <div class="stat-value" id="total-opcoes-dedicado">0</div>
+                                <div class="stat-label">Total de Opções</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="melhor-opcao-dedicado">-</div>
+                                <div class="stat-label">Melhor Opção</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-value" id="economia-dedicado">-</div>
+                                <div class="stat-label">Economia</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Lista de Ranking -->
+                        <div id="ranking-list-dedicado" class="ranking-list" style="margin-top: 20px;"></div>
+                        
+                        <!-- Detalhes do Veículo Selecionado -->
+                        <div id="detalhes-veiculo-dedicado" class="detalhes-veiculo" style="margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px; display: none;">
+                            <h4><i class="fa-solid fa-info-circle"></i> Detalhes do Veículo</h4>
+                            <div id="detalhes-content"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            allInSection = container.querySelector('.all-in-section');
+        }
+        
+        console.log('[DEDICADO] Exibindo seção All In');
+        allInSection.style.display = 'block';
+        
+        // Preparar dados para o formato All In
+        const veiculosOrdenados = Object.entries(data.custos || {}).sort(([,a], [,b]) => a - b);
+        const melhorOpcao = veiculosOrdenados[0];
+        const totalOpcoes = veiculosOrdenados.length;
+        
+        console.log('[DEDICADO] Veículos ordenados:', veiculosOrdenados);
+        console.log('[DEDICADO] Melhor opção:', melhorOpcao);
+        console.log('[DEDICADO] Total de opções:', totalOpcoes);
+        
+        // Atualizar estatísticas
+        const totalOpcoesElement = document.getElementById('total-opcoes-dedicado');
+        const melhorOpcaoElement = document.getElementById('melhor-opcao-dedicado');
+        const economiaElement = document.getElementById('economia-dedicado');
+        
+        if (totalOpcoesElement) totalOpcoesElement.textContent = totalOpcoes;
+        if (melhorOpcaoElement) melhorOpcaoElement.textContent = melhorOpcao ? melhorOpcao[0] : '-';
+        
+        // Calcular economia (diferença entre pior e melhor)
+        if (veiculosOrdenados.length > 1) {
+            const piorPreco = veiculosOrdenados[veiculosOrdenados.length - 1][1];
+            const melhorPreco = melhorOpcao[1];
+            const economia = ((piorPreco - melhorPreco) / piorPreco * 100).toFixed(1);
+            if (economiaElement) economiaElement.textContent = `${economia}%`;
+        } else {
+            if (economiaElement) economiaElement.textContent = '-';
+        }
+        
+        // Criar lista de ranking
+        const rankingList = document.getElementById('ranking-list-dedicado');
+        if (rankingList) {
             let rankingHtml = '';
             
             veiculosOrdenados.forEach(([tipo, valor], index) => {
@@ -2098,39 +2285,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 
                 rankingHtml += `
-                    <div class="ranking-item" data-veiculo="${tipo}" onclick="exibirDetalhesVeiculoDedicado('${tipo}', ${valor}, '${veiculo.descricao}', '${veiculo.peso}', '${veiculo.volume}')" ${destaque}>
-                        <div class="ranking-header">
-                            <span class="ranking-position">${medalha} ${index + 1}º</span>
-                            <span class="ranking-price">R$ ${valor.toFixed(2)}</span>
+                    <div class="ranking-item" data-veiculo="${tipo}" onclick="exibirDetalhesVeiculoDedicado('${tipo}', ${valor}, '${veiculo.descricao}', '${veiculo.peso}', '${veiculo.volume}')" ${destaque} style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; cursor: pointer; transition: all 0.3s;">
+                        <div class="ranking-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <span class="ranking-position" style="font-weight: bold; font-size: 1.1em;">${medalha} ${index + 1}º</span>
+                            <span class="ranking-price" style="font-weight: bold; color: #0a6ed1; font-size: 1.2em;">R$ ${valor.toFixed(2)}</span>
                         </div>
-                        <div class="ranking-info">
-                            <div class="veiculo-info">
-                                <span class="veiculo-icon">${veiculo.icon}</span>
+                        <div class="ranking-info" style="display: flex; justify-content: space-between; align-items: center;">
+                            <div class="veiculo-info" style="display: flex; align-items: center;">
+                                <span class="veiculo-icon" style="font-size: 2em; margin-right: 10px;">${veiculo.icon}</span>
                                 <div class="veiculo-details">
-                                    <div class="veiculo-name">${tipo}</div>
-                                    <div class="veiculo-desc">${veiculo.descricao}</div>
+                                    <div class="veiculo-name" style="font-weight: bold; font-size: 1.1em;">${tipo}</div>
+                                    <div class="veiculo-desc" style="color: #666; font-size: 0.9em;">${veiculo.descricao}</div>
                                 </div>
                             </div>
-                            <div class="capacidade-info">
+                            <div class="capacidade-info" style="text-align: right; font-size: 0.9em;">
                                 <div>📦 ${veiculo.peso}</div>
                                 <div>📏 ${veiculo.volume}</div>
                             </div>
+                        </div>
                     </div>
-                </div>
-            `;
+                `;
             });
             
             rankingList.innerHTML = rankingHtml;
+            console.log('[DEDICADO] Ranking HTML gerado:', rankingHtml.length, 'caracteres');
             
             // Selecionar automaticamente a melhor opção
             if (melhorOpcao) {
                 const melhorVeiculo = capacidades[melhorOpcao[0]] || { descricao: 'Veículo', peso: 'N/A', volume: 'N/A' };
                 exibirDetalhesVeiculoDedicado(melhorOpcao[0], melhorOpcao[1], melhorVeiculo.descricao, melhorVeiculo.peso, melhorVeiculo.volume);
             }
+        } else {
+            console.error('[DEDICADO] Elemento ranking-list-dedicado não encontrado');
         }
         
         // Mostrar análise se disponível
         if (data.analise && analiseContainer) {
+            console.log('[DEDICADO] Exibindo análise da rota');
             let analiseHtml = `
                 <div class="analise-container">
                     <div class="analise-title">📍 Informações da Rota</div>
@@ -2144,6 +2335,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             `;
             analiseContainer.innerHTML = analiseHtml;
+        } else {
+            console.warn('[DEDICADO] Análise não disponível ou container não encontrado');
         }
         
         // Definir capacidades para uso nas funções
@@ -2283,104 +2476,113 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Função para exibir detalhes do veículo dedicado
     function exibirDetalhesVeiculoDedicado(tipo, valor, descricao, peso, volume) {
-        const detailsContainer = document.getElementById('details-content-dedicado');
-        if (!detailsContainer) return;
+        const detailsContainer = document.getElementById('detalhes-content');
+        if (!detailsContainer) {
+            console.error('[DEDICADO] Container detalhes-content não encontrado');
+            return;
+        }
+        
+        console.log('[DEDICADO] Exibindo detalhes do veículo:', tipo, valor);
         
         // Destacar item selecionado
         document.querySelectorAll('#ranking-list-dedicado .ranking-item').forEach(item => {
-            item.classList.remove('selected');
+            item.style.border = '1px solid #ddd';
         });
-        document.querySelector(`[data-veiculo="${tipo}"]`).classList.add('selected');
+        const selectedItem = document.querySelector(`[data-veiculo="${tipo}"]`);
+        if (selectedItem) {
+            selectedItem.style.border = '2px solid #0a6ed1';
+            selectedItem.style.boxShadow = '0 2px 8px rgba(10, 110, 209, 0.3)';
+        }
         
         const capacidades = window.capacidadesDedicado || {};
         const veiculo = capacidades[tipo] || { icon: '🚛', descricao: 'Veículo', peso: 'N/A', volume: 'N/A' };
         
         const detailsHtml = `
-            <div class="vehicle-details">
-                <div class="vehicle-header">
-                    <div class="vehicle-icon-large">${veiculo.icon}</div>
-                    <div class="vehicle-title">
-                        <h4>${tipo}</h4>
-                        <p>${descricao}</p>
+            <div class="vehicle-details" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <div class="vehicle-header" style="display: flex; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
+                    <div class="vehicle-icon-large" style="font-size: 3em; margin-right: 15px;">${veiculo.icon}</div>
+                    <div class="vehicle-title" style="flex: 1;">
+                        <h4 style="margin: 0; color: #0a6ed1; font-size: 1.5em;">${tipo}</h4>
+                        <p style="margin: 5px 0 0 0; color: #666;">${descricao}</p>
                     </div>
-                    <div class="vehicle-price">
-                        <span class="price-label">Preço Total</span>
-                        <span class="price-value">R$ ${valor.toFixed(2)}</span>
-                    </div>
-                </div>
-                
-                <div class="vehicle-specs">
-                    <h5><i class="fa-solid fa-cogs"></i> Especificações Técnicas</h5>
-                    <div class="specs-grid">
-                        <div class="spec-item">
-                            <span class="spec-icon">⚖️</span>
-                            <div class="spec-info">
-                                <span class="spec-label">Capacidade de Peso</span>
-                                <span class="spec-value">${peso}</span>
-                            </div>
-                        </div>
-                        <div class="spec-item">
-                            <span class="spec-icon">📦</span>
-                            <div class="spec-info">
-                                <span class="spec-label">Volume Útil</span>
-                                <span class="spec-value">${volume}</span>
-                            </div>
-                        </div>
-                        <div class="spec-item">
-                            <span class="spec-icon">🚛</span>
-                            <div class="spec-info">
-                                <span class="spec-label">Tipo de Veículo</span>
-                                <span class="spec-value">${descricao}</span>
-                            </div>
-                        </div>
-                        <div class="spec-item">
-                            <span class="spec-icon">🛣️</span>
-                            <div class="spec-info">
-                                <span class="spec-label">Modalidade</span>
-                                <span class="spec-value">Frete Dedicado</span>
-                            </div>
-                        </div>
+                    <div class="vehicle-price" style="text-align: right;">
+                        <span class="price-label" style="display: block; font-size: 0.9em; color: #666;">Preço Total</span>
+                        <span class="price-value" style="display: block; font-size: 2em; font-weight: bold; color: #28a745;">R$ ${valor.toFixed(2)}</span>
                     </div>
                 </div>
                 
-                <div class="vehicle-advantages">
-                    <h5><i class="fa-solid fa-star"></i> Vantagens</h5>
-                    <div class="advantages-list">
+                <div class="vehicle-specs" style="margin-bottom: 20px;">
+                    <h5 style="color: #0a6ed1; margin-bottom: 15px;"><i class="fa-solid fa-cogs"></i> Especificações Técnicas</h5>
+                    <div class="specs-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                        <div class="spec-item" style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                            <span class="spec-icon" style="font-size: 1.5em; margin-right: 10px;">⚖️</span>
+                            <div class="spec-info">
+                                <span class="spec-label" style="display: block; font-size: 0.8em; color: #666;">Capacidade de Peso</span>
+                                <span class="spec-value" style="display: block; font-weight: bold;">${peso}</span>
+                            </div>
+                        </div>
+                        <div class="spec-item" style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                            <span class="spec-icon" style="font-size: 1.5em; margin-right: 10px;">📦</span>
+                            <div class="spec-info">
+                                <span class="spec-label" style="display: block; font-size: 0.8em; color: #666;">Volume Útil</span>
+                                <span class="spec-value" style="display: block; font-weight: bold;">${volume}</span>
+                            </div>
+                        </div>
+                        <div class="spec-item" style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                            <span class="spec-icon" style="font-size: 1.5em; margin-right: 10px;">🚛</span>
+                            <div class="spec-info">
+                                <span class="spec-label" style="display: block; font-size: 0.8em; color: #666;">Tipo de Veículo</span>
+                                <span class="spec-value" style="display: block; font-weight: bold;">${descricao}</span>
+                            </div>
+                        </div>
+                        <div class="spec-item" style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                            <span class="spec-icon" style="font-size: 1.5em; margin-right: 10px;">🛣️</span>
+                            <div class="spec-info">
+                                <span class="spec-label" style="display: block; font-size: 0.8em; color: #666;">Modalidade</span>
+                                <span class="spec-value" style="display: block; font-weight: bold;">Frete Dedicado</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="vehicle-advantages" style="margin-bottom: 20px;">
+                    <h5 style="color: #0a6ed1; margin-bottom: 15px;"><i class="fa-solid fa-star"></i> Vantagens</h5>
+                    <div class="advantages-list" style="background: #f8f9fa; padding: 15px; border-radius: 6px;">
                         ${getVehicleAdvantages(tipo)}
                     </div>
                 </div>
                 
-                <div class="vehicle-cost-breakdown">
-                    <h5><i class="fa-solid fa-calculator"></i> Composição do Custo</h5>
-                    <div class="cost-items">
-                        <div class="cost-item">
+                <div class="vehicle-cost-breakdown" style="margin-bottom: 20px;">
+                    <h5 style="color: #0a6ed1; margin-bottom: 15px;"><i class="fa-solid fa-calculator"></i> Composição do Custo</h5>
+                    <div class="cost-items" style="background: #f8f9fa; padding: 15px; border-radius: 6px;">
+                        <div class="cost-item" style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span class="cost-label">🚛 Frete Base</span>
                             <span class="cost-value">R$ ${(valor * 0.7).toFixed(2)}</span>
                         </div>
-                        <div class="cost-item">
+                        <div class="cost-item" style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span class="cost-label">⛽ Combustível</span>
                             <span class="cost-value">R$ ${(valor * 0.15).toFixed(2)}</span>
                         </div>
-                        <div class="cost-item">
+                        <div class="cost-item" style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span class="cost-label">🛣️ Pedágios</span>
                             <span class="cost-value">R$ ${(valor * 0.08).toFixed(2)}</span>
                         </div>
-                        <div class="cost-item">
+                        <div class="cost-item" style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                             <span class="cost-label">📋 Outros</span>
                             <span class="cost-value">R$ ${(valor * 0.07).toFixed(2)}</span>
                         </div>
-                        <div class="cost-total">
+                        <div class="cost-total" style="display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 2px solid #0a6ed1;">
                             <span class="cost-label"><strong>💰 Total</strong></span>
                             <span class="cost-value"><strong>R$ ${valor.toFixed(2)}</strong></span>
                         </div>
                     </div>
                 </div>
                 
-                <div class="vehicle-actions">
-                    <button class="btn-primary" onclick="selecionarVeiculoDedicado('${tipo}', ${valor})">
+                <div class="vehicle-actions" style="display: flex; gap: 10px; justify-content: center;">
+                    <button class="btn-primary" onclick="selecionarVeiculoDedicado('${tipo}', ${valor})" style="padding: 12px 24px; font-size: 1.1em;">
                         <i class="fa-solid fa-check"></i> Selecionar Este Veículo
                     </button>
-                    <button class="btn-secondary" onclick="exportarCotacaoDedicado('${tipo}', ${valor})">
+                    <button class="btn-secondary" onclick="exportarCotacaoDedicado('${tipo}', ${valor})" style="padding: 12px 24px; font-size: 1.1em;">
                         <i class="fa-solid fa-download"></i> Exportar Cotação
                     </button>
                 </div>
@@ -2389,12 +2591,13 @@ document.addEventListener('DOMContentLoaded', function() {
         
         detailsContainer.innerHTML = detailsHtml;
         
-        // Animação de entrada
-        detailsContainer.style.opacity = '0';
-        setTimeout(() => {
-            detailsContainer.style.transition = 'opacity 0.3s ease';
-            detailsContainer.style.opacity = '1';
-        }, 50);
+        // Mostrar o container de detalhes
+        const detalhesContainer = document.getElementById('detalhes-veiculo-dedicado');
+        if (detalhesContainer) {
+            detalhesContainer.style.display = 'block';
+        }
+        
+        console.log('[DEDICADO] Detalhes do veículo exibidos com sucesso');
     }
 
     // Função para obter vantagens específicas do veículo
