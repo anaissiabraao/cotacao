@@ -1026,8 +1026,45 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                     (df_diretos['Destino'].str.contains(destino_norm[:5], case=False, na=False))
                 ]
                 print(f"[DEBUG] Busca por similaridade encontrou: {len(servicos_diretos_sim)}")
+                
+                # 🔧 CORREÇÃO: Filtrar por UF para evitar confusão entre cidades com nomes similares
                 if len(servicos_diretos_sim) > 0:
-                    servicos_diretos = servicos_diretos_sim
+                    # Verificar se há colunas de UF na base
+                    if 'UF Origem' in df_diretos.columns and 'UF Destino' in df_diretos.columns:
+                        servicos_diretos_filtrados = servicos_diretos_sim[
+                            (servicos_diretos_sim['UF Origem'] == uf_origem) &
+                            (servicos_diretos_sim['UF Destino'] == uf_destino)
+                        ]
+                        if len(servicos_diretos_filtrados) > 0:
+                            servicos_diretos = servicos_diretos_filtrados
+                            print(f"[DEBUG] Busca por similaridade filtrada por UF: {len(servicos_diretos)}")
+                        else:
+                            print(f"[DEBUG] Busca por similaridade rejeitada - UFs não correspondem")
+                    else:
+                        # Se não há colunas de UF, usar validação manual
+                        servicos_validos_sim = []
+                        for _, servico in servicos_diretos_sim.iterrows():
+                            servico_origem = normalizar_cidade_nome(str(servico['Origem']))
+                            servico_destino = normalizar_cidade_nome(str(servico['Destino']))
+                            
+                            # Verificar se a similaridade é muito forte (pelo menos 80% do nome)
+                            origem_similar = (
+                                servico_origem.startswith(origem_norm[:6]) or 
+                                origem_norm.startswith(servico_origem[:6])
+                            )
+                            destino_similar = (
+                                servico_destino.startswith(destino_norm[:6]) or 
+                                destino_norm.startswith(servico_destino[:6])
+                            )
+                            
+                            if origem_similar and destino_similar:
+                                servicos_validos_sim.append(servico)
+                        
+                        if len(servicos_validos_sim) > 0:
+                            servicos_diretos = pd.DataFrame(servicos_validos_sim)
+                            print(f"[DEBUG] Busca por similaridade validada: {len(servicos_diretos)}")
+                        else:
+                            print(f"[DEBUG] Busca por similaridade rejeitada - similaridade insuficiente")
             
             # ADICIONAR: Buscar ML, GRITSCH e EXPRESSO S. MIGUEL mesmo que estejam como Agente (tratamento especial)
             # Otimização: Pré-filtrar por fornecedor para melhorar performance
@@ -1047,8 +1084,41 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                     (df_ml_gritsch['Destino'].str.contains(destino_norm, case=False, na=False))
                 ]
                 print(f"[DEBUG] Busca flexível ML/GRITSCH/EXPRESSO S. MIGUEL encontrou: {len(ml_gritsch_flex)}")
+                
+                # 🔧 CORREÇÃO: Validar busca flexível para evitar confusão entre cidades
                 if len(ml_gritsch_flex) > 0:
-                    ml_gritsch_services = ml_gritsch_flex
+                    ml_gritsch_validos = []
+                    for _, servico in ml_gritsch_flex.iterrows():
+                        servico_origem = normalizar_cidade_nome(str(servico['Origem']))
+                        servico_destino = normalizar_cidade_nome(str(servico['Destino']))
+                        
+                        # Verificar se não são cidades diferentes
+                        origem_valida = (
+                            servico_origem == origem_norm or
+                            (origem_norm in servico_origem and len(origem_norm) >= 4) or
+                            (servico_origem in origem_norm and len(servico_origem) >= 4)
+                        )
+                        
+                        destino_valido = (
+                            servico_destino == destino_norm or
+                            (destino_norm in servico_destino and len(destino_norm) >= 4) or
+                            (servico_destino in destino_norm and len(servico_destino) >= 4)
+                        )
+                        
+                        # 🔧 CORREÇÃO ESPECÍFICA: IMPERATRIZ vs SANTO AMARO DA IMPERATRIZ
+                        if destino_norm == 'IMPERATRIZ' and 'SANTO AMARO DA IMPERATRIZ' in servico_destino:
+                            destino_valido = False
+                        elif destino_norm == 'SANTO AMARO DA IMPERATRIZ' and servico_destino == 'IMPERATRIZ':
+                            destino_valido = False
+                        
+                        if origem_valida and destino_valido:
+                            ml_gritsch_validos.append(servico)
+                    
+                    if len(ml_gritsch_validos) > 0:
+                        ml_gritsch_services = pd.DataFrame(ml_gritsch_validos)
+                        print(f"[DEBUG] Busca flexível ML/GRITSCH/EXPRESSO S. MIGUEL validada: {len(ml_gritsch_services)}")
+                    else:
+                        print(f"[DEBUG] Busca flexível ML/GRITSCH/EXPRESSO S. MIGUEL rejeitada - cidades não correspondem")
             
             # Combinar resultados (serviços diretos + ML + GRITSCH + EXPRESSO S. MIGUEL)
             import pandas as pd
@@ -1081,6 +1151,18 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                     # Exemplo: "PRADO" não deve corresponder a "ANTONIO PRADO" ou "PRADO FERREIRA"
                     if destino_norm == 'PRADO':
                         if 'ANTONIO PRADO' in servico_destino or 'PRADO FERREIRA' in servico_destino:
+                            destino_valido = False
+                            print(f"[FRACIONADO] ❌ Rejeitando cidade diferente: {servico_destino} (solicitado: {destino_norm})")
+                    
+                    # 🔧 CORREÇÃO ESPECÍFICA: IMPERATRIZ vs SANTO AMARO DA IMPERATRIZ
+                    if destino_norm == 'IMPERATRIZ':
+                        if 'SANTO AMARO DA IMPERATRIZ' in servico_destino:
+                            destino_valido = False
+                            print(f"[FRACIONADO] ❌ Rejeitando cidade diferente: {servico_destino} (solicitado: {destino_norm})")
+                    
+                    # 🔧 CORREÇÃO ESPECÍFICA: SANTO AMARO DA IMPERATRIZ vs IMPERATRIZ
+                    if destino_norm == 'SANTO AMARO DA IMPERATRIZ':
+                        if servico_destino == 'IMPERATRIZ':
                             destino_valido = False
                             print(f"[FRACIONADO] ❌ Rejeitando cidade diferente: {servico_destino} (solicitado: {destino_norm})")
                     
@@ -1632,6 +1714,11 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             df_agentes_destino_uf['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
         ]
         
+        # 🔧 CORREÇÃO: Se origem e destino são do mesmo estado, filtrar agentes apenas do estado correto
+        if uf_origem == uf_destino:
+            print(f"[AGENTES] 🔍 Origem e destino são do mesmo estado ({uf_origem}) - filtrando agentes apenas deste estado")
+            agentes_destino = agentes_destino[agentes_destino['UF'] == uf_destino]
+        
         # 🔧 CORREÇÃO: Verificar se faltam agentes exatos - SER CONSERVADOR
         if agentes_origem.empty:
             agentes_faltando['origem'] = True
@@ -1871,11 +1958,13 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             # MÉTODO 3: Buscar transferências via estados ADJACENTES apenas
             print(f"[TRANSFERENCIAS] 🌍 MÉTODO 3: Buscando transferências via estados adjacentes...")
             
-            # Para RS → SC, só considerar estados que fazem fronteira direta
-            estados_proximos = []
+            # Se origem e destino são do mesmo estado, não precisa de estado intermediário
+            if uf_origem == uf_destino:
+                print(f"[TRANSFERENCIAS] ✅ {uf_origem} e {uf_destino} são o mesmo estado - não precisa intermediário")
+                estados_proximos = []  # Sem estados intermediários necessários
             
-            # Se origem é RS e destino é SC, são adjacentes diretos
-            if uf_origem == 'RS' and uf_destino == 'SC':
+            # Para RS → SC, só considerar estados que fazem fronteira direta
+            elif uf_origem == 'RS' and uf_destino == 'SC':
                 print(f"[TRANSFERENCIAS] ✅ {uf_origem} e {uf_destino} são estados adjacentes")
                 # Não precisa de estado intermediário, mas vamos buscar rotas via cidades principais
                 # Focar em cidades de divisa ou principais
@@ -2043,22 +2132,23 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                     )
                                     transf_para_base = df_transferencias[mask]
                 
-                # 🆕 CORREÇÃO: Se ainda não encontrou, buscar transferências que chegam no estado do agente
+                # 🆕 CORREÇÃO: Se ainda não encontrou, buscar transferências que conectem origem com destino
                 if transf_para_base.empty:
-                    print(f"[TRANSFERENCIAS] 🔍 Buscando transferências para o estado do agente {base_uf}...")
-                    # Buscar transferências que chegam no estado do agente (não necessariamente na cidade exata)
+                    print(f"[TRANSFERENCIAS] 🔍 Buscando transferências que conectem {uf_origem} → {uf_destino}...")
+                    # Buscar transferências que conectem os estados de origem e destino
                     if 'UF' in df_transferencias.columns:
-                        # Buscar transferências que mencionam o estado destino
+                        # Buscar transferências que conectem os estados
                         transf_para_base = df_transferencias[
-                            (df_transferencias['UF'].str.contains(base_uf, case=False, na=False)) |
-                            (df_transferencias['Base Destino'].str.contains(base_uf, case=False, na=False)) |
-                            (df_transferencias['Destino'].str.contains(base_uf, case=False, na=False))
+                            (df_transferencias['UF'].str.contains(f"{uf_origem}-{uf_destino}", case=False, na=False)) |
+                            (df_transferencias['UF'].str.contains(f"{uf_destino}-{uf_origem}", case=False, na=False)) |
+                            ((df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) &
+                             (df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)))
                         ]
                     else:
-                        # Fallback: buscar por padrões na coluna Base Destino ou Destino
+                        # Fallback: buscar por padrões nas colunas Base Origem e Base Destino
                         transf_para_base = df_transferencias[
-                            (df_transferencias['Base Destino'].str.contains(base_uf, case=False, na=False)) |
-                            (df_transferencias['Destino'].str.contains(base_uf, case=False, na=False))
+                            ((df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) &
+                             (df_transferencias['Base Destino'].str.contains(uf_destino, case=False, na=False)))
                         ]
                 
                 if not transf_para_base.empty:
