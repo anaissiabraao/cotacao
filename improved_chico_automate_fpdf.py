@@ -1061,6 +1061,7 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                                 servicos_validos_sim.append(servico)
                         
                         if len(servicos_validos_sim) > 0:
+                            import pandas as pd
                             servicos_diretos = pd.DataFrame(servicos_validos_sim)
                             print(f"[DEBUG] Busca por similaridade validada: {len(servicos_diretos)}")
                         else:
@@ -1115,6 +1116,7 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                             ml_gritsch_validos.append(servico)
                     
                     if len(ml_gritsch_validos) > 0:
+                        import pandas as pd
                         ml_gritsch_services = pd.DataFrame(ml_gritsch_validos)
                         print(f"[DEBUG] Busca flexível ML/GRITSCH/EXPRESSO S. MIGUEL validada: {len(ml_gritsch_services)}")
                     else:
