@@ -1884,25 +1884,27 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     estados_proximos = []  # São adjacentes, não precisa intermediário
                 else:
                     # Encontrar estado intermediário comum
+                    estados_proximos = []
                     for estado_inter in ['SC', 'PR']:  # Apenas estados do Sul
                         if (estado_inter in proximidade_estados.get(uf_origem, []) and 
                             uf_destino in proximidade_estados.get(estado_inter, [])):
                             estados_proximos.append((estado_inter, 1))
                             break
+            # Para outros casos (ES → SP, etc.)
+            else:
+                estados_proximos = []
+            
             # Máximo de estados intermediários a tentar
             max_estados_intermediarios = 2  # Reduzido para focar apenas em rotas diretas
             estados_tentados = 0
             max_transferencias = 5  # Limite reduzido
             
             # Buscar transferências via estados intermediários próximos
-            print(f"[TRANSFERENCIAS] 🔍 Buscando por estados intermediários: {[e[0] for e in estados_proximos[:max_estados_intermediarios]]}")
-            
             for estado_intermediario, nivel_proximidade in estados_proximos:
                 if estados_tentados >= max_estados_intermediarios or len(transferencias_origem_destino) >= max_transferencias:
                     break
                 
                 estados_tentados += 1
-                print(f"[TRANSFERENCIAS] 🔄 Tentando via estado {estado_intermediario} (proximidade: {nivel_proximidade})")
                 
                 # Buscar transferências que passam pelo estado intermediário
                 try:
@@ -1960,17 +1962,14 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         if not agentes_entrega.empty:
             # Processar agentes na ordem que aparecem na planilha
             agentes_list = [(agente, 0) for _, agente in agentes_entrega.iterrows()]
-            print(f"[AGENTES] 📍 Agentes disponíveis: {len(agentes_list)}")
         else:
             agentes_list = []
-            print(f"[AGENTES] ⚠️ Nenhum agente de entrega disponível")
         
         # Percorrer agentes sem ordenar por proximidade
         transferencias_para_bases = []
         for agente_ent, _ in agentes_list:
             # Processar todos os agentes sem filtrar por proximidade
                 
-            print(f"[TRANSFERENCIAS] 🔍 Buscando transferências para base do agente {agente_ent.get('Fornecedor', 'N/A')}")
             fornecedor_ent = agente_ent.get('Fornecedor', 'N/A')
             base_agente = agente_ent.get('Base Origem') or agente_ent.get('Base Destino', '')
             
@@ -1979,7 +1978,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 cidade_base_norm = normalizar_cidade_nome(str(cidade_base))
                 
                 # Buscar transferências com fallback para colunas UF
-                print(f"[TRANSFERENCIAS] 🔍 Buscando transferência: {origem_norm} → {cidade_base_norm}")
                 transf_para_base = df_transferencias[
                     (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
                     (df_transferencias['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == cidade_base_norm))
@@ -1989,7 +1987,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 if transf_para_base.empty:
                     base_uf = agente_ent.get('UF', '')
                     if base_uf:
-                        print(f"[TRANSFERENCIAS] 🔍 Busca expandida para base {cidade_base_norm} via UF {uf_origem} → {base_uf}...")
                         # Verificando as colunas disponíveis para UF
                         if 'UF Origem' in df_transferencias.columns and 'UF Destino' in df_transferencias.columns:
                             transf_para_base = df_transferencias[
@@ -2005,7 +2002,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                             
                             # Se ainda vazio, tentar busca mais flexível por Base Origem OU Base Destino
                             if transf_para_base.empty:
-                                print(f"[TRANSFERENCIAS] 🔍 Tentando busca flexível de bases entre {uf_origem} e {base_uf}...")
                                 # Buscar qualquer transferência que mencione as UFs nas bases ou nas cidades
                                 transf_para_base = df_transferencias[
                                     ((df_transferencias['Base Origem'].str.contains(uf_origem, case=False, na=False)) |
