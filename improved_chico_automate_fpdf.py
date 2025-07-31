@@ -93,13 +93,6 @@ def verificar_autenticacao():
     usuario_na_sessao = 'usuario_logado' in session
     usuario_existe = session.get('usuario_logado') in USUARIOS_SISTEMA if usuario_na_sessao else False
     
-    # Debug para identificar problemas de sessão
-    if not usuario_na_sessao:
-        # Debug removido
-        pass
-    elif not usuario_existe:
-        print(f"[DEBUG] Usuário '{session.get('usuario_logado')}' não existe no sistema")
-    
     return usuario_na_sessao and usuario_existe
 
 def verificar_permissao(permissao_requerida):
@@ -551,15 +544,11 @@ def geocode(municipio, uf):
         from utils.coords_cache import COORDS_CACHE
         chave_cache = f"{cidade_norm}-{uf_norm}"
         
-        print(f"[geocode] Buscando coordenadas para: {chave_cache}")
-        
         if chave_cache in COORDS_CACHE:
             coords = COORDS_CACHE[chave_cache]
-            print(f"[geocode] ✅ Encontrado no cache: {coords}")
             return coords
         
         # Se não encontrou no cache, tentar a API do OpenStreetMap
-        print(f"[geocode] Não encontrado no cache, tentando API...")
         
         try:
             query = f"{cidade_norm}, {uf_norm}, Brasil"
@@ -578,7 +567,6 @@ def geocode(municipio, uf):
                 lat = float(data[0]["lat"])
                 lon = float(data[0]["lon"])
                 coords = [lat, lon]
-                print(f"[geocode] ✅ Encontrado via API: {coords}")
                 return coords
         except Exception as api_error:
             print(f"[geocode] Erro na API: {str(api_error)}")
@@ -596,12 +584,10 @@ def geocode(municipio, uf):
         
         if uf_norm in coords_estados:
             coords = coords_estados[uf_norm]
-            print(f"[geocode] ✅ Usando coordenadas do estado {uf_norm}: {coords}")
             return coords
         
         # 5. Fallback final: Brasília
         coords = [-15.7801, -47.9292]
-        print(f"[geocode] ⚠️ Usando coordenadas padrão (Brasília): {coords}")
         return coords
         
     except Exception as e:
@@ -780,7 +766,6 @@ def calcular_custos_dedicado(uf_origem, municipio_origem, uf_destino, municipio_
             if not isinstance(custos[tipo_veiculo], (int, float)) or custos[tipo_veiculo] < 0:
                 custos[tipo_veiculo] = 0.0
         
-        print(f"[DEBUG] Custos calculados: {custos}")
         return custos
         
     except Exception as e:
@@ -828,7 +813,7 @@ def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="De
             # Calcular pedágios usando estimativa simples
             pedagio_real = rota_info["distancia"] * 0.05  # R$ 0,05 por km
             pedagio_detalhes = {"fonte": "Estimativa baseada na distância", "valor_por_km": 0.05}
-            print(f"[PEDÁGIO] ✅ Pedágio estimado: R$ {pedagio_real:.2f}")
+    
         else:
             # Para outros tipos de frete, manter a estimativa antiga
             pedagio_real = rota_info["distancia"] * 0.05
@@ -936,8 +921,7 @@ def carregar_base_unificada():
         tempo_atual = time.time()
         if (_BASE_UNIFICADA_CACHE is not None and 
             (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE):
-            print(f"[BASE] ✅ Usando cache da base unificada ({len(_BASE_UNIFICADA_CACHE)} registros)")
-            return _BASE_UNIFICADA_CACHE
+                    return _BASE_UNIFICADA_CACHE
         
         if not BASE_UNIFICADA_FILE:
             print("[BASE] ❌ BASE_UNIFICADA_FILE não está definido")
@@ -946,8 +930,6 @@ def carregar_base_unificada():
         if not os.path.exists(BASE_UNIFICADA_FILE):
             print(f"[BASE] ❌ Arquivo não encontrado: {BASE_UNIFICADA_FILE}")
             return None
-        
-        print(f"[BASE] 📁 Carregando arquivo: {BASE_UNIFICADA_FILE}")
         
         # Tentar carregar o arquivo Excel
         df_base = pd.read_excel(BASE_UNIFICADA_FILE)
@@ -960,9 +942,6 @@ def carregar_base_unificada():
         _BASE_UNIFICADA_CACHE = df_base
         _ULTIMO_CARREGAMENTO_BASE = tempo_atual
         
-        print(f"[BASE] ✅ Base carregada com sucesso: {len(df_base)} registros")
-        print(f"[BASE] Colunas disponíveis: {list(df_base.columns)}")
-        
         return df_base
         
     except Exception as e:
@@ -974,14 +953,10 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
     """
     try:
         tempo_inicio = time.time()
-        print(f"[FRACIONADO] 📦 Iniciando cálculo: {origem}/{uf_origem} → {destino}/{uf_destino}")
-        print(f"[FRACIONADO] Peso: {peso}kg, Cubagem: {cubagem}m³, Valor NF: R$ {valor_nf:,}" if valor_nf else f"[FRACIONADO] Peso: {peso}kg, Cubagem: {cubagem}m³")
-        
         # Lista para armazenar todas as opções
         todas_opcoes = []
         
         # 1. PRIMEIRO BUSCAR SERVIÇOS DIRETOS PORTA-PORTA (sem agentes e transferências)
-        print(f"[FRACIONADO] 🚚 Buscando serviços diretos porta-porta...")
         df_base = carregar_base_unificada()
         if df_base is not None:
             # Normalizar cidades
@@ -994,38 +969,28 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             df_diretos = df_base[df_base['Tipo'] == 'Direto']
             
             # Buscar serviços diretos com busca otimizada
-            # Adicionar debug para verificar normalização
-            print(f"[DEBUG] Origem normalizada: '{origem_norm}'")
-            print(f"[DEBUG] Destino normalizado: '{destino_norm}'")
-            
             # Estratégia 1: Busca exata com normalização
             servicos_diretos = df_diretos[
                 (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
                 (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
             ]
             
-            print(f"[DEBUG] Estratégia 1 - Busca exata: {len(servicos_diretos)} encontrados")
-            
             # Estratégia 2: Busca flexível se exata falhar
             if len(servicos_diretos) == 0:
-                print(f"[DEBUG] Estratégia 2 - Tentando busca flexível...")
                 servicos_diretos_flex = df_diretos[
                     (df_diretos['Origem'].str.contains(origem_norm, case=False, na=False)) &
                     (df_diretos['Destino'].str.contains(destino_norm, case=False, na=False))
                 ]
-                print(f"[DEBUG] Busca flexível encontrou: {len(servicos_diretos_flex)}")
                 if len(servicos_diretos_flex) > 0:
                     servicos_diretos = servicos_diretos_flex
             
             # Estratégia 3: Busca por similaridade se ainda não encontrou
             if len(servicos_diretos) == 0:
-                print(f"[DEBUG] Estratégia 3 - Tentando busca por similaridade...")
                 # Buscar qualquer serviço direto que contenha parte do nome
                 servicos_diretos_sim = df_diretos[
                     (df_diretos['Origem'].str.contains(origem_norm[:5], case=False, na=False)) &
                     (df_diretos['Destino'].str.contains(destino_norm[:5], case=False, na=False))
                 ]
-                print(f"[DEBUG] Busca por similaridade encontrou: {len(servicos_diretos_sim)}")
                 
                 # 🔧 CORREÇÃO: Filtrar por UF para evitar confusão entre cidades com nomes similares
                 if len(servicos_diretos_sim) > 0:
@@ -1037,9 +1002,6 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                         ]
                         if len(servicos_diretos_filtrados) > 0:
                             servicos_diretos = servicos_diretos_filtrados
-                            print(f"[DEBUG] Busca por similaridade filtrada por UF: {len(servicos_diretos)}")
-                        else:
-                            print(f"[DEBUG] Busca por similaridade rejeitada - UFs não correspondem")
                     else:
                         # Se não há colunas de UF, usar validação manual
                         servicos_validos_sim = []
@@ -1063,9 +1025,6 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                         if len(servicos_validos_sim) > 0:
                             import pandas as pd
                             servicos_diretos = pd.DataFrame(servicos_validos_sim)
-                            print(f"[DEBUG] Busca por similaridade validada: {len(servicos_diretos)}")
-                        else:
-                            print(f"[DEBUG] Busca por similaridade rejeitada - similaridade insuficiente")
             
             # ADICIONAR: Buscar ML, GRITSCH e EXPRESSO S. MIGUEL mesmo que estejam como Agente (tratamento especial)
             # Otimização: Pré-filtrar por fornecedor para melhorar performance
@@ -1076,15 +1035,12 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                 (df_ml_gritsch['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
             ]
             
-            print(f"[DEBUG] ML/GRITSCH/EXPRESSO S. MIGUEL encontrados: {len(ml_gritsch_services)}")
             if len(ml_gritsch_services) == 0:
                 # Tentar busca mais flexível para ML/GRITSCH/EXPRESSO S. MIGUEL
-                print(f"[DEBUG] Tentando busca flexível para ML/GRITSCH/EXPRESSO S. MIGUEL...")
                 ml_gritsch_flex = df_ml_gritsch[
                     (df_ml_gritsch['Origem'].str.contains(origem_norm, case=False, na=False)) &
                     (df_ml_gritsch['Destino'].str.contains(destino_norm, case=False, na=False))
                 ]
-                print(f"[DEBUG] Busca flexível ML/GRITSCH/EXPRESSO S. MIGUEL encontrou: {len(ml_gritsch_flex)}")
                 
                 # 🔧 CORREÇÃO: Validar busca flexível para evitar confusão entre cidades
                 if len(ml_gritsch_flex) > 0:
@@ -1118,15 +1074,10 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                     if len(ml_gritsch_validos) > 0:
                         import pandas as pd
                         ml_gritsch_services = pd.DataFrame(ml_gritsch_validos)
-                        print(f"[DEBUG] Busca flexível ML/GRITSCH/EXPRESSO S. MIGUEL validada: {len(ml_gritsch_services)}")
-                    else:
-                        print(f"[DEBUG] Busca flexível ML/GRITSCH/EXPRESSO S. MIGUEL rejeitada - cidades não correspondem")
             
             # Combinar resultados (serviços diretos + ML + GRITSCH + EXPRESSO S. MIGUEL)
             import pandas as pd
             servicos_diretos_completos = pd.concat([servicos_diretos, ml_gritsch_services]).drop_duplicates()
-            
-            print(f"[FRACIONADO] Encontrados {len(servicos_diretos_completos)} serviços diretos porta-porta (incluindo ML, GRITSCH e EXPRESSO S. MIGUEL)")
             
             # VALIDAÇÃO RIGOROSA: Verificar se os serviços realmente atendem a rota
             servicos_validos = []
@@ -1170,9 +1121,6 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                     
                     if origem_valida and destino_valido:
                         servicos_validos.append(servico)
-                        print(f"[FRACIONADO] ✅ Serviço válido: {servico['Fornecedor']} - {servico_origem} → {servico_destino}")
-                    else:
-                        print(f"[FRACIONADO] ❌ Serviço inválido: {servico['Fornecedor']} - {servico_origem} → {servico_destino} (solicitado: {origem_norm} → {destino_norm})")
                         
                 except Exception as e:
                     print(f"[FRACIONADO] ❌ Erro ao validar serviço {servico['Fornecedor']}: {e}")
@@ -1210,13 +1158,10 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                             'prazo_real': servico.get('Prazo', 'N/A')
                         }
                         todas_opcoes.append(opcao_formatada)
-                        print(f"[FRACIONADO] ✅ Direto adicionado: {opcao['fornecedor']} - R$ {opcao['total']:.2f}")
                 except Exception as e:
-                    print(f"[FRACIONADO] ❌ Erro ao processar serviço direto: {e}")
                     continue
         
         # 2. BUSCAR ROTAS COM AGENTES
-        print(f"[FRACIONADO] 🔄 Buscando rotas com agentes...")
         rotas_agentes = calcular_frete_com_agentes(
             origem, uf_origem,
             destino, uf_destino,
@@ -1292,7 +1237,6 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                                 ]
                                 
                                 if len(transferencias_origem) > 0:
-                                    print(f"[FRACIONADO] ✅ Encontradas {len(transferencias_origem)} transferências para agente {agente_nome}")
                                     
                                     # Processar as primeiras 3 transferências
                                     for _, transferencia in transferencias_origem.head(3).iterrows():
@@ -1365,9 +1309,6 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                                                 
                                                 if rota_valida:
                                                     todas_opcoes.append(opcao_formatada)
-                                                    print(f"[FRACIONADO] ✅ Rota parcial (coleta) adicionada: {agente_nome} + {transferencia['Fornecedor']} - R$ {total:.2f}")
-                                                else:
-                                                    print(f"[FRACIONADO] ❌ Rota parcial inválida: {agente_nome} + {transferencia['Fornecedor']} - {origem_parcial_norm} → {destino_parcial_norm} (solicitado: {origem_norm} → {destino_norm})")
                                                 
                                         except Exception as e:
                                             print(f"[FRACIONADO] ❌ Erro ao processar rota parcial (coleta): {e}")
@@ -1388,7 +1329,6 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                                 ]
                                 
                                 if len(transferencias_destino) > 0:
-                                    print(f"[FRACIONADO] ✅ Encontradas {len(transferencias_destino)} transferências para agente {agente_nome}")
                                     
                                     # Processar as primeiras 3 transferências
                                     for _, transferencia in transferencias_destino.head(3).iterrows():
@@ -1461,16 +1401,12 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                                                 
                                                 if rota_valida:
                                                     todas_opcoes.append(opcao_formatada)
-                                                    print(f"[FRACIONADO] ✅ Rota parcial (entrega) adicionada: {transferencia['Fornecedor']} + {agente_nome} - R$ {total:.2f}")
-                                                else:
-                                                    print(f"[FRACIONADO] ❌ Rota parcial inválida: {transferencia['Fornecedor']} + {agente_nome} - {origem_parcial_norm} → {destino_parcial_norm} (solicitado: {origem_norm} → {destino_norm})")
                                                 
                                         except Exception as e:
                                             print(f"[FRACIONADO] ❌ Erro ao processar rota parcial (entrega): {e}")
                                             continue
         
         if rotas_agentes and rotas_agentes.get('total_opcoes', 0) > 0:
-            print(f"[FRACIONADO] ✅ {rotas_agentes['total_opcoes']} rotas com agentes encontradas")
             # Adicionar rotas de agentes às opções
             for rota in rotas_agentes.get('rotas', []):
                 # Validar se rota é um dicionário
@@ -1532,8 +1468,6 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         cubagem_float = float(cubagem)
         peso_cubado = max(peso_float, cubagem_float * 300)  # 1m³ = 300kg
         
-        print(f"[FRACIONADO] ✅ Total de opções encontradas: {len(todas_opcoes)}")
-        
         # Ordenar por menor custo total
         todas_opcoes.sort(key=lambda x: x['total'])
         
@@ -1550,9 +1484,6 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
             'peso_cubado': peso_cubado,
             'valor_nf': valor_nf
         }
-        tempo_total = time.time() - tempo_inicio
-        print(f"[FRACIONADO] ⏱️ Tempo total de processamento: {tempo_total:.2f} segundos")
-        
         return resultado
         
     except Exception as e:
@@ -1679,9 +1610,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         ].copy()
         df_diretos = df_base[df_base['Tipo'] == 'Direto'].copy()
         
-        print(f"[AGENTES] Agentes carregados (ML, GRITSCH e EXPRESSO S. MIGUEL excluídos - são diretos): {len(df_agentes)}")
-        print(f"[AGENTES] Transferências carregadas: {len(df_transferencias)}")
-        print(f"[AGENTES] Diretos carregados: {len(df_diretos)}")
+
         
         # Normalizar cidades e UFs
         origem_norm = normalizar_cidade_nome(origem)
@@ -1718,24 +1647,15 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         # 🔧 CORREÇÃO: Se origem e destino são do mesmo estado, filtrar agentes apenas do estado correto
         if uf_origem == uf_destino:
-            print(f"[AGENTES] 🔍 Origem e destino são do mesmo estado ({uf_origem}) - filtrando agentes apenas deste estado")
             agentes_destino = agentes_destino[agentes_destino['UF'] == uf_destino]
         
         # 🔧 CORREÇÃO: Verificar se faltam agentes exatos - SER CONSERVADOR
         if agentes_origem.empty:
             agentes_faltando['origem'] = True
-            print(f"[AGENTES] ❌ Nenhum agente encontrado em {origem_norm}/{uf_origem}")
-            print(f"[AGENTES] ❌ NÃO BUSCAR AGENTES PRÓXIMOS - Ser conservador")
-            
-            # 🔧 CORREÇÃO: Não buscar agentes próximos - apenas informar
             avisos.append(f"Não há agente de coleta em {origem_norm}")
         
         if agentes_destino.empty:
             agentes_faltando['destino'] = True
-            print(f"[AGENTES] ❌ Nenhum agente encontrado em {destino_norm}/{uf_destino}")
-            print(f"[AGENTES] ❌ NÃO BUSCAR AGENTES PRÓXIMOS - Ser conservador")
-            
-            # 🔧 CORREÇÃO: Não buscar agentes próximos - apenas informar
             avisos.append(f"Não há agente de entrega em {destino_norm}")
         
         # REMOVIDO: Serviços diretos - já são processados em calcular_frete_fracionado_base_unificada
@@ -1755,11 +1675,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         # Se não encontrar agentes na cidade exata, manter vazio para rotas parciais
         if agentes_coleta.empty:
-            print(f"[AGENTES] ⚠️ Nenhum agente de coleta encontrado em {origem_norm}/{uf_origem}")
-            print(f"[AGENTES] 📋 Permitindo rotas parciais (cliente deve entregar na origem)")
             # Manter vazio para permitir rotas parciais
-            
-        print(f"[AGENTES] ✅ Total de agentes de coleta encontrados: {len(agentes_coleta)}")
+            pass
         
         # Agentes de entrega - BUSCA GLOBAL E INTELIGENTE
         agentes_entrega = df_agentes[
@@ -1768,18 +1685,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         # Se não encontrar agentes na cidade exata, manter vazio para rotas parciais
         if agentes_entrega.empty:
-            print(f"[AGENTES] ⚠️ Nenhum agente de entrega encontrado em {destino_norm}/{uf_destino}")
-            print(f"[AGENTES] 📋 Permitindo rotas parciais (cliente deve retirar no destino)")
             # Manter vazio para permitir rotas parciais
-            
-            print(f"[AGENTES] ✅ Total de agentes de entrega encontrados: {len(agentes_entrega)}")
-
-        # AVISO: Verificar se há agentes de entrega, mas continuar com rotas parciais
-        if agentes_entrega.empty:
-            print(f"[AGENTES] ⚠️ AVISO: Não há agentes de entrega disponíveis em {destino}/{uf_destino}")
-            print(f"[AGENTES] Continuando busca por rotas parciais e transferências diretas...")
-        else:
-            print(f"[AGENTES] ✅ Agentes de entrega encontrados: {len(agentes_entrega)}")
+            pass
 
         # 🔧 BUSCAR TRANSFERÊNCIAS DIRETAS CIDADE → CIDADE (PRIORIDADE MÁXIMA)
         # Primeiro tentar cidades exatas
@@ -1790,10 +1697,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         # Se não encontrar, tentar estratégias mais abrangentes
         if transferencias_origem_destino.empty:
-            print(f"[TRANSFERENCIAS] 🔍 Busca inteligente por rotas disponíveis...")
             
             # ESTRATÉGIA 1: Buscar TODAS as transferências que saem da origem para o estado destino
-            print(f"[TRANSFERENCIAS] 📍 ESTRATÉGIA 1: Buscando transferências {origem_norm} → qualquer cidade em {uf_destino}...")
             transf_origem_para_uf = df_transferencias[
                 (df_transferencias['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
                 ((df_transferencias['UF'] == f"{uf_origem}-{uf_destino}") |
@@ -1802,12 +1707,10 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             ]
             
             if not transf_origem_para_uf.empty:
-                print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transf_origem_para_uf)} transferências de {origem_norm} para {uf_destino}")
                 transferencias_origem_destino = transf_origem_para_uf
             
             # ESTRATÉGIA 2: Buscar transferências de qualquer cidade em RS para o destino específico
             if transferencias_origem_destino.empty:
-                print(f"[TRANSFERENCIAS] 📍 ESTRATÉGIA 2: Buscando transferências de qualquer cidade em {uf_origem} → {destino_norm}...")
                 transf_uf_para_destino = df_transferencias[
                     ((df_transferencias['UF'] == f"{uf_origem}-{uf_destino}") |
                      (df_transferencias['UF'].str.startswith(uf_origem, na=False)) |
@@ -1816,12 +1719,10 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 ]
                 
                 if not transf_uf_para_destino.empty:
-                    print(f"[TRANSFERENCIAS] ✅ Encontradas {len(transf_uf_para_destino)} transferências de {uf_origem} para {destino_norm}")
                     transferencias_origem_destino = transf_uf_para_destino
             
             # ESTRATÉGIA 3: Buscar QUALQUER transferência entre os estados
             if transferencias_origem_destino.empty:
-                print(f"[TRANSFERENCIAS] 📍 ESTRATÉGIA 3: Buscando QUALQUER transferência {uf_origem} → {uf_destino}...")
                 
                 # Múltiplas tentativas com diferentes padrões
                 patterns_uf = [
@@ -2021,9 +1922,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     ]
                     
                     if not transf_primeiro_trecho.empty and not transf_segundo_trecho.empty:
-                        print(f"[TRANSFERENCIAS] ✅ Encontradas rotas via {estado_intermediario}:")
-                        print(f"  - Primeiro trecho: {len(transf_primeiro_trecho)} opções")
-                        print(f"  - Segundo trecho: {len(transf_segundo_trecho)} opções")
+
                         
                         # Adicionar combinações encontradas
                         for _, t1 in transf_primeiro_trecho.iterrows():
@@ -2246,11 +2145,9 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                         'chave_unica': chave_rota  # 🆕 Para debug
                                     }
                                     rotas_encontradas.append(rota)
-                                    print(f"[AGENTES] ✅ Rota COMPLETA adicionada: {chave_rota} - R$ {total:.2f}")
                                     
                                     # Verificar limite máximo
                                     if len(rotas_encontradas) >= MAX_ROTAS:
-                                        print(f"[AGENTES] ⚠️ Limite máximo de {MAX_ROTAS} rotas atingido - interrompendo busca")
                                         break
 
         # Se há agentes de coleta mas não há transferências diretas, tentar via bases
@@ -3946,18 +3843,13 @@ def historico():
 def api_base_agentes():
     """API endpoint para fornecer dados da Base Unificada para o mapa de agentes"""
     try:
-        print("[API] Carregando base unificada para mapa de agentes...")
-        
         # Carregar base unificada
         df_base = carregar_base_unificada()
         if df_base is None:
-            print("[API] Erro: Base unificada não disponível")
             return jsonify({
                 "error": "Base de dados não disponível",
                 "agentes": []
             })
-        
-        print(f"[API] Base carregada: {len(df_base)} registros")
         
         # Mapear estados para UF
         estados_uf = {
@@ -4108,14 +4000,11 @@ def calcular():
             return jsonify({"error": "Origem e destino são obrigatórios"})
         coord_origem = geocode(municipio_origem, uf_origem)
         coord_destino = geocode(municipio_destino, uf_destino)
-        print(f"[DEBUG] coord_origem: {coord_origem}")
-        print(f"[DEBUG] coord_destino: {coord_destino}")
         if not coord_origem or not coord_destino:
             return jsonify({"error": "Não foi possível geocodificar origem ou destino"})
         rota_info = calcular_distancia_osrm(coord_origem, coord_destino) or \
                     calcular_distancia_openroute(coord_origem, coord_destino) or \
                     calcular_distancia_reta(coord_origem, coord_destino)
-        print(f"[DEBUG] rota_info: {rota_info}")
         if not rota_info:
             return jsonify({"error": "Não foi possível calcular a rota"})
         # Primeiro gerar análise para calcular pedágios reais
@@ -4143,7 +4032,6 @@ def calcular():
         )
         
         rota_pontos = rota_info.get("rota_pontos", [])
-        print(f"[DEBUG] rota_pontos final: {rota_pontos}")
         if not isinstance(rota_pontos, list) or len(rota_pontos) == 0:
             rota_pontos = [coord_origem, coord_destino]
         for i, pt in enumerate(rota_pontos):
