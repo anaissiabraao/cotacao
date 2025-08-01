@@ -545,4 +545,93 @@
 @media (max-width: 900px) {
   .form-grid { grid-template-columns: 1fr; }
   .brasil-map { width: 100%; height: 180px; }
+}
+
+/* === FRETE DEDICADO - LAYOUT ESPECÍFICO === */
+
+.resultados-dedicado-especifico {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.veiculo-card {
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.veiculo-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.veiculo-card.capacidade-excedida {
+    border-color: #dc3545 !important;
+    background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%);
+}
+
+.capacidade-insuficiente {
+    color: #dc3545 !important;
+    font-weight: 600;
+}
+
+.aviso-capacidade {
+    background: #dc3545;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    text-align: center;
+    margin-top: 8px;
+}
+
+.detalhes-veiculo-especifico {
+    animation: slideInUp 0.3s ease-out;
+}
+
+.detalhe-card {
+    transition: all 0.3s ease;
+}
+
+.detalhe-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.acoes-section button {
+    transition: all 0.3s ease;
+}
+
+.acoes-section button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Responsividade para o layout específico */
+@media (max-width: 768px) {
+    .veiculos-grid {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .detalhe-card {
+        margin-bottom: 15px;
+    }
+    
+    .acoes-section div {
+        flex-direction: column;
+    }
+    
+    .acoes-section button {
+        width: 100%;
+        margin-bottom: 10px;
+    }
+}
+
+@media (max-width: 480px) {
+    .veiculo-card {
+        padding: 12px !important;
+    }
+    
+    .info-rota div {
+        grid-template-columns: 1fr !important;
+    }
 } 

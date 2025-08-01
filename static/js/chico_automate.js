@@ -534,7 +534,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         } catch (error) {
             console.error('[DEDICADO] Erro:', error);
-            showError(`Erro no cálculo dedicado: ${error.message}`, 'resultados-dedicado');
+            showError(`Erro no cálculo dedicado: ${error.message}`, 'resultados-dedicado-all-in');
         } finally {
             if (loading) loading.style.display = 'none';
         }
@@ -1053,24 +1053,38 @@ document.addEventListener('DOMContentLoaded', function() {
     let veiculoSelecionado = null;
 
     function exibirResultadoAllInDedicado(data) {
+        console.log('[EXIBIR ALL IN DEDICADO] Iniciando função');
+        console.log('[EXIBIR ALL IN DEDICADO] Procurando containers...');
+        
         const containerVeiculos = document.getElementById('resumo-dedicado-veiculos');
         const containerCustos = document.getElementById('resumo-dedicado-custos');
         const containerMargens = document.getElementById('resumo-dedicado-margens');
         
+        console.log('[EXIBIR ALL IN DEDICADO] Container veículos:', containerVeiculos);
+        console.log('[EXIBIR ALL IN DEDICADO] Container custos:', containerCustos);
+        console.log('[EXIBIR ALL IN DEDICADO] Container margens:', containerMargens);
         console.log('[DEBUG] Dados recebidos para frete dedicado All In:', data);
         
         // Armazenar dados globalmente
         dadosFreteDedicadoAll = data;
         
         // Veículos Disponíveis
+        console.log('[EXIBIR ALL IN DEDICADO] Verificando container veículos...');
         if (containerVeiculos) {
             let htmlVeiculos = '<h4>🚛 Veículos Disponíveis</h4>';
             htmlVeiculos += '<p style="font-size: 0.9rem; color: #6c757d; margin-bottom: 15px;">Clique em um veículo para ver detalhes específicos</p>';
             
+            console.log('[EXIBIR ALL IN DEDICADO] Verificando data.custos:', data.custos);
+            console.log('[EXIBIR ALL IN DEDICADO] Tipo de data.custos:', typeof data.custos);
+            console.log('[EXIBIR ALL IN DEDICADO] data.custos é objeto?', typeof data.custos === 'object');
+            
             if (data && data.custos) {
+                console.log('[EXIBIR ALL IN DEDICADO] Custos encontrados, criando grid');
+                console.log('[EXIBIR ALL IN DEDICADO] Chaves dos custos:', Object.keys(data.custos));
                 htmlVeiculos += '<div class="veiculos-grid">';
                 
                 Object.entries(data.custos).forEach(([veiculo, valor]) => {
+                    console.log('[EXIBIR ALL IN DEDICADO] Processando veículo:', veiculo, 'valor:', valor);
                     const icone = veiculo.includes('VUC') ? '🚐' : 
                                  veiculo.includes('3/4') ? '🚚' : 
                                  veiculo.includes('TOCO') ? '🚛' : 
@@ -1114,10 +1128,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 htmlVeiculos += '<p class="text-muted">Nenhum veículo disponível encontrado.</p>';
             }
             
+            console.log('[EXIBIR ALL IN DEDICADO] HTML gerado:', htmlVeiculos);
             containerVeiculos.innerHTML = htmlVeiculos;
         }
         
         // Custos Operacionais - Exibir mensagem inicial
+        console.log('[EXIBIR ALL IN DEDICADO] Verificando container custos...');
         if (containerCustos) {
             containerCustos.innerHTML = `
                 <h4>📊 Custos Operacionais</h4>
@@ -1128,6 +1144,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // Margens Comerciais - Exibir mensagem inicial
+        console.log('[EXIBIR ALL IN DEDICADO] Verificando container margens...');
         if (containerMargens) {
             containerMargens.innerHTML = `
                 <h4>📈 Margens Comerciais</h4>
@@ -2147,329 +2164,104 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function exibirResultadoDedicado(data) {
-        const container = document.getElementById('resultados-dedicado');
+        console.log('[DEDICADO] Iniciando exibição de resultados');
+        
+        // Detectar em qual aba estamos
+        const abaAtiva = document.querySelector('.tab-content.active');
+        const isAbaDedicado = abaAtiva && abaAtiva.id === 'dedicado';
+        const isAbaAllIn = abaAtiva && abaAtiva.id === 'all-in';
+        
+        console.log('[DEDICADO] Aba ativa:', abaAtiva?.id);
+        console.log('[DEDICADO] É aba dedicado?', isAbaDedicado);
+        console.log('[DEDICADO] É aba all-in?', isAbaAllIn);
+        console.log('[DEDICADO] Elemento aba ativa:', abaAtiva);
+        console.log('[DEDICADO] Todas as abas:', document.querySelectorAll('.tab-content'));
+        
+        let container;
+        let containerId;
+        
+        if (isAbaDedicado) {
+            // Estamos na aba específica "Frete Dedicado"
+            console.log('[DEDICADO] Exibindo na aba específica Frete Dedicado');
+            container = document.getElementById('resultados-dedicado');
+            containerId = 'resultados-dedicado';
+            
+            // Se o container não existir, vamos criá-lo
+            if (!container) {
+                console.log('[DEDICADO] Container não existe, criando...');
+                const dedicadoTab = document.getElementById('dedicado');
+                if (dedicadoTab) {
+                    // Criar o container de resultados
+                    const novoContainer = document.createElement('div');
+                    novoContainer.id = 'resultados-dedicado';
+                    novoContainer.className = 'resultados-dedicado';
+                    novoContainer.style.marginTop = '20px';
+                    
+                    // Inserir após o mapa
+                    const mapaSection = dedicadoTab.querySelector('#mapa-section-dedicado');
+                    if (mapaSection) {
+                        mapaSection.parentNode.insertBefore(novoContainer, mapaSection.nextSibling);
+                    } else {
+                        dedicadoTab.appendChild(novoContainer);
+                    }
+                    
+                    container = novoContainer;
+                    console.log('[DEDICADO] Container criado:', container);
+                }
+            }
+        } else {
+            // Estamos na aba "All In" ou outra aba
+            console.log('[DEDICADO] Exibindo na aba All In');
+            container = document.getElementById('resultados-dedicado-all-in');
+            containerId = 'resultados-dedicado-all-in';
+        }
+        
         const analiseContainer = document.getElementById('analise-dedicado');
         const mapaSection = document.getElementById('mapa-section-dedicado');
         const mapContainer = document.getElementById('map-dedicado');
         
-        console.log('[DEDICADO] Iniciando exibição de resultados');
         console.log('[DEDICADO] Container encontrado:', !!container);
+        console.log('[DEDICADO] Container element:', container);
         console.log('[DEDICADO] Dados recebidos:', data);
 
         if (!container) {
-            console.error('[DEDICADO] Container resultados-dedicado não encontrado');
-            showError('Container de resultados não encontrado. Recarregue a página.', 'resultados-dedicado');
+            console.error('[DEDICADO] Container de resultados não encontrado');
+            showError('Container de resultados não encontrado. Recarregue a página.', containerId);
             return;
         }
 
         // Verificar se temos dados válidos
         if (!data) {
             console.error('[DEDICADO] Dados vazios recebidos');
-            showError('Nenhum dado recebido do servidor.', 'resultados-dedicado');
-            return;
-        }
-
-        // Verificar se temos dados de ranking (novo formato All In)
-        if (data.ranking_dedicado && data.ranking_dedicado.ranking_opcoes) {
-            console.log('[DEDICADO] Usando formato All In');
-            exibirResultadoAllInDedicado(data);
+            showError('Nenhum dado recebido do servidor.', containerId);
             return;
         }
 
         // Verificar se temos custos básicos
         if (!data.custos || Object.keys(data.custos).length === 0) {
             console.error('[DEDICADO] Nenhum custo encontrado nos dados');
-            showError('Nenhum custo de frete encontrado para esta rota.', 'resultados-dedicado');
+            showError('Nenhum custo de frete encontrado para esta rota.', containerId);
             return;
         }
 
         console.log('[DEDICADO] Custos encontrados:', data.custos);
 
-        // Criar estrutura HTML se não existir
-        let allInSection = container.querySelector('.all-in-section');
-        if (!allInSection) {
-            console.log('[DEDICADO] Criando estrutura HTML para resultados');
-            container.innerHTML = `
-                <div class="all-in-section" style="display: block;">
-                    <div class="card">
-                        <h3><i class="fa-solid fa-trophy"></i> Ranking de Veículos - Frete Dedicado</h3>
-                        
-                        <!-- Estatísticas -->
-                        <div class="stats-container" style="display: flex; justify-content: space-around; margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                            <div class="stat-item">
-                                <div class="stat-value" id="total-opcoes-dedicado">0</div>
-                                <div class="stat-label">Total de Opções</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-value" id="melhor-opcao-dedicado">-</div>
-                                <div class="stat-label">Melhor Opção</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-value" id="economia-dedicado">-</div>
-                                <div class="stat-label">Economia</div>
-                            </div>
-                        </div>
-                        
-                        <!-- Lista de Ranking -->
-                        <div id="ranking-list-dedicado" class="ranking-list" style="margin-top: 20px;"></div>
-                        
-                        <!-- Detalhes do Veículo Selecionado -->
-                        <div id="detalhes-veiculo-dedicado" class="detalhes-veiculo" style="margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px; display: none;">
-                            <h4><i class="fa-solid fa-info-circle"></i> Detalhes do Veículo</h4>
-                            <div id="detalhes-content"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            allInSection = container.querySelector('.all-in-section');
-        }
-        
-        console.log('[DEDICADO] Exibindo seção All In');
-        allInSection.style.display = 'block';
-        
-        // Preparar dados para o formato All In
-        const veiculosOrdenados = Object.entries(data.custos || {}).sort(([,a], [,b]) => a - b);
-        const melhorOpcao = veiculosOrdenados[0];
-        const totalOpcoes = veiculosOrdenados.length;
-        
-        console.log('[DEDICADO] Veículos ordenados:', veiculosOrdenados);
-        console.log('[DEDICADO] Melhor opção:', melhorOpcao);
-        console.log('[DEDICADO] Total de opções:', totalOpcoes);
-        
-        // Atualizar estatísticas
-        const totalOpcoesElement = document.getElementById('total-opcoes-dedicado');
-        const melhorOpcaoElement = document.getElementById('melhor-opcao-dedicado');
-        const economiaElement = document.getElementById('economia-dedicado');
-        
-        if (totalOpcoesElement) totalOpcoesElement.textContent = totalOpcoes;
-        if (melhorOpcaoElement) melhorOpcaoElement.textContent = melhorOpcao ? melhorOpcao[0] : '-';
-        
-        // Calcular economia (diferença entre pior e melhor)
-        if (veiculosOrdenados.length > 1) {
-            const piorPreco = veiculosOrdenados[veiculosOrdenados.length - 1][1];
-            const melhorPreco = melhorOpcao[1];
-            const economia = ((piorPreco - melhorPreco) / piorPreco * 100).toFixed(1);
-            if (economiaElement) economiaElement.textContent = `${economia}%`;
+        // Se estamos na aba específica "Frete Dedicado", SEMPRE usar layout específico
+        if (isAbaDedicado) {
+            console.log('[DEDICADO] Usando layout específico para aba Frete Dedicado');
+            exibirResultadoDedicadoEspecifico(data, container);
         } else {
-            if (economiaElement) economiaElement.textContent = '-';
-        }
-        
-        // Criar lista de ranking
-        const rankingList = document.getElementById('ranking-list-dedicado');
-        if (rankingList) {
-            let rankingHtml = '';
+            // Estamos na aba "All In" - verificar formato dos dados
+            console.log('[DEDICADO] Verificando formato dos dados para All In:', data);
+            console.log('[DEDICADO] data.ranking_dedicado:', data.ranking_dedicado);
+            console.log('[DEDICADO] data.ranking_dedicado?.ranking_opcoes:', data.ranking_dedicado?.ranking_opcoes);
             
-            veiculosOrdenados.forEach(([tipo, valor], index) => {
-                const capacidades = {
-                    'FIORINO': { peso: '500kg', volume: '1.2m³', icon: '🚐', descricao: 'Utilitário pequeno' },
-                    'VAN': { peso: '1.5t', volume: '6m³', icon: '🚐', descricao: 'Van/Kombi' },
-                    '3/4': { peso: '3.5t', volume: '12m³', icon: '🚚', descricao: 'Caminhão 3/4' },
-                    'TOCO': { peso: '7t', volume: '40m³', icon: '🚛', descricao: 'Caminhão toco' },
-                    'TRUCK': { peso: '12t', volume: '70m³', icon: '🚛', descricao: 'Caminhão truck' },
-                    'CARRETA': { peso: '28t', volume: '110m³', icon: '🚛', descricao: 'Carreta/bitrem' }
-                };
-                
-                const veiculo = capacidades[tipo] || { peso: 'N/A', volume: 'N/A', icon: '🚛', descricao: 'Veículo' };
-                
-                let medalha = '';
-                let destaque = '';
-                if (index === 0) {
-                    medalha = '🥇';
-                    destaque = 'style="background: linear-gradient(135deg, #fff3cd, #ffeaa7); border: 2px solid #ffc107;"';
-                } else if (index === 1) {
-                    medalha = '🥈';
-                    destaque = 'style="background: linear-gradient(135deg, #f8f9fa, #e9ecef); border: 2px solid #6c757d;"';
-                } else if (index === 2) {
-                    medalha = '🥉';
-                    destaque = 'style="background: linear-gradient(135deg, #fff3cd, #ffeaa7); border: 2px solid #fd7e14;"';
-                }
-                
-                rankingHtml += `
-                    <div class="ranking-item" data-veiculo="${tipo}" onclick="exibirDetalhesVeiculoDedicado('${tipo}', ${valor}, '${veiculo.descricao}', '${veiculo.peso}', '${veiculo.volume}')" ${destaque} style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin: 10px 0; cursor: pointer; transition: all 0.3s;">
-                        <div class="ranking-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <span class="ranking-position" style="font-weight: bold; font-size: 1.1em;">${medalha} ${index + 1}º</span>
-                            <span class="ranking-price" style="font-weight: bold; color: #0a6ed1; font-size: 1.2em;">R$ ${valor.toFixed(2)}</span>
-                        </div>
-                        <div class="ranking-info" style="display: flex; justify-content: space-between; align-items: center;">
-                            <div class="veiculo-info" style="display: flex; align-items: center;">
-                                <span class="veiculo-icon" style="font-size: 2em; margin-right: 10px;">${veiculo.icon}</span>
-                                <div class="veiculo-details">
-                                    <div class="veiculo-name" style="font-weight: bold; font-size: 1.1em;">${tipo}</div>
-                                    <div class="veiculo-desc" style="color: #666; font-size: 0.9em;">${veiculo.descricao}</div>
-                                </div>
-                            </div>
-                            <div class="capacidade-info" style="text-align: right; font-size: 0.9em;">
-                                <div>📦 ${veiculo.peso}</div>
-                                <div>📏 ${veiculo.volume}</div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            rankingList.innerHTML = rankingHtml;
-            console.log('[DEDICADO] Ranking HTML gerado:', rankingHtml.length, 'caracteres');
-            
-            // Selecionar automaticamente a melhor opção
-            if (melhorOpcao) {
-                const melhorVeiculo = capacidades[melhorOpcao[0]] || { descricao: 'Veículo', peso: 'N/A', volume: 'N/A' };
-                exibirDetalhesVeiculoDedicado(melhorOpcao[0], melhorOpcao[1], melhorVeiculo.descricao, melhorVeiculo.peso, melhorVeiculo.volume);
-            }
-        } else {
-            console.error('[DEDICADO] Elemento ranking-list-dedicado não encontrado');
-        }
-        
-        // Mostrar análise se disponível
-        if (data.analise && analiseContainer) {
-            console.log('[DEDICADO] Exibindo análise da rota');
-            let analiseHtml = `
-                <div class="analise-container">
-                    <div class="analise-title">📍 Informações da Rota</div>
-                    <div class="analise-item"><strong>Origem:</strong> ${data.analise.origem || 'N/A'}</div>
-                    <div class="analise-item"><strong>Destino:</strong> ${data.analise.destino || 'N/A'}</div>
-                    <div class="analise-item"><strong>Distância:</strong> ${data.analise.distancia || data.distancia || 'N/A'} km</div>
-                    <div class="analise-item"><strong>Tempo estimado:</strong> ${data.analise.tempo_estimado || 'N/A'}</div>
-                    ${data.analise.pedagio_real ? `<div class="analise-item"><strong>Pedágios:</strong> R$ ${data.analise.pedagio_real.toFixed(2)}</div>` : ''}
-                    ${data.analise.consumo_combustivel ? `<div class="analise-item"><strong>Consumo:</strong> ${data.analise.consumo_combustivel.toFixed(1)}L</div>` : ''}
-                    ${data.analise.emissao_co2 ? `<div class="analise-item"><strong>Emissão CO2:</strong> ${data.analise.emissao_co2.toFixed(1)}kg</div>` : ''}
-                </div>
-            `;
-            analiseContainer.innerHTML = analiseHtml;
-        } else {
-            console.warn('[DEDICADO] Análise não disponível ou container não encontrado');
-        }
-        
-        // Definir capacidades para uso nas funções
-        window.capacidadesDedicado = {
-            'FIORINO': { peso: '500kg', volume: '1.2m³', icon: '🚐', descricao: 'Utilitário pequeno' },
-            'VAN': { peso: '1.5t', volume: '6m³', icon: '🚐', descricao: 'Van/Kombi' },
-            '3/4': { peso: '3.5t', volume: '12m³', icon: '🚚', descricao: 'Caminhão 3/4' },
-            'TOCO': { peso: '7t', volume: '40m³', icon: '🚛', descricao: 'Caminhão toco' },
-            'TRUCK': { peso: '12t', volume: '70m³', icon: '🚛', descricao: 'Caminhão truck' },
-            'CARRETA': { peso: '28t', volume: '110m³', icon: '🚛', descricao: 'Carreta/bitrem' }
-        };
-        
-        container.innerHTML = container.innerHTML;
-
-        // Exibir análise da rota se disponível
-        if (data.analise && analiseContainer) {
-            let analiseHtml = `
-                <div class="analise-container">
-                    <div class="analise-title">Análise da Rota</div>
-                    <div class="analise-item">Distância: ${data.analise.distancia || data.distancia || 'N/A'} km</div>
-                    <div class="analise-item">Tempo estimado: ${data.analise.tempo_estimado || 'N/A'}</div>
-                    <div class="analise-item">Consumo de combustível: ${data.analise.consumo_combustivel || 'N/A'}</div>
-                    ${data.analise.pedagio_real ? `<div class="analise-item">Pedágio: R$ ${data.analise.pedagio_real.toFixed(2)}</div>` : ''}
-                    ${data.analise.emissao_co2 ? `<div class="analise-item">Emissão CO2: ${data.analise.emissao_co2}</div>` : ''}
-                        </div>
-                    `;
-            analiseContainer.innerHTML = analiseHtml;
-        }
-
-        // Exibir mapa se há pontos da rota
-        if (data.rota_pontos && data.rota_pontos.length > 0 && mapContainer) {
-            console.log('[DEDICADO] Inicializando mapa com pontos:', data.rota_pontos);
-            
-            // Mostrar seção do mapa
-            if (mapaSection) {
-                mapaSection.style.display = 'block';
-            }
-            
-            // Inicializar mapa
-            try {
-                if (window.mapaDedicado) {
-                    window.mapaDedicado.remove();
-                }
-                
-                // Verificar se os pontos são válidos
-                const pontosValidos = data.rota_pontos.filter(ponto => 
-                    Array.isArray(ponto) && ponto.length >= 2 && 
-                    typeof ponto[0] === 'number' && typeof ponto[1] === 'number' &&
-                    ponto[0] !== 0 && ponto[1] !== 0
-                );
-                
-                if (pontosValidos.length >= 2) {
-                    // Criar mapa centrado na rota
-                    const bounds = L.latLngBounds(pontosValidos.map(p => [p[0], p[1]]));
-                    
-                    window.mapaDedicado = L.map('map-dedicado').fitBounds(bounds, {
-                        padding: [20, 20]
-                    });
-                    
-                    // Adicionar camada de tiles
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenStreetMap contributors'
-                    }).addTo(window.mapaDedicado);
-                    
-                    // Adicionar marcadores de origem e destino
-                    const origem = pontosValidos[0];
-                    const destino = pontosValidos[pontosValidos.length - 1];
-                    
-                    L.marker([origem[0], origem[1]])
-                        .addTo(window.mapaDedicado)
-                        .bindPopup(`<b>Origem</b><br>${data.analise?.origem || 'Ponto de partida'}`)
-                        .openPopup();
-                    
-                    L.marker([destino[0], destino[1]])
-                        .addTo(window.mapaDedicado)
-                        .bindPopup(`<b>Destino</b><br>${data.analise?.destino || 'Ponto de chegada'}`);
-                    
-                    // Adicionar linha da rota
-                    const latlngs = pontosValidos.map(p => [p[0], p[1]]);
-                    L.polyline(latlngs, {
-                        color: '#ff9800',
-                        weight: 4,
-                        opacity: 0.8
-                    }).addTo(window.mapaDedicado);
-                    
-                    // Adicionar pontos de pedágio se disponíveis
-                    if (data.analise?.pedagios_mapa && data.analise.pedagios_mapa.pontos_pedagio) {
-                        data.analise.pedagios_mapa.pontos_pedagio.forEach((pedagio, index) => {
-                            if (pedagio.coordenadas && pedagio.coordenadas.length >= 2) {
-                                const [lat, lng] = pedagio.coordenadas;
-                                
-                                // Criar ícone personalizado para pedágio
-                                const pedagioIcon = L.divIcon({
-                                    className: 'pedagio-marker',
-                                    html: '<div style="background: #dc3545; color: white; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);">💰</div>',
-                                    iconSize: [24, 24],
-                                    iconAnchor: [12, 12]
-                                });
-                                
-                                L.marker([lat, lng], { icon: pedagioIcon })
-                                    .addTo(window.mapaDedicado)
-                                    .bindPopup(`
-                                        <div style="min-width: 200px;">
-                                            <b>🛣️ Ponto de Pedágio ${index + 1}</b><br>
-                                            <strong>Localização:</strong> ${pedagio.nome || 'N/A'}<br>
-                                            <strong>Valor Estimado:</strong> R$ ${pedagio.valor ? pedagio.valor.toFixed(2) : 'N/A'}<br>
-                                            <strong>Tipo:</strong> ${pedagio.tipo || 'Convencional'}<br>
-                                            <small style="color: #666;">Coordenadas: ${lat.toFixed(4)}, ${lng.toFixed(4)}</small>
-                                        </div>
-                                    `);
-                            }
-                        });
-                        
-                        console.log(`[DEDICADO] Adicionados ${data.analise.pedagios_mapa.pontos_pedagio.length} pontos de pedágio ao mapa`);
-                    }
-                    
-                    console.log('[DEDICADO] Mapa criado com sucesso');
-                } else {
-                    console.warn('[DEDICADO] Pontos da rota inválidos, ocultando mapa');
-                    if (mapaSection) {
-                        mapaSection.style.display = 'none';
-                    }
-                }
-            } catch (error) {
-                console.error('[DEDICADO] Erro ao criar mapa:', error);
-                if (mapaSection) {
-                    mapaSection.style.display = 'none';
-                }
-            }
-        } else {
-            console.warn('[DEDICADO] Sem pontos de rota disponíveis');
-            if (mapaSection) {
-                mapaSection.style.display = 'none';
+            if (data.ranking_dedicado && data.ranking_dedicado.ranking_opcoes) {
+                console.log('[DEDICADO] Usando formato All In com ranking');
+                exibirResultadoAllInDedicado(data);
+            } else {
+                console.log('[DEDICADO] Usando formato All In básico');
+                exibirResultadoAllInDedicado(data);
             }
         }
     }
@@ -3759,4 +3551,520 @@ document.addEventListener('DOMContentLoaded', function() {
     // 🔧 EXPORTAÇÃO DA FUNÇÃO PARA USO GLOBAL
     window.showNoOptionsMessage = showNoOptionsMessage;
     window.closeNoOptionsMessage = closeNoOptionsMessage;
+
+    function exibirResultadoDedicadoEspecifico(data, container) {
+        console.log('[DEDICADO ESPECÍFICO] Iniciando exibição específica');
+        console.log('[DEDICADO ESPECÍFICO] Container:', container);
+        console.log('[DEDICADO ESPECÍFICO] Dados:', data);
+        
+        // Armazenar dados globalmente
+        dadosFreteDedicadoAll = data;
+        
+        // Obter dados do formulário para informações da rota
+        const origem = document.getElementById('uf_origem')?.value + '/' + document.getElementById('municipio_origem')?.value;
+        const destino = document.getElementById('uf_destino')?.value + '/' + document.getElementById('municipio_destino')?.value;
+        const peso = parseFloat(document.getElementById('peso')?.value) || 0;
+        const cubagem = parseFloat(document.getElementById('cubagem')?.value) || 0;
+        
+        // Criar layout específico para a aba Frete Dedicado (SEM RANKING)
+        let html = `
+            <div class="resultados-dedicado-especifico" style="margin-top: 20px;">
+                <div class="card">
+                    <h3><i class="fa-solid fa-truck"></i> Resultados - Frete Dedicado</h3>
+                    
+                    <!-- Informações da Rota -->
+                    <div class="info-rota" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4><i class="fa-solid fa-route"></i> Informações da Rota</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                            <div><strong>Origem:</strong> ${origem || 'N/A'}</div>
+                            <div><strong>Destino:</strong> ${destino || 'N/A'}</div>
+                            <div><strong>Distância:</strong> ${data.distancia ? `${data.distancia.toLocaleString('pt-BR')} km` : 'N/A'}</div>
+                            <div><strong>Peso:</strong> ${peso ? `${peso.toLocaleString('pt-BR')} kg` : 'N/A'}</div>
+                            <div><strong>Cubagem:</strong> ${cubagem ? `${cubagem.toLocaleString('pt-BR')} m³` : 'N/A'}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Veículos Disponíveis (SEM RANKING) -->
+                    <div class="veiculos-section" style="margin-bottom: 30px;">
+                        <h4><i class="fa-solid fa-truck"></i> Veículos Disponíveis</h4>
+                        <p style="color: #6c757d; margin-bottom: 15px;">Clique em um veículo para ver detalhes específicos</p>
+                        
+                        <div class="veiculos-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px;">
+        `;
+        
+        // Listar veículos (sem ranking)
+        Object.entries(data.custos).forEach(([veiculo, valor]) => {
+            const icone = veiculo.includes('VUC') ? '🚐' : 
+                         veiculo.includes('3/4') ? '🚚' : 
+                         veiculo.includes('TOCO') ? '🚛' : 
+                         veiculo.includes('TRUCK') ? '🚛' : 
+                         veiculo.includes('CARRETA') ? '🚛' : '🚚';
+            
+            const capacidade = obterCapacidadeVeiculo(veiculo);
+            const pesoOk = peso <= capacidade.peso_max;
+            const volumeOk = cubagem <= capacidade.volume_max;
+            const capacidadeOk = pesoOk && volumeOk;
+            
+            html += `
+                <div class="veiculo-card ${!capacidadeOk && peso > 0 ? 'capacidade-excedida' : ''}" 
+                     onclick="selecionarVeiculoDedicadoEspecifico('${veiculo}', ${valor})" 
+                     style="cursor: pointer; background: white; border: 2px solid #e3e8ee; border-radius: 12px; padding: 15px; transition: all 0.3s ease;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.5rem;">${icone}</span>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 1.3rem; font-weight: bold; color: #0a6ed1;">R$ ${valor.toFixed(2)}</div>
+                        </div>
+                    </div>
+                    <div style="font-weight: 600; margin-bottom: 8px;">${veiculo}</div>
+                    <div style="font-size: 0.9rem; color: #6c757d;">
+                        <div class="${!pesoOk && peso > 0 ? 'capacidade-insuficiente' : ''}">
+                            ⚖️ ${capacidade.peso_max.toLocaleString('pt-BR')} kg
+                        </div>
+                        <div class="${!volumeOk && cubagem > 0 ? 'capacidade-insuficiente' : ''}">
+                            📦 ${capacidade.volume_max.toLocaleString('pt-BR')} m³
+                        </div>
+                    </div>
+                    ${!capacidadeOk && peso > 0 ? '<div class="aviso-capacidade" style="color: #dc3545; font-size: 0.8rem; margin-top: 5px;">⚠️ Capacidade excedida</div>' : ''}
+                </div>
+            `;
+        });
+        
+        html += `
+                        </div>
+                    </div>
+                    
+                    <!-- Detalhes do Veículo Selecionado -->
+                    <div id="detalhes-veiculo-especifico" class="detalhes-veiculo-especifico" style="margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px; display: none;">
+                        <h4><i class="fa-solid fa-info-circle"></i> Detalhes do Veículo Selecionado</h4>
+                        <div id="detalhes-content-especifico"></div>
+                    </div>
+                    
+                    <!-- Ações -->
+                    <div class="acoes-section" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e3e8ee;">
+                        <h4><i class="fa-solid fa-tools"></i> Ações</h4>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <button onclick="exportarCotacaoDedicadoEspecifico()" class="btn-secondary" style="padding: 10px 20px;">
+                                <i class="fa-solid fa-download"></i> Exportar Cotação
+                            </button>
+                            <button onclick="limparResultadosDedicado()" class="btn-secondary" style="padding: 10px 20px;">
+                                <i class="fa-solid fa-trash"></i> Limpar Resultados
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        console.log('[DEDICADO ESPECÍFICO] Layout específico criado com sucesso');
+    }
+
+    // Funções auxiliares para o layout específico
+    function selecionarVeiculoDedicadoEspecifico(tipo, valor) {
+        console.log('[DEDICADO ESPECÍFICO] Veículo selecionado:', tipo, 'valor:', valor);
+        
+        // Remover seleção anterior
+        document.querySelectorAll('.veiculo-card').forEach(card => {
+            card.style.border = '2px solid #e3e8ee';
+            card.style.transform = 'scale(1)';
+        });
+        
+        // Destacar o veículo selecionado
+        event.target.closest('.veiculo-card').style.border = '2px solid #0a6ed1';
+        event.target.closest('.veiculo-card').style.transform = 'scale(1.02)';
+        
+        // Exibir detalhes do veículo
+        const detalhesContainer = document.getElementById('detalhes-veiculo-especifico');
+        const detalhesContent = document.getElementById('detalhes-content-especifico');
+        
+        if (detalhesContainer && detalhesContent) {
+            detalhesContainer.style.display = 'block';
+            
+            const capacidade = obterCapacidadeVeiculo(tipo);
+            const vantagens = getVehicleAdvantages(tipo);
+            
+            detalhesContent.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+                    <div class="detalhe-card" style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e3e8ee;">
+                        <h5><i class="fa-solid fa-truck"></i> Informações do Veículo</h5>
+                        <p><strong>Tipo:</strong> ${tipo}</p>
+                        <p><strong>Valor:</strong> R$ ${valor.toFixed(2)}</p>
+                        <p><strong>Capacidade Peso:</strong> ${capacidade.peso_max.toLocaleString('pt-BR')} kg</p>
+                        <p><strong>Capacidade Volume:</strong> ${capacidade.volume_max.toLocaleString('pt-BR')} m³</p>
+                    </div>
+                    
+                    <div class="detalhe-card" style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e3e8ee;">
+                        <h5><i class="fa-solid fa-star"></i> Vantagens</h5>
+                        <ul style="margin: 0; padding-left: 20px;">
+                            ${vantagens.map(vantagem => `<li>${vantagem}</li>`).join('')}
+                        </ul>
+                    </div>
+                    
+                    <div class="detalhe-card" style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e3e8ee;">
+                        <h5><i class="fa-solid fa-calculator"></i> Análise de Custos</h5>
+                        <p><strong>Custo por km:</strong> R$ ${(valor / (dadosFreteDedicadoAll.distancia || 1)).toFixed(2)}</p>
+                        <p><strong>Eficiência:</strong> ${((capacidade.peso_max / valor) * 100).toFixed(1)} kg/R$</p>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px; text-align: center;">
+                    <button onclick="exportarCotacaoDedicadoEspecifico('${tipo}', ${valor})" class="btn-primary" style="margin-right: 10px;">
+                        <i class="fa-solid fa-download"></i> Exportar Cotação
+                    </button>
+                    <button onclick="fecharDetalhesDedicado()" class="btn-secondary">
+                        <i class="fa-solid fa-times"></i> Fechar
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    function exportarCotacaoDedicadoEspecifico(tipo, valor) {
+        console.log('[DEDICADO ESPECÍFICO] Exportando cotação:', tipo, valor);
+        
+        const dados = {
+            tipo: 'Frete Dedicado',
+            veiculo: tipo,
+            valor: valor,
+            origem: dadosFreteDedicadoAll.origem,
+            destino: dadosFreteDedicadoAll.destino,
+            distancia: dadosFreteDedicadoAll.distancia,
+            peso: dadosFreteDedicadoAll.peso,
+            data: new Date().toLocaleDateString('pt-BR'),
+            hora: new Date().toLocaleTimeString('pt-BR')
+        };
+        
+        // Criar arquivo JSON para download
+        const blob = new Blob([JSON.stringify(dados, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `cotacao_dedicado_${tipo.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        alert('Cotação exportada com sucesso!');
+    }
+
+    function limparResultadosDedicado() {
+        console.log('[DEDICADO ESPECÍFICO] Limpando resultados');
+        
+        const container = document.getElementById('resultados-dedicado');
+        if (container) {
+            container.innerHTML = '';
+        }
+        
+        // Limpar também os containers da aba All In se existirem
+        const containerAllIn = document.getElementById('resultados-dedicado-all-in');
+        if (containerAllIn) {
+            containerAllIn.innerHTML = '';
+        }
+        
+        // Limpar dados globais
+        dadosFreteDedicadoAll = null;
+        
+        console.log('[DEDICADO ESPECÍFICO] Resultados limpos');
+    }
+
+    function fecharDetalhesDedicado() {
+        const detalhesContainer = document.getElementById('detalhes-veiculo-especifico');
+        if (detalhesContainer) {
+            detalhesContainer.style.display = 'none';
+        }
+        
+        // Remover destaque dos veículos
+        document.querySelectorAll('.veiculo-card').forEach(card => {
+            card.style.border = '2px solid #e3e8ee';
+            card.style.transform = 'scale(1)';
+        });
+    }
+
+    // Expor funções globalmente
+    window.selecionarVeiculoDedicadoEspecifico = selecionarVeiculoDedicadoEspecifico;
+    window.exportarCotacaoDedicadoEspecifico = exportarCotacaoDedicadoEspecifico;
+    window.limparResultadosDedicado = limparResultadosDedicado;
+    window.fecharDetalhesDedicado = fecharDetalhesDedicado;
+
+    // Variáveis globais para múltiplas bases
+    let basesSelecionadas = [];
+    let todasBases = [];
+
+    // Carregar bases disponíveis ao inicializar
+    carregarBasesDisponiveis();
+
+    async function carregarBasesDisponiveis() {
+        try {
+            const response = await fetch('/api/bases-disponiveis');
+            const data = await response.json();
+            
+            if (data.bases) {
+                todasBases = data.bases;
+                console.log('[BASES] Bases carregadas:', todasBases.length);
+            }
+        } catch (error) {
+            console.error('[BASES] Erro ao carregar bases:', error);
+        }
+    }
+
+    function abrirModalBases() {
+        const modal = document.getElementById('modal-bases');
+        const grid = document.getElementById('bases-grid');
+        
+        if (!modal || !grid) {
+            console.error('[BASES] Modal ou grid não encontrado');
+            return;
+        }
+        
+        // Limpar grid
+        grid.innerHTML = '';
+        
+        // Adicionar bases ao grid
+        todasBases.forEach(base => {
+            const baseItem = document.createElement('div');
+            baseItem.className = 'base-item';
+            baseItem.onclick = () => toggleBaseSelecao(base);
+            
+            baseItem.innerHTML = `
+                <div class="base-codigo">${base.codigo}</div>
+                <div class="base-nome">${base.nome}</div>
+                <div class="base-regiao">${base.regiao}</div>
+            `;
+            
+            grid.appendChild(baseItem);
+        });
+        
+        // Atualizar lista de bases selecionadas
+        atualizarListaBasesSelecionadas();
+        
+        modal.style.display = 'block';
+    }
+
+    function fecharModalBases() {
+        const modal = document.getElementById('modal-bases');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    function toggleBaseSelecao(base) {
+        // Permitir apenas uma base selecionada
+        basesSelecionadas = [base];
+        atualizarListaBasesSelecionadas();
+        atualizarGridBases();
+    }
+
+    function atualizarListaBasesSelecionadas() {
+        const lista = document.getElementById('bases-selecionadas-lista');
+        if (!lista) return;
+        
+        lista.innerHTML = '';
+        
+        basesSelecionadas.forEach((base, index) => {
+            const baseItem = document.createElement('span');
+            baseItem.className = 'base-selecionada';
+            baseItem.innerHTML = `
+                ${base.codigo}
+                <span class="remove" onclick="removerBase(${index})">&times;</span>
+            `;
+            lista.appendChild(baseItem);
+        });
+    }
+
+    function atualizarGridBases() {
+        const items = document.querySelectorAll('.base-item');
+        
+        items.forEach(item => {
+            const codigo = item.querySelector('.base-codigo').textContent;
+            const isSelected = basesSelecionadas.some(b => b.codigo === codigo);
+            
+            if (isSelected) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+
+    function removerBase(index) {
+        basesSelecionadas.splice(index, 1);
+        atualizarListaBasesSelecionadas();
+        atualizarGridBases();
+    }
+
+    function aplicarBasesSelecionadas() {
+        const input = document.getElementById('bases_intermediarias');
+        if (input) {
+            const codigos = basesSelecionadas.map(b => b.codigo).join(', ');
+            input.value = codigos;
+        }
+        fecharModalBases();
+    }
+
+    async function calcularFreteFracionadoMultiplasBases() {
+        const form = document.getElementById('form-fracionado');
+        if (!form) {
+            showError('Formulário não encontrado', 'fracionado-resultado');
+            return;
+        }
+        
+        // Obter dados do formulário
+        const formData = {
+            uf_origem: document.getElementById('uf_origem_frac').value,
+            municipio_origem: document.getElementById('municipio_origem_frac').value,
+            uf_destino: document.getElementById('uf_destino_frac').value,
+            municipio_destino: document.getElementById('municipio_destino_frac').value,
+            peso: parseFloat(document.getElementById('peso_frac').value),
+            cubagem: parseFloat(document.getElementById('cubagem_frac').value),
+            valor_nf: parseFloat(document.getElementById('valor_nf_frac').value) || null
+        };
+        
+        // Obter bases do input ou das selecionadas
+        let basesInput = document.getElementById('bases_intermediarias').value;
+        let basesArray = [];
+        
+        if (basesInput) {
+            basesArray = basesInput.split(',').map(b => b.trim().toUpperCase()).filter(b => b);
+        } else if (basesSelecionadas.length > 0) {
+            basesArray = basesSelecionadas.map(b => b.codigo);
+        }
+        
+        formData.bases_intermediarias = basesArray;
+        
+        console.log('[MULTIPLAS_BASES] Dados do formulário:', formData);
+        
+        if (!formData.uf_origem || !formData.municipio_origem || !formData.uf_destino || !formData.municipio_destino) {
+            showError('Por favor, preencha todos os campos obrigatórios', 'fracionado-resultado');
+            return;
+        }
+        
+        if (basesArray.length !== 1) {
+            showError('É necessário selecionar exatamente 1 base intermediária', 'fracionado-resultado');
+            return;
+        }
+        
+        const loading = document.getElementById('loading-fracionado-multiplas-bases');
+        if (loading) loading.style.display = 'block';
+        
+        try {
+            const response = await fetch('/calcular_frete_fracionado_multiplas_bases', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            });
+            
+            const result = await response.json();
+            
+            if (result.error) {
+                showError(result.error, 'fracionado-resultado');
+                if (result.sem_opcoes) {
+                    showNoOptionsMessage(result.error);
+                }
+            } else {
+                exibirResultadoFracionadoMultiplasBases(result);
+            }
+        } catch (error) {
+            console.error('Erro ao calcular frete fracionado com múltiplas bases:', error);
+            showError('Erro ao calcular frete fracionado com múltiplas bases. Tente novamente.', 'fracionado-resultado');
+        } finally {
+            if (loading) loading.style.display = 'none';
+        }
+    }
+
+    function exibirResultadoFracionadoMultiplasBases(data) {
+        const container = document.getElementById('fracionado-resultado');
+        if (!container) return;
+        
+        let html = `
+            <div class="card" style="margin-top: 20px;">
+                <h3><i class="fa-solid fa-route"></i> Frete Fracionado com Múltiplas Bases</h3>
+                
+                <div class="resumo-section">
+                    <h4><i class="fa-solid fa-map-marker-alt"></i> Rota Completa</h4>
+                    <div class="rota-completa" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0;">
+                        <span class="rota-item origem" style="background: #28a745; color: white; padding: 5px 10px; border-radius: 15px;">${data.origem}</span>
+                        ${data.bases_intermediarias.map(base => `<span class="rota-item base" style="background: #0a6ed1; color: white; padding: 5px 10px; border-radius: 15px;">${base}</span>`).join('')}
+                        <span class="rota-item destino" style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 15px;">${data.destino}</span>
+                    </div>
+                </div>
+                
+                <div class="resumo-section">
+                    <h4><i class="fa-solid fa-calculator"></i> Resumo Financeiro</h4>
+                    <div class="resumo-grid">
+                        <div class="resumo-card">
+                            <div class="resumo-card-header">
+                                <i class="fa-solid fa-dollar-sign"></i> Custo Total
+                            </div>
+                            <div class="resumo-card-body">
+                                <div class="valor-principal" style="font-size: 1.5rem; font-weight: bold; color: #28a745;">R$ ${data.custo_total.toFixed(2)}</div>
+                                <div class="detalhes">
+                                    <div>Prazo: ${data.prazo_total} dias</div>
+                                    <div>Peso Cubado: ${data.peso_cubado.toFixed(2)} kg</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="resumo-card">
+                            <div class="resumo-card-header">
+                                <i class="fa-solid fa-shield-alt"></i> Custos Adicionais
+                            </div>
+                            <div class="resumo-card-body">
+                                <div>GRIS: R$ ${data.gris.toFixed(2)}</div>
+                                <div>Seguro: R$ ${data.seguro.toFixed(2)}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="resumo-section">
+                    <h4><i class="fa-solid fa-truck"></i> Detalhamento por Trecho</h4>
+                    <div class="trechos-container">
+        `;
+        
+        data.trechos.forEach((trecho, index) => {
+            html += `
+                <div class="trecho-item" style="background: #f8f9fa; border-radius: 8px; padding: 15px; margin: 10px 0; border-left: 4px solid #0a6ed1;">
+                    <div class="trecho-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span class="trecho-numero" style="background: #0a6ed1; color: white; padding: 5px 10px; border-radius: 15px; font-weight: bold;">${index + 1}</span>
+                        <span class="trecho-rota" style="font-weight: bold; color: #495057;">${trecho.trecho}</span>
+                        <span class="trecho-custo" style="background: #28a745; color: white; padding: 5px 10px; border-radius: 15px; font-weight: bold;">R$ ${trecho.custo.toFixed(2)}</span>
+                    </div>
+                    <div class="trecho-detalhes" style="color: #6c757d;">
+                        <div><strong>Fornecedor:</strong> ${trecho.fornecedor}</div>
+                        <div><strong>Tipo:</strong> ${trecho.tipo_servico || 'FRACIONADO'}</div>
+                        <div><strong>Prazo:</strong> ${trecho.prazo} dias</div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                    </div>
+                </div>
+                
+                <div class="resumo-section">
+                    <h4><i class="fa-solid fa-info-circle"></i> Informações Adicionais</h4>
+                    <div class="info-grid" style="background: #f8f9fa; border-radius: 8px; padding: 15px;">
+                        <div><strong>Fornecedores Utilizados:</strong> ${data.fornecedores_utilizados.join(', ')}</div>
+                        <div><strong>Tempo de Cálculo:</strong> ${data.tempo_calculo.toFixed(2)}s</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+
+    // Expor funções de múltiplas bases globalmente
+    window.abrirModalBases = abrirModalBases;
+    window.fecharModalBases = fecharModalBases;
+    window.toggleBaseSelecao = toggleBaseSelecao;
+    window.removerBase = removerBase;
+    window.aplicarBasesSelecionadas = aplicarBasesSelecionadas;
+    window.calcularFreteFracionadoMultiplasBases = calcularFreteFracionadoMultiplasBases;
 });

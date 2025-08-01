@@ -947,6 +947,250 @@ def carregar_base_unificada():
     except Exception as e:
         print(f"[BASE] ❌ Erro ao carregar base unificada: {e}")
         return None
+def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None, bases_intermediarias=None):
+    """
+    Calcular frete fracionado usando múltiplas bases intermediárias
+    Permite ao usuário escolher bases para compor a viagem (ex: SAO -> ITJ -> SSZ -> SJP)
+    """
+    try:
+        tempo_inicio = time.time()
+        
+        # Carregar base unificada
+        df_base = carregar_base_unificada()
+        if df_base is None:
+            return None
+        
+        # Normalizar cidades
+        origem_norm = normalizar_cidade_nome(origem)
+        destino_norm = normalizar_cidade_nome(destino)
+        uf_origem_norm = normalizar_uf(uf_origem)
+        uf_destino_norm = normalizar_uf(uf_destino)
+        
+        # Mapeamento de códigos de base para nomes
+        mapeamento_bases = {
+            "SAO": "São Paulo", "ITJ": "Itajaí", "SSZ": "Salvador", "SJP": "São José dos Pinhais",
+            "SPO": "São Paulo", "RAO": "Ribeirão Preto", "CPQ": "Campinas", "SJK": "São José dos Campos",
+            "RIO": "Rio de Janeiro", "BHZ": "Belo Horizonte", "VIX": "Vitória", "CWB": "Curitiba",
+            "POA": "Porto Alegre", "BSB": "Brasília", "GYN": "Goiânia", "CGB": "Cuiabá",
+            "CGR": "Campo Grande", "FOR": "Fortaleza", "REC": "Recife", "SSA": "Salvador",
+            "NAT": "Natal", "JPA": "João Pessoa", "MCZ": "Maceió", "AJU": "Aracaju",
+            "SLZ": "São Luís", "THE": "Teresina", "MAO": "Manaus", "MAB": "Marabá",
+            "PMW": "Palmas", "FILIAL": "Filial Local"
+        }
+        
+        # Se não foi fornecida base intermediária, retornar erro
+        if not bases_intermediarias or len(bases_intermediarias) != 1:
+            return {
+                'error': 'É necessário fornecer exatamente 1 base intermediária para compor a viagem (ex: SAO)',
+                'sem_opcoes': True
+            }
+        
+        # Construir rota completa: Origem -> Base Intermediária -> Destino
+        # Converter códigos de base para nomes de cidades
+        base_intermediaria = bases_intermediarias[0]  # Pegar a única base
+        nome_base = mapeamento_bases.get(base_intermediaria.upper(), base_intermediaria)
+        
+        # Usar nomes normalizados para busca na base de dados
+        rota_completa = [origem_norm, nome_base, destino_norm]
+        
+        print(f"[MULTIPLAS_BASES] 🛣️ Rota completa: {' -> '.join(rota_completa)}")
+        
+        # Calcular custos para cada trecho da rota
+        trechos_custos = []
+        custo_total = 0
+        prazo_total = 0
+        fornecedores_utilizados = []
+        
+        # Calcular cada trecho da rota
+        for i in range(len(rota_completa) - 1):
+            origem_trecho = rota_completa[i]
+            destino_trecho = rota_completa[i + 1]
+            indice = i + 1
+            
+            print(f"[MULTIPLAS_BASES] 🔍 Calculando trecho {indice}: {origem_trecho} -> {destino_trecho}")
+            
+            # Buscar serviços para este trecho - incluindo agentes, transferência e direto
+            print(f"[MULTIPLAS_BASES] 🔍 Buscando serviços para: {origem_trecho} -> {destino_trecho}")
+            
+            # Estratégia 1: Busca exata por nome normalizado (todos os tipos incluindo agentes)
+            servicos_trecho = df_base[
+                (df_base['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_trecho)) &
+                (df_base['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_trecho))
+            ]
+            
+            # Estratégia 2: Busca por Base Origem/Destino
+            if servicos_trecho.empty:
+                servicos_trecho = df_base[
+                    (df_base['Base Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_trecho)) &
+                    (df_base['Base Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_trecho))
+                ]
+            
+            # Estratégia 3: Busca flexível por nome (incluindo agentes)
+            if servicos_trecho.empty:
+                servicos_trecho = df_base[
+                    (df_base['Origem'].str.contains(origem_trecho, case=False, na=False)) &
+                    (df_base['Destino'].str.contains(destino_trecho, case=False, na=False))
+                ]
+            
+            # Estratégia 4: Busca por similaridade (primeiros caracteres)
+            if servicos_trecho.empty:
+                servicos_trecho = df_base[
+                    (df_base['Origem'].str.contains(origem_trecho[:4], case=False, na=False)) &
+                    (df_base['Destino'].str.contains(destino_trecho[:4], case=False, na=False))
+                ]
+            
+            # Estratégia 5: Busca específica para agentes (sempre incluir agentes)
+            print(f"[MULTIPLAS_BASES] 🔍 Buscando agentes específicos para: {origem_trecho} -> {destino_trecho}")
+            servicos_agentes = df_base[
+                (df_base['Tipo'] == 'Agente') &
+                (df_base['Origem'].str.contains(origem_trecho[:4], case=False, na=False)) &
+                (df_base['Destino'].str.contains(destino_trecho[:4], case=False, na=False))
+            ]
+            
+            # Combinar serviços encontrados com agentes
+            if not servicos_agentes.empty:
+                if servicos_trecho.empty:
+                    servicos_trecho = servicos_agentes
+                else:
+                    # Concatenar agentes aos serviços já encontrados
+                    servicos_trecho = pd.concat([servicos_trecho, servicos_agentes], ignore_index=True)
+                print(f"[MULTIPLAS_BASES] 📊 Adicionados {len(servicos_agentes)} agentes aos serviços")
+            
+            print(f"[MULTIPLAS_BASES] 📊 Encontrados {len(servicos_trecho)} serviços para o trecho")
+            
+            if servicos_trecho.empty:
+                return {
+                    'error': f'Não há serviços disponíveis para o trecho {origem_trecho} -> {destino_trecho}',
+                    'sem_opcoes': True
+                }
+            
+            # Encontrar o melhor serviço para este trecho
+            melhor_servico = None
+            menor_custo = float('inf')
+            
+            # Contador para evitar logs duplicados
+            servicos_processados = 0
+            
+            for _, servico in servicos_trecho.iterrows():
+                try:
+                    # Calcular custo para este serviço baseado no tipo
+                    peso_cubado = max(float(peso), float(cubagem) * 300) if cubagem else float(peso)
+                    tipo_servico = servico.get('Tipo', 'FRACIONADO')
+                    fornecedor = servico.get('Fornecedor', 'N/A')
+                    
+                    if tipo_servico == 'Agente':
+                        # Usar lógica específica para agentes
+                        custo_servico = calcular_custo_agente(servico, peso_cubado, valor_nf)
+                    else:
+                        # Usar lógica padrão para outros tipos
+                        custo_servico = processar_linha_fracionado(servico, peso_cubado, valor_nf, tipo_servico)
+                    
+                    if custo_servico and custo_servico.get('custo_total', float('inf')) < menor_custo:
+                        menor_custo = custo_servico.get('custo_total', float('inf'))
+                        melhor_servico = {
+                            'servico': servico,
+                            'custo': custo_servico,
+                            'origem': origem_trecho,
+                            'destino': destino_trecho,
+                            'tipo': tipo_servico
+                        }
+                        print(f"[MULTIPLAS_BASES] ✅ Melhor serviço: {fornecedor} ({tipo_servico}) - R$ {menor_custo:.2f}")
+                    
+                    servicos_processados += 1
+                    
+                except Exception as e:
+                    print(f"[MULTIPLAS_BASES] ⚠️ Erro ao processar serviço {fornecedor}: {e}")
+                    continue
+            
+            print(f"[MULTIPLAS_BASES] 📊 Processados {servicos_processados} serviços para o trecho")
+            
+            # Se não encontrou nenhum serviço válido, tentar com o primeiro disponível
+            if not melhor_servico and not servicos_trecho.empty:
+                print(f"[MULTIPLAS_BASES] ⚠️ Nenhum serviço válido encontrado, tentando com o primeiro disponível")
+                primeiro_servico = servicos_trecho.iloc[0]
+                try:
+                    peso_cubado = max(float(peso), float(cubagem) * 300) if cubagem else float(peso)
+                    custo_servico = processar_linha_fracionado(primeiro_servico, peso_cubado, valor_nf, "FRACIONADO")
+                    
+                    if custo_servico:
+                        melhor_servico = {
+                            'servico': primeiro_servico,
+                            'custo': custo_servico,
+                            'origem': origem_trecho,
+                            'destino': destino_trecho
+                        }
+                        print(f"[MULTIPLAS_BASES] ✅ Usando primeiro serviço disponível: {primeiro_servico.get('Fornecedor', 'N/A')}")
+                except Exception as e:
+                    print(f"[MULTIPLAS_BASES] ⚠️ Erro ao processar primeiro serviço: {e}")
+            
+            if not melhor_servico:
+                return {
+                    'error': f'Não foi possível calcular custo para o trecho {origem_trecho} -> {destino_trecho}',
+                    'sem_opcoes': True
+                }
+            
+            # Adicionar custo do trecho ao total
+            custo_trecho = melhor_servico['custo'].get('custo_total', 0)
+            if custo_trecho == 0:
+                # Tentar outras chaves possíveis
+                custo_trecho = melhor_servico['custo'].get('total', 0)
+                if custo_trecho == 0:
+                    custo_trecho = melhor_servico['custo'].get('valor', 0)
+            
+            custo_total += custo_trecho
+            prazo_total += melhor_servico['custo'].get('prazo', 0)
+            fornecedores_utilizados.append(melhor_servico['servico'].get('Fornecedor', 'N/A'))
+            
+            trechos_custos.append({
+                'trecho': f"{origem_trecho} -> {destino_trecho}",
+                'custo': custo_trecho,
+                'fornecedor': melhor_servico['servico'].get('Fornecedor', 'N/A'),
+                'tipo_servico': melhor_servico.get('tipo', 'FRACIONADO'),
+                'prazo': melhor_servico['custo'].get('prazo', 0),
+                'detalhes': melhor_servico['custo']
+            })
+            
+            print(f"[MULTIPLAS_BASES] 💰 Trecho {indice}: {origem_trecho} -> {destino_trecho} = R$ {custo_trecho:.2f} ({melhor_servico.get('tipo', 'FRACIONADO')})")
+        
+        # Calcular custos adicionais (GRIS, seguro, etc.)
+        peso_cubado = max(float(peso), float(cubagem) * 300) if cubagem else float(peso)
+        
+        # GRIS (se valor_nf fornecido)
+        gris_total = 0
+        if valor_nf:
+            gris_total = float(valor_nf) * 0.01  # 1% do valor da NF
+        
+        # Seguro (se aplicável)
+        seguro_total = peso_cubado * 0.50  # R$ 0,50 por kg
+        
+        custo_total += gris_total + seguro_total
+        
+        # Preparar resultado
+        resultado = {
+            'tipo': 'Fracionado Multiplas Bases',
+            'origem': f"{origem}/{uf_origem}",
+            'destino': f"{destino}/{uf_destino}",
+            'bases_intermediarias': bases_intermediarias,
+            'rota_completa': rota_completa,
+            'trechos': trechos_custos,
+            'custo_total': custo_total,
+            'prazo_total': prazo_total,
+            'fornecedores_utilizados': fornecedores_utilizados,
+            'peso_cubado': peso_cubado,
+            'gris': gris_total,
+            'seguro': seguro_total,
+            'tempo_calculo': time.time() - tempo_inicio
+        }
+        
+        print(f"[MULTIPLAS_BASES] ✅ Cálculo concluído: R$ {custo_total:.2f} em {prazo_total} dias")
+        return resultado
+        
+    except Exception as e:
+        print(f"[MULTIPLAS_BASES] ❌ Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None):
     """
     Calcular frete fracionado usando a Base Unificada com lógica correta de agentes
@@ -3835,6 +4079,58 @@ def historico():
     except Exception as e:
         print(f"[ERROR] Erro ao carregar histórico: {e}")
         return jsonify([])
+@app.route("/api/bases-disponiveis")
+def api_bases_disponiveis():
+    """API endpoint para fornecer lista de bases disponíveis para frete fracionado"""
+    try:
+        # Mapeamento de códigos de base para nomes de cidades
+        bases_disponiveis = [
+            {"codigo": "SAO", "nome": "São Paulo", "regiao": "Sudeste"},
+            {"codigo": "ITJ", "nome": "Itajaí", "regiao": "Sul"},
+            {"codigo": "SSZ", "nome": "Salvador", "regiao": "Nordeste"},
+            {"codigo": "SJP", "nome": "São José dos Pinhais", "regiao": "Sul"},
+            {"codigo": "SPO", "nome": "São Paulo", "regiao": "Sudeste"},
+            {"codigo": "RAO", "nome": "Ribeirão Preto", "regiao": "Sudeste"},
+            {"codigo": "CPQ", "nome": "Campinas", "regiao": "Sudeste"},
+            {"codigo": "SJK", "nome": "São José dos Campos", "regiao": "Sudeste"},
+            {"codigo": "RIO", "nome": "Rio de Janeiro", "regiao": "Sudeste"},
+            {"codigo": "BHZ", "nome": "Belo Horizonte", "regiao": "Sudeste"},
+            {"codigo": "VIX", "nome": "Vitória", "regiao": "Sudeste"},
+            {"codigo": "CWB", "nome": "Curitiba", "regiao": "Sul"},
+            {"codigo": "POA", "nome": "Porto Alegre", "regiao": "Sul"},
+            {"codigo": "BSB", "nome": "Brasília", "regiao": "Centro-Oeste"},
+            {"codigo": "GYN", "nome": "Goiânia", "regiao": "Centro-Oeste"},
+            {"codigo": "CGB", "nome": "Cuiabá", "regiao": "Centro-Oeste"},
+            {"codigo": "CGR", "nome": "Campo Grande", "regiao": "Centro-Oeste"},
+            {"codigo": "FOR", "nome": "Fortaleza", "regiao": "Nordeste"},
+            {"codigo": "REC", "nome": "Recife", "regiao": "Nordeste"},
+            {"codigo": "SSA", "nome": "Salvador", "regiao": "Nordeste"},
+            {"codigo": "NAT", "nome": "Natal", "regiao": "Nordeste"},
+            {"codigo": "JPA", "nome": "João Pessoa", "regiao": "Nordeste"},
+            {"codigo": "MCZ", "nome": "Maceió", "regiao": "Nordeste"},
+            {"codigo": "AJU", "nome": "Aracaju", "regiao": "Nordeste"},
+            {"codigo": "SLZ", "nome": "São Luís", "regiao": "Nordeste"},
+            {"codigo": "THE", "nome": "Teresina", "regiao": "Nordeste"},
+            {"codigo": "MAO", "nome": "Manaus", "regiao": "Norte"},
+            {"codigo": "MAB", "nome": "Marabá", "regiao": "Norte"},
+            {"codigo": "PMW", "nome": "Palmas", "regiao": "Norte"},
+            {"codigo": "FILIAL", "nome": "Filial Local", "regiao": "Local"}
+        ]
+        
+        return jsonify({
+            "bases": bases_disponiveis,
+            "total": len(bases_disponiveis)
+        })
+        
+    except Exception as e:
+        print(f"[API] Erro ao carregar bases disponíveis: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "error": f"Erro interno: {str(e)}",
+            "bases": []
+        })
+
 @app.route("/api/base-agentes")
 def api_base_agentes():
     """API endpoint para fornecer dados da Base Unificada para o mapa de agentes"""
@@ -4158,6 +4454,90 @@ def calcular_aereo():
         log_acesso(usuario, 'ERRO_CALCULO_AEREO', ip_cliente, f"Erro: {str(e)}")
         print(f"Erro ao calcular frete aéreo: {e}")
         return jsonify({"error": f"Erro ao calcular frete aéreo: {str(e)}"})
+
+@app.route("/calcular_frete_fracionado_multiplas_bases", methods=["POST"])
+@middleware_auth
+def calcular_frete_fracionado_multiplas_bases_route():
+    """Rota para calcular frete fracionado com múltiplas bases intermediárias"""
+    global ultimoResultadoFracionado
+    ip_cliente = obter_ip_cliente()
+    usuario = session.get('usuario_logado', 'DESCONHECIDO')
+    
+    try:
+        data = request.get_json()
+        uf_origem = data.get("uf_origem")
+        municipio_origem = data.get("municipio_origem")
+        uf_destino = data.get("uf_destino")
+        municipio_destino = data.get("municipio_destino")
+        peso = data.get("peso", 1)
+        cubagem = data.get("cubagem", 0.01)
+        valor_nf = data.get("valor_nf")
+        bases_intermediarias = data.get("bases_intermediarias", [])
+
+        log_acesso(usuario, 'CALCULO_FRACIONADO_MULTIPLAS_BASES', ip_cliente, 
+                  f"Cálculo Fracionado Multiplas Bases: {municipio_origem}/{uf_origem} -> {bases_intermediarias} -> {municipio_destino}/{uf_destino}, Peso: {peso}kg, Cubagem: {cubagem}m³")
+
+        if not all([uf_origem, municipio_origem, uf_destino, municipio_destino]):
+            return jsonify({"error": "Origem e destino são obrigatórios"})
+
+        if not bases_intermediarias or len(bases_intermediarias) != 1:
+            return jsonify({"error": "É necessário fornecer exatamente 1 base intermediária para compor a viagem (ex: SAO)"})
+
+        # Calcular frete fracionado com múltiplas bases
+        resultado = calcular_frete_fracionado_multiplas_bases(
+            municipio_origem, uf_origem,
+            municipio_destino, uf_destino,
+            peso, cubagem, valor_nf, bases_intermediarias
+        )
+        
+        if not resultado:
+            return jsonify({
+                "error": "Erro ao calcular frete fracionado com múltiplas bases",
+                "tipo": "Fracionado Multiplas Bases"
+            })
+        
+        if resultado.get('error'):
+            return jsonify({
+                "error": resultado.get('error'),
+                "tipo": "Fracionado Multiplas Bases",
+                "sem_opcoes": resultado.get('sem_opcoes', False)
+            })
+        
+        # Preparar resposta
+        resposta = {
+            "tipo": "Fracionado Multiplas Bases",
+            "origem": resultado['origem'],
+            "destino": resultado['destino'],
+            "bases_intermediarias": resultado['bases_intermediarias'],
+            "rota_completa": resultado['rota_completa'],
+            "trechos": resultado['trechos'],
+            "custo_total": resultado['custo_total'],
+            "prazo_total": resultado['prazo_total'],
+            "fornecedores_utilizados": resultado['fornecedores_utilizados'],
+            "peso_cubado": resultado['peso_cubado'],
+            "gris": resultado['gris'],
+            "seguro": resultado['seguro'],
+            "tempo_calculo": resultado['tempo_calculo']
+        }
+        
+        # Armazenar resultado para exportação
+        ultimoResultadoFracionado = resposta
+        
+        # Registrar no histórico
+        HISTORICO_PESQUISAS.append(resposta)
+        if len(HISTORICO_PESQUISAS) > 15:
+            HISTORICO_PESQUISAS.pop(0)
+        
+        # Sanitizar JSON
+        resposta_sanitizada = sanitizar_json(resposta)
+        return jsonify(resposta_sanitizada)
+    
+    except Exception as e:
+        log_acesso(usuario, 'ERRO_CALCULO_FRACIONADO_MULTIPLAS_BASES', ip_cliente, f"Erro: {str(e)}")
+        print(f"Erro ao calcular frete fracionado com múltiplas bases: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Erro ao calcular frete fracionado com múltiplas bases: {str(e)}"})
 
 @app.route("/calcular_frete_fracionado", methods=["POST"])
 @middleware_auth
@@ -4699,6 +5079,10 @@ def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_
     try:
         # Preparar ranking das opcoes baseado nos custos
         ranking_opcoes = []
+        
+        # Verificar se custos é válido
+        if not custos or not isinstance(custos, dict) or len(custos) == 0:
+            return None
         
         # Ordenar custos por valor crescente
         custos_ordenados = sorted(custos.items(), key=lambda x: x[1])
@@ -5352,5 +5736,5 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
         }
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port, debug=True)

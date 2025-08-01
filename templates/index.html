@@ -98,6 +98,153 @@
             line-height: 1.4;
         }
         
+        /* Modal para seleção de bases */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+        }
+        
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 0;
+            border: none;
+            width: 90%;
+            max-width: 800px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        
+        .modal-header {
+            background: linear-gradient(135deg, #0a6ed1 0%, #1e88e5 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px 12px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.3rem;
+        }
+        
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+        
+        .close:hover {
+            color: white;
+        }
+        
+        .modal-body {
+            padding: 20px;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #e3e8ee;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        
+        .bases-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .base-item {
+            background: #f8f9fa;
+            border: 2px solid #e3e8ee;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .base-item:hover {
+            border-color: #0a6ed1;
+            background: #e3f2fd;
+            transform: translateY(-2px);
+        }
+        
+        .base-item.selected {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        
+        .base-codigo {
+            font-family: monospace;
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: #0a6ed1;
+            margin-bottom: 5px;
+        }
+        
+        .base-nome {
+            font-size: 0.9rem;
+            color: #495057;
+            margin-bottom: 3px;
+        }
+        
+        .base-regiao {
+            font-size: 0.8rem;
+            color: #6c757d;
+            font-style: italic;
+        }
+        
+        .bases-selecionadas {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            border-left: 4px solid #28a745;
+        }
+        
+        .bases-selecionadas h4 {
+            margin: 0 0 10px 0;
+            color: #28a745;
+            font-size: 1.1rem;
+        }
+        
+        .base-selecionada {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin: 2px;
+            font-size: 0.9rem;
+            font-family: monospace;
+        }
+        
+        .base-selecionada .remove {
+            margin-left: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .base-selecionada .remove:hover {
+            color: #ff6b6b;
+        }
+        
         .no-options-message .close-btn {
             background: rgba(255, 255, 255, 0.2);
             border: 2px solid rgba(255, 255, 255, 0.3);
@@ -1733,6 +1880,57 @@
                 <button type="submit" class="btn-primary">Calcular Rota com Agentes</button>
                 <div id="loading-fracionado" class="loading-spinner"></div>
             </form>
+            
+            <!-- Botão para Frete Fracionado com Múltiplas Bases -->
+            <div class="form-grid" style="margin-top: 20px; padding-top: 20px; border-top: 2px solid #e3e8ee;">
+                <div class="form-group">
+                                   <label for="bases_intermediarias">Base Intermediária (ex: SAO):</label>
+               <div style="display: flex; gap: 10px;">
+                   <input type="text" id="bases_intermediarias" name="bases_intermediarias" 
+                          placeholder="Digite o código da base intermediária" 
+                          style="font-family: monospace; flex: 1;">
+                   <button type="button" class="btn-secondary" onclick="abrirModalBases()" 
+                           style="white-space: nowrap; padding: 10px 15px;">
+                       <i class="fa-solid fa-map-marker-alt"></i> Selecionar
+                   </button>
+               </div>
+               <small style="color: #6c757d; font-size: 0.85rem; margin-top: 4px; display: block;">
+                   <i class="fa-solid fa-info-circle"></i> Use código de 3 letras da base intermediária ou clique em "Selecionar"
+               </small>
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                                   <button type="button" class="btn-primary" onclick="calcularFreteFracionadoMultiplasBases()" 
+                       style="background: #28a745; width: 100%;">
+                   <i class="fa-solid fa-route"></i> Calcular Frete Fracionado com Base Intermediária
+               </button>
+                    <div id="loading-fracionado-multiplas-bases" class="loading-spinner"></div>
+                </div>
+            </div>
+            
+            <!-- Modal para seleção de bases -->
+            <div id="modal-bases" class="modal" style="display: none;">
+                <div class="modal-content">
+                                   <div class="modal-header">
+                   <h3><i class="fa-solid fa-map-marker-alt"></i> Selecionar Base Intermediária</h3>
+                   <span class="close" onclick="fecharModalBases()">&times;</span>
+               </div>
+                    <div class="modal-body">
+                        <div class="bases-grid" id="bases-grid">
+                            <!-- Bases serão carregadas dinamicamente -->
+                        </div>
+                                           <div class="bases-selecionadas">
+                       <h4>Base Selecionada:</h4>
+                       <div id="bases-selecionadas-lista"></div>
+                   </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn-secondary" onclick="fecharModalBases()">Cancelar</button>
+                        <button type="button" class="btn-primary" onclick="aplicarBasesSelecionadas()">Aplicar</button>
+                    </div>
+                </div>
+            </div>
+            
             <div id="fracionado-resultado"></div>
         </div>
     </div>
@@ -1875,7 +2073,7 @@
             <div id="analise-dedicado"></div>
             
             <!-- Resultados - Layout All In -->
-            <div class="resultados-dedicado-all-in">
+            <div id="resultados-dedicado-all-in" class="resultados-dedicado-all-in">
                 <div class="resumo-section">
                     <h3><i class="fa-solid fa-truck"></i> Frete Dedicado</h3>
                     <div class="resumo-grid">
