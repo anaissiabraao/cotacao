@@ -1009,54 +1009,63 @@ def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_des
             
             print(f"[MULTIPLAS_BASES] 🔍 Calculando trecho {indice}: {origem_trecho} -> {destino_trecho}")
             
-            # Buscar serviços para este trecho - incluindo agentes, transferência e direto
-            print(f"[MULTIPLAS_BASES] 🔍 Buscando serviços para: {origem_trecho} -> {destino_trecho}")
+            # Buscar serviços porta-porta (agentes diretos) - removendo transferências
+            print(f"[MULTIPLAS_BASES] 🔍 Buscando serviços porta-porta para: {origem_trecho} -> {destino_trecho}")
             
-            # Estratégia 1: Busca exata por nome normalizado (todos os tipos incluindo agentes)
-            servicos_trecho = df_base[
-                (df_base['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_trecho)) &
-                (df_base['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_trecho))
-            ]
-            
-            # Estratégia 2: Busca por Base Origem/Destino
-            if servicos_trecho.empty:
-                servicos_trecho = df_base[
-                    (df_base['Base Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_trecho)) &
-                    (df_base['Base Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_trecho))
-                ]
-            
-            # Estratégia 3: Busca flexível por nome (incluindo agentes)
-            if servicos_trecho.empty:
-                servicos_trecho = df_base[
-                    (df_base['Origem'].str.contains(origem_trecho, case=False, na=False)) &
-                    (df_base['Destino'].str.contains(destino_trecho, case=False, na=False))
-                ]
-            
-            # Estratégia 4: Busca por similaridade (primeiros caracteres)
-            if servicos_trecho.empty:
-                servicos_trecho = df_base[
-                    (df_base['Origem'].str.contains(origem_trecho[:4], case=False, na=False)) &
-                    (df_base['Destino'].str.contains(destino_trecho[:4], case=False, na=False))
-                ]
-            
-            # Estratégia 5: Busca específica para agentes (sempre incluir agentes)
-            print(f"[MULTIPLAS_BASES] 🔍 Buscando agentes específicos para: {origem_trecho} -> {destino_trecho}")
+            # Estratégia 1: Busca específica para agentes (prioridade)
+            print(f"[MULTIPLAS_BASES] 🔍 Buscando agentes diretos para: {origem_trecho} -> {destino_trecho}")
             servicos_agentes = df_base[
                 (df_base['Tipo'] == 'Agente') &
                 (df_base['Origem'].str.contains(origem_trecho[:4], case=False, na=False)) &
                 (df_base['Destino'].str.contains(destino_trecho[:4], case=False, na=False))
             ]
             
-            # Combinar serviços encontrados com agentes
+            # Estratégia 2: Busca por agentes com busca exata
+            if servicos_agentes.empty:
+                servicos_agentes = df_base[
+                    (df_base['Tipo'] == 'Agente') &
+                    (df_base['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_trecho)) &
+                    (df_base['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_trecho))
+                ]
+            
+            # Estratégia 3: Busca por agentes com Base Origem/Destino
+            if servicos_agentes.empty:
+                servicos_agentes = df_base[
+                    (df_base['Tipo'] == 'Agente') &
+                    (df_base['Base Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_trecho)) &
+                    (df_base['Base Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_trecho))
+                ]
+            
+            # Estratégia 4: Busca por agentes com busca flexível
+            if servicos_agentes.empty:
+                servicos_agentes = df_base[
+                    (df_base['Tipo'] == 'Agente') &
+                    (df_base['Origem'].str.contains(origem_trecho, case=False, na=False)) &
+                    (df_base['Destino'].str.contains(destino_trecho, case=False, na=False))
+                ]
+            
+            # Estratégia 5: Busca por serviços diretos (não transferência) como fallback
+            if servicos_agentes.empty:
+                print(f"[MULTIPLAS_BASES] 🔍 Nenhum agente encontrado, buscando serviços diretos")
+                servicos_diretos = df_base[
+                    (df_base['Tipo'] == 'Direto') &
+                    (df_base['Origem'].str.contains(origem_trecho[:4], case=False, na=False)) &
+                    (df_base['Destino'].str.contains(destino_trecho[:4], case=False, na=False))
+                ]
+                if not servicos_diretos.empty:
+                    servicos_agentes = servicos_diretos
+                    print(f"[MULTIPLAS_BASES] 📊 Encontrados {len(servicos_diretos)} serviços diretos")
+            
+            # Usar apenas agentes/diretos encontrados
+            servicos_trecho = servicos_agentes
+            
             if not servicos_agentes.empty:
-                if servicos_trecho.empty:
-                    servicos_trecho = servicos_agentes
-                else:
-                    # Concatenar agentes aos serviços já encontrados
-                    servicos_trecho = pd.concat([servicos_trecho, servicos_agentes], ignore_index=True)
-                print(f"[MULTIPLAS_BASES] 📊 Adicionados {len(servicos_agentes)} agentes aos serviços")
+                print(f"[MULTIPLAS_BASES] 📊 Encontrados {len(servicos_agentes)} agentes/serviços diretos")
+            else:
+                print(f"[MULTIPLAS_BASES] ⚠️ Nenhum agente ou serviço direto encontrado")
             
             print(f"[MULTIPLAS_BASES] 📊 Encontrados {len(servicos_trecho)} serviços para o trecho")
+            print(f"[MULTIPLAS_BASES] 🔍 Processando serviços...")
             
             if servicos_trecho.empty:
                 return {
@@ -1078,23 +1087,48 @@ def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_des
                     tipo_servico = servico.get('Tipo', 'FRACIONADO')
                     fornecedor = servico.get('Fornecedor', 'N/A')
                     
-                    if tipo_servico == 'Agente':
+                    # Lógica específica para PTX
+                    if fornecedor == 'PTX':
+                        peso_maximo = max(float(peso), peso_cubado)
+                        custo_base = peso_maximo * 0.25
+                        custo_servico = {
+                            'custo_total': custo_base,
+                            'total': custo_base,
+                            'valor': custo_base,
+                            'prazo': servico.get('Prazo', 2),
+                            'detalhes': {
+                                'base': custo_base,
+                                'peso_maximo': peso_maximo,
+                                'formula': '0.25 × peso máximo'
+                            }
+                        }
+                        print(f"[MULTIPLAS_BASES] 🔍 PTX: {peso_maximo}kg × 0.25 = R$ {custo_base:.2f}")
+                    elif tipo_servico == 'Agente':
                         # Usar lógica específica para agentes
                         custo_servico = calcular_custo_agente(servico, peso_cubado, valor_nf)
                     else:
                         # Usar lógica padrão para outros tipos
                         custo_servico = processar_linha_fracionado(servico, peso_cubado, valor_nf, tipo_servico)
                     
-                    if custo_servico and custo_servico.get('custo_total', float('inf')) < menor_custo:
-                        menor_custo = custo_servico.get('custo_total', float('inf'))
-                        melhor_servico = {
-                            'servico': servico,
-                            'custo': custo_servico,
-                            'origem': origem_trecho,
-                            'destino': destino_trecho,
-                            'tipo': tipo_servico
-                        }
-                        print(f"[MULTIPLAS_BASES] ✅ Melhor serviço: {fornecedor} ({tipo_servico}) - R$ {menor_custo:.2f}")
+                    # Verificar se o custo é válido
+                    if custo_servico:
+                        custo_total_servico = custo_servico.get('custo_total', 0)
+                        if custo_total_servico == 0:
+                            # Tentar outras chaves possíveis
+                            custo_total_servico = custo_servico.get('total', 0)
+                            if custo_total_servico == 0:
+                                custo_total_servico = custo_servico.get('valor', 0)
+                        
+                        if custo_total_servico > 0 and custo_total_servico < menor_custo:
+                            menor_custo = custo_total_servico
+                            melhor_servico = {
+                                'servico': servico,
+                                'custo': custo_servico,
+                                'origem': origem_trecho,
+                                'destino': destino_trecho,
+                                'tipo': tipo_servico
+                            }
+                            print(f"[MULTIPLAS_BASES] ✅ Melhor serviço: {fornecedor} ({tipo_servico}) - R$ {menor_custo:.2f}")
                     
                     servicos_processados += 1
                     
@@ -1104,28 +1138,11 @@ def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_des
             
             print(f"[MULTIPLAS_BASES] 📊 Processados {servicos_processados} serviços para o trecho")
             
-            # Se não encontrou nenhum serviço válido, tentar com o primeiro disponível
-            if not melhor_servico and not servicos_trecho.empty:
-                print(f"[MULTIPLAS_BASES] ⚠️ Nenhum serviço válido encontrado, tentando com o primeiro disponível")
-                primeiro_servico = servicos_trecho.iloc[0]
-                try:
-                    peso_cubado = max(float(peso), float(cubagem) * 300) if cubagem else float(peso)
-                    custo_servico = processar_linha_fracionado(primeiro_servico, peso_cubado, valor_nf, "FRACIONADO")
-                    
-                    if custo_servico:
-                        melhor_servico = {
-                            'servico': primeiro_servico,
-                            'custo': custo_servico,
-                            'origem': origem_trecho,
-                            'destino': destino_trecho
-                        }
-                        print(f"[MULTIPLAS_BASES] ✅ Usando primeiro serviço disponível: {primeiro_servico.get('Fornecedor', 'N/A')}")
-                except Exception as e:
-                    print(f"[MULTIPLAS_BASES] ⚠️ Erro ao processar primeiro serviço: {e}")
-            
+            # Se não encontrou nenhum serviço válido, retornar erro
             if not melhor_servico:
+                print(f"[MULTIPLAS_BASES] ❌ Nenhum serviço porta-porta válido encontrado")
                 return {
-                    'error': f'Não foi possível calcular custo para o trecho {origem_trecho} -> {destino_trecho}',
+                    'error': f'Não há serviços porta-porta disponíveis para o trecho {origem_trecho} -> {destino_trecho}',
                     'sem_opcoes': True
                 }
             
