@@ -1830,53 +1830,7 @@
                         </small>
                     </div>
                 </div>
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label for="tipo_filtro_frac">Filtrar por Tipo:</label>
-                        <select id="tipo_filtro_frac" name="tipo_filtro_frac">
-                            <option value="">Todos os Tipos</option>
-                            <option value="Agente">Agente</option>
-                            <option value="Transferência">Transferência</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="base_filtro_frac">Filtrar por Base:</label>
-                        <select id="base_filtro_frac" name="base_filtro_frac">
-                            <option value="">Todas as Bases</option>
-                            <!-- Região Sudeste -->
-                            <option value="FILIAL">São Paulo Capital (FILIAL)</option>
-                            <option value="RAO">Ribeirão Preto (RAO)</option>
-                            <option value="CPQ">Campinas (CPQ)</option>
-                            <option value="SJK">São José dos Campos (SJK)</option>
-                            <option value="RIO">Rio de Janeiro (RIO)</option>
-                            <option value="BHZ">Belo Horizonte (BHZ)</option>
-                            <option value="VIX">Vitória (VIX)</option>
-                            <!-- Região Sul -->
-                            <option value="CWB">Curitiba (CWB)</option>
-                            <option value="ITJ">Itajaí (ITJ)</option>
-                            <option value="POA">Porto Alegre (POA)</option>
-                            <!-- Região Centro-Oeste -->
-                            <option value="BSB">Brasília (BSB)</option>
-                            <option value="GYN">Goiânia (GYN)</option>
-                            <option value="CGB">Cuiabá (CGB)</option>
-                            <option value="CGR">Campo Grande (CGR)</option>
-                            <!-- Região Nordeste -->
-                            <option value="FOR">Fortaleza (FOR)</option>
-                            <option value="REC">Recife (REC)</option>
-                            <option value="SSA">Salvador (SSA)</option>
-                            <option value="NAT">Natal (NAT)</option>
-                            <option value="JPA">João Pessoa (JPA)</option>
-                            <option value="MCZ">Maceió (MCZ)</option>
-                            <option value="AJU">Aracaju (AJU)</option>
-                            <option value="SLZ">São Luís (SLZ)</option>
-                            <option value="THE">Teresina (THE)</option>
-                            <!-- Região Norte -->
-                            <option value="MAO">Manaus (MAO)</option>
-                            <option value="MAB">Marabá (MAB)</option>
-                            <option value="PMW">Palmas (PMW)</option>
-                        </select>
-                    </div>
-                </div>
+
                 <button type="submit" class="btn-primary">Calcular Rota com Agentes</button>
                 <div id="loading-fracionado" class="loading-spinner"></div>
             </form>
@@ -1901,8 +1855,8 @@
                 <div class="form-group">
                     <label>&nbsp;</label>
                                    <button type="button" class="btn-primary" onclick="calcularFreteFracionadoMultiplasBases()" 
-                       style="background: #28a745; width: 100%;">
-                   <i class="fa-solid fa-route"></i> Calcular Frete Fracionado com Base Intermediária
+                       style="background: #28a745;">
+                   <i class="fa-solid fa-route"></i> Calcular com base intermediária
                </button>
                     <div id="loading-fracionado-multiplas-bases" class="loading-spinner"></div>
                 </div>

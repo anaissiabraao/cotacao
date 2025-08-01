@@ -443,9 +443,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 municipio_destino: document.getElementById('municipio_destino_frac').value,
                 peso: parseFloat(document.getElementById('peso_frac').value),
                 cubagem: parseFloat(document.getElementById('cubagem_frac').value),
-                valor_nf: parseFloat(document.getElementById('valor_nf_frac').value) || null,
-                tipo_filtro: document.getElementById('tipo_filtro_frac').value,
-                base_filtro: document.getElementById('base_filtro_frac').value
+                valor_nf: parseFloat(document.getElementById('valor_nf_frac').value) || null
             };
 
             console.log('[FRACIONADO] Dados do formulário:', formData);
