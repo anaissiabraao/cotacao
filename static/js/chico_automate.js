@@ -1568,7 +1568,8 @@ document.addEventListener('DOMContentLoaded', function() {
                             R$ ${opcao.custo_total.toFixed(2)}
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
-                            <strong>Peso Máximo Transportado:</strong> ${opcao.peso_maximo_agente || 'N/A'}<br>
+                            <strong>Peso Máximo:</strong> ${opcao.peso_maximo_agente || 'N/A'}<br>
+                            <strong>Prazo:</strong> ${opcao.prazo || 'N/A'} dias
                         </td>
                         <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center;">
                             <button class="btn btn-info btn-sm" onclick="toggleDetalhesOpcao(${index})" style="background: #17a2b8; border: none; color: white; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem;">
@@ -1605,7 +1606,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     html += `
                         <div onclick="exibirCustosAgente('coleta', ${index})" style="margin-bottom: 10px; padding: 8px; background: #e8f5e8; border-radius: 4px; cursor: pointer; transition: background 0.3s;" onmouseover="this.style.background='#d4ecda'" onmouseout="this.style.background='#e8f5e8'">
                             <strong>🚛 Agente de Coleta:</strong> ${agentes.agente_coleta}<br>
-                            ${agentes.base_origem !== 'N/A' ? `<small>Base Destino: ${agentes.base_origem}</small>` : ''}
+                            ${agentes.base_origem !== 'N/A' ? `<small>📍 Base: ${agentes.base_origem}</small>` : `<small>📍 Base: Base de Origem</small>`}
                             <br><small style="color: #007bff;">👆 Clique para ver custos específicos</small>
                         </div>
                     `;
@@ -1616,7 +1617,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div onclick="exibirCustosAgente('transferencia', ${index})" style="margin-bottom: 10px; padding: 8px; background: #e3f2fd; border-radius: 4px; cursor: pointer; transition: background 0.3s;" onmouseover="this.style.background='#bbdefb'" onmouseout="this.style.background='#e3f2fd'">
                             <strong>🚚 Transferência:</strong> ${agentes.transferencia}<br>
                             ${agentes.base_origem !== 'N/A' && agentes.base_destino !== 'N/A' ? 
-                              `<small>Rota: ${agentes.base_origem} → ${agentes.base_destino}</small>` : ''}
+                              `<small>🛣️ Rota: ${agentes.base_origem} → ${agentes.base_destino}</small>` : 
+                              `<small>🛣️ Rota: ${rota_info.origem || 'Origem'} → ${rota_info.destino || 'Destino'}</small>`}
                             <br><small style="color: #007bff;">👆 Clique para ver custos específicos</small>
                         </div>
                     `;
@@ -1626,7 +1628,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     html += `
                         <div onclick="exibirCustosAgente('entrega', ${index})" style="margin-bottom: 10px; padding: 8px; background: #fff3e0; border-radius: 4px; cursor: pointer; transition: background 0.3s;" onmouseover="this.style.background='#ffe0b2'" onmouseout="this.style.background='#fff3e0'">
                             <strong>🚛 Agente de Entrega:</strong> ${agentes.agente_entrega}<br>
-                            ${agentes.base_destino !== 'N/A' ? `<small>Base Origem: ${agentes.base_destino}</small>` : ''}
+                            ${agentes.base_destino !== 'N/A' ? `<small>📍 Base: ${agentes.base_destino}</small>` : `<small>📍 Base: Base de Destino</small>`}
                             <br><small style="color: #007bff;">👆 Clique para ver custos específicos</small>
                         </div>
                     `;
@@ -1659,9 +1661,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Agente de Coleta
                 if (agentes.agente_coleta && agentes.agente_coleta !== 'N/A') {
                     const dadosColeta = dadosAgentes.agente_coleta || {};
+                    const baseColeta = agentes.base_origem !== 'N/A' ? agentes.base_origem : 'Base de Origem';
                     html += `
                                         <div style="margin-bottom: 15px; padding: 12px; background: #e8f5e8; border-radius: 6px; border-left: 4px solid #28a745;">
                                             <h6 style="color: #28a745; margin: 0 0 8px 0; font-weight: bold;">🚛 Agente de Coleta: ${agentes.agente_coleta}</h6>
+                                            <div style="font-size: 0.8rem; color: #666; margin-bottom: 8px;">📍 Base: ${baseColeta}</div>
                                             <div style="font-family: 'Courier New', monospace; font-size: 0.85rem;">
                                                 <div style="display: flex; justify-content: space-between; padding: 2px 0;">
                                                     <span>💼 Custo Base:</span>
@@ -1691,9 +1695,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Transferência
                 if (agentes.transferencia && agentes.transferencia !== 'N/A') {
                     const dadosTransferencia = dadosAgentes.transferencia || {};
+                    const rotaTransferencia = `${agentes.base_origem !== 'N/A' ? agentes.base_origem : 'Origem'} → ${agentes.base_destino !== 'N/A' ? agentes.base_destino : 'Destino'}`;
                     html += `
                                         <div style="margin-bottom: 15px; padding: 12px; background: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
                                             <h6 style="color: #2196f3; margin: 0 0 8px 0; font-weight: bold;">🚚 Transferência: ${agentes.transferencia}</h6>
+                                            <div style="font-size: 0.8rem; color: #666; margin-bottom: 8px;">🛣️ Rota: ${rotaTransferencia}</div>
                                             <div style="font-family: 'Courier New', monospace; font-size: 0.85rem;">
                                                 <div style="display: flex; justify-content: space-between; padding: 2px 0;">
                                                     <span>💼 Custo Base:</span>
@@ -1723,9 +1729,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Agente de Entrega
                 if (agentes.agente_entrega && agentes.agente_entrega !== 'N/A') {
                     const dadosEntrega = dadosAgentes.agente_entrega || {};
+                    const baseEntrega = agentes.base_destino !== 'N/A' ? agentes.base_destino : 'Base de Destino';
                     html += `
                                         <div style="margin-bottom: 15px; padding: 12px; background: #fff3e0; border-radius: 6px; border-left: 4px solid #ff9800;">
                                             <h6 style="color: #ff9800; margin: 0 0 8px 0; font-weight: bold;">🚛 Agente de Entrega: ${agentes.agente_entrega}</h6>
+                                            <div style="font-size: 0.8rem; color: #666; margin-bottom: 8px;">📍 Base: ${baseEntrega}</div>
                                             <div style="font-family: 'Courier New', monospace; font-size: 0.85rem;">
                                                 <div style="display: flex; justify-content: space-between; padding: 2px 0;">
                                                     <span>💼 Custo Base:</span>

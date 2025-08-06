@@ -44,7 +44,7 @@ window.exibirCustosAgente = function(tipoAgente, opcaoIndex) {
             agenteInfo = {
                 tipo: 'Agente de Coleta',
                 fornecedor: agentes.agente_coleta,
-                base: agentes.base_origem,
+                base: agentes.base_origem !== 'N/A' ? agentes.base_origem : 'Base de Origem',
                 funcao: 'Coleta na origem e transporte até a base'
             };
             custoEspecifico = detalhes.custos_detalhados?.custo_coleta || (detalhes.custos_detalhados?.custo_base_frete * 0.3) || 0; // ✅ Custo real da coleta com fallback
@@ -54,7 +54,7 @@ window.exibirCustosAgente = function(tipoAgente, opcaoIndex) {
             agenteInfo = {
                 tipo: 'Transferência',
                 fornecedor: agentes.transferencia,
-                rota: `${agentes.base_origem} → ${agentes.base_destino}`,
+                rota: `${agentes.base_origem !== 'N/A' ? agentes.base_origem : 'Origem'} → ${agentes.base_destino !== 'N/A' ? agentes.base_destino : 'Destino'}`,
                 funcao: 'Transporte entre bases'
             };
             custoEspecifico = detalhes.custos_detalhados?.custo_transferencia || (detalhes.custos_detalhados?.custo_base_frete * 0.5) || 0; // ✅ Custo real da transferência com fallback
@@ -64,7 +64,7 @@ window.exibirCustosAgente = function(tipoAgente, opcaoIndex) {
             agenteInfo = {
                 tipo: 'Agente de Entrega',
                 fornecedor: agentes.agente_entrega,
-                base: agentes.base_destino,
+                base: agentes.base_destino !== 'N/A' ? agentes.base_destino : 'Base de Destino',
                 funcao: 'Coleta na base e entrega no destino'
             };
             custoEspecifico = detalhes.custos_detalhados?.custo_entrega || (detalhes.custos_detalhados?.custo_base_frete * 0.2) || 0; // ✅ Custo real da entrega com fallback
