@@ -1103,8 +1103,17 @@ def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_des
                     
                     # Lógica específica para PTX
                     if str(fornecedor).strip().upper() == 'PTX':
-                        custo_base = float(peso_cubado) * 0.25
-                        print(f"[CUSTO-PTX] {peso_cubado}kg × 0.25 = R$ {custo_base:.2f}")
+                        # Usar valores da tabela da base de dados multiplicados pelo peso
+                        valor_por_kg = float(servico.get(20, 0))  # Usar coluna 20kg como base
+                        if valor_por_kg == 0:
+                            # Se não tiver valor na coluna 20, tentar outras colunas
+                            for coluna in [10, 30, 50, 70, 100]:
+                                valor_por_kg = float(servico.get(coluna, 0))
+                                if valor_por_kg > 0:
+                                    break
+                        
+                        custo_base = float(peso_cubado) * valor_por_kg
+                        print(f"[CUSTO-PTX] {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {custo_base:.2f}")
                         custo_servico = {
                             'custo_total': custo_base,
                             'total': custo_base,
@@ -1113,7 +1122,8 @@ def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_des
                             'detalhes': {
                                 'base': custo_base,
                                 'peso_maximo': peso_cubado,
-                                'formula': '0.25 × peso máximo'
+                                'valor_por_kg': valor_por_kg,
+                                'formula': f'{peso_cubado}kg × R$ {valor_por_kg:.4f}'
                             }
                         }
                     elif tipo_servico in ['Agente', 'Direto', 'Transferência']:
@@ -1796,6 +1806,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     continue
 
         # Retornar resultados encontrados
+        rotas_encontradas.sort(key=lambda x: x['total'])
         return {
             'rotas': rotas_encontradas,
             'total_opcoes': len(rotas_encontradas),
@@ -1860,7 +1871,6 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'agente_entrega': custo_entrega
                             }
                             rotas_encontradas.append(rota)
-        # 🆕 CORREÇÃO: Se não há agentes de coleta mas há transferências para bases, criar rotas parciais
         if agentes_coleta.empty and transferencias_para_bases:
             print(f"[ROTAS] 🔄 Criando rotas parciais via bases (sem agente de coleta)...")
             for item in transferencias_para_bases:
@@ -2460,6 +2470,22 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
             print(f"[CUSTO-JEM] Fornecedor: {fornecedor}, Peso: {peso_cubado}kg, Base: R$ {valor_base:.2f}")
             custo_base = valor_base
         
+        # 🔧 LÓGICA ESPECÍFICA PARA PTX - VALOR DA BASE × PESO
+        elif 'PTX' in fornecedor_upper:
+            print(f"[CUSTO-PTX] 🔧 Aplicando lógica específica para PTX: {fornecedor}")
+            
+            # PTX usa valores da tabela da base de dados multiplicados pelo peso
+            valor_por_kg = float(linha.get(20, 0))  # Usar coluna 20kg como base
+            if valor_por_kg == 0:
+                # Se não tiver valor na coluna 20, tentar outras colunas
+                for coluna in [10, 30, 50, 70, 100]:
+                    valor_por_kg = float(linha.get(coluna, 0))
+                    if valor_por_kg > 0:
+                        break
+            
+            custo_base = float(peso_cubado) * valor_por_kg
+            print(f"[CUSTO-PTX] {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {custo_base:.2f}")
+        
         # 🔧 LÓGICA ESPECÍFICA PARA EXPRESSO S. MIGUEL - COLUNAS G, P, Q, S
         elif 'EXPRESSO S. MIGUEL' in fornecedor_upper:
             print(f"[CUSTO-EXPRESSO] 🔧 Aplicando lógica específica para EXPRESSO S. MIGUEL: {fornecedor}")
@@ -2550,9 +2576,13 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     excedente_por_kg = float(linha.get('EXCEDENTE', 0))
                     excedente_valor = peso_excedente * excedente_por_kg
         
-                valor_base = valor_base + excedente_valor
-        
+            valor_base = valor_base + excedente_valor
             custo_base = valor_base
+        
+        # 🔧 GARANTIR QUE custo_base ESTEJA DEFINIDO PARA TODOS OS FORNECEDORES
+        if 'custo_base' not in locals():
+            print(f"[CUSTO] ⚠️ custo_base não definido para {fornecedor}, usando valor padrão")
+            custo_base = valor_base if 'valor_base' in locals() else 0.0
         
         # 🔧 CALCULAR PEDÁGIO (APLICADO PARA TRANSFERÊNCIAS TAMBÉM)
         pedagio = 0.0
