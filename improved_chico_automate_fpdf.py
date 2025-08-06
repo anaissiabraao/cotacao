@@ -2837,9 +2837,24 @@ def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=Non
         if tipo_linha == 'Agente':
             fator_cubagem = 250  # kg/m³ para agentes
             tipo_calculo = "Agente (250kg/m³)"
-        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper() or 'SOL' in str(fornecedor).upper()):
-            fator_cubagem = 166  # kg/m³ para JEM, Concept e SOL
+        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'SOL' in str(fornecedor).upper()):
+            fator_cubagem = 166  # kg/m³ para JEM e SOL
             tipo_calculo = f"Transferência {fornecedor} (166kg/m³)"
+        elif tipo_linha == 'Transferência' and fornecedor and ('Concept' in str(fornecedor).upper()):
+            fator_cubagem = 167  # kg/m³ para Transferência Concept
+            tipo_calculo = f"Transferência {fornecedor} (167kg/m³)"
+        elif tipo_linha == 'Transferência' and fornecedor and ('EXPRESSO S. MIGUEL' in str(fornecedor).upper()):
+            fator_cubagem = 300  # kg/m³ para Transferência Expresso S. Miguel
+            tipo_calculo = f"Transferência {fornecedor} (300kg/m³)"
+        elif tipo_linha == 'Direto' and fornecedor and ('ML' in str(fornecedor).upper()):
+            fator_cubagem = 167  # kg/m³ para Direto ML, Gritsch e Expresso S. Miguel
+            tipo_calculo = f"Direto {fornecedor} (167kg/m³)"
+        elif tipo_linha == 'Direto' and fornecedor and ('GRITSCH' in str(fornecedor).upper() or 'EXPRESSO S. MIGUEL' in str(fornecedor).upper() or 'PTX' in str(fornecedor).upper()):
+            fator_cubagem = 300  # kg/m³ para Direto Gritsch e Expresso S. Miguel
+            tipo_calculo = f"Direto {fornecedor} (300kg/m³)"
+        elif tipo_linha == 'Agente' and fornecedor and ('PTX' in str(fornecedor).upper()):
+            fator_cubagem = 300  # kg/m³ para Agente PTX
+            tipo_calculo = f"Agente {fornecedor} (300kg/m³)"
         else:
             # Padrão para outros tipos
             fator_cubagem = 250  # kg/m³ padrão
