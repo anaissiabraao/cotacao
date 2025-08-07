@@ -1051,6 +1051,1073 @@ def carregar_base_unificada():
     except Exception as e:
         print(f"[BASE] ❌ Erro ao carregar base unificada: {e}")
         return None
+
+
+def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None, bases_intermediarias=None):
+    """
+    Calcular frete fracionado usando múltiplas bases intermediárias
+    Permite ao usuário escolher bases para compor a viagem (ex: SAO -> ITJ -> SSZ -> SJP)
+    """
+    try:
+        tempo_inicio = time.time()
+        todas_opcoes = []
+        
+        # Carregar base unificada
+        df_base = carregar_base_unificada()
+        if df_base is None:
+            return {
+                'error': 'É necessário fornecer exatamente 1 base intermediária para compor a viagem (ex: SAO)',
+                'sem_opcoes': True
+            }
+        
+        # Normalizar cidades
+        origem_norm = normalizar_cidade_nome(origem)
+        destino_norm = normalizar_cidade_nome(destino)
+        uf_origem_norm = normalizar_uf(uf_origem)
+        uf_destino_norm = normalizar_uf(uf_destino)
+        
+        print(f"[FRACIONADO] 🔍 Buscando serviços para: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
+        
+        return {
+            'opcoes': todas_opcoes,
+            'total_opcoes': len(todas_opcoes),
+            'tempo_processamento': time.time() - tempo_inicio,
+            'origem': origem_norm,
+            'destino': destino_norm,
+            'uf_origem': uf_origem_norm,
+            'uf_destino': uf_destino_norm
+        }
+        
+    except Exception as e:
+        print(f"[FRACIONADO] ❌ Erro geral: {e}")
+        return {
+            'sem_opcoes': True,
+            'mensagem': 'Erro interno no processamento',
+            'detalhes': str(e)
+        }
+
+def calcular_prazo_total_agentes(opcao, tipo_rota):
+    """
+    Calcula o prazo total somando os prazos de todos os agentes da rota
+    """
+    try:
+        detalhes = opcao.get('detalhes', {})
+        prazo_total = 0
+        
+        if tipo_rota == 'transferencia_direta':
+            # Para transferência direta, usar prazo da transferência
+            transferencia = opcao.get('transferencia', {})
+            prazo_total = transferencia.get('prazo', 3)
+            
+        elif tipo_rota == 'agente_direto':
+            # Para agente direto, usar prazo do agente
+            agente_direto = opcao.get('agente_direto', {})
+            prazo_total = agente_direto.get('prazo', 3)
+            
+        elif tipo_rota == 'coleta_transferencia':
+            # Somar prazo da coleta + transferência
+            agente_coleta = opcao.get('agente_coleta', {})
+            transferencia = opcao.get('transferencia', {})
+            prazo_total = (agente_coleta.get('prazo', 1) + transferencia.get('prazo', 2))
+            
+        elif tipo_rota == 'transferencia_entrega':
+            # Somar prazo da transferência + entrega
+            transferencia = opcao.get('transferencia', {})
+            agente_entrega = opcao.get('agente_entrega', {})
+            prazo_total = (transferencia.get('prazo', 2) + agente_entrega.get('prazo', 1))
+            
+        elif tipo_rota == 'coleta_transferencia_entrega':
+            # Somar prazo da coleta + transferência + entrega
+            agente_coleta = opcao.get('agente_coleta', {})
+            transferencia = opcao.get('transferencia', {})
+            agente_entrega = opcao.get('agente_entrega', {})
+            prazo_total = (agente_coleta.get('prazo', 1) + transferencia.get('prazo', 2) + agente_entrega.get('prazo', 1))
+            
+        else:
+            # Fallback para outros tipos de rota
+            prazo_total = opcao.get('prazo_total', 3)
+        
+        return max(prazo_total, 1)  # Mínimo de 1 dia
+        
+    except Exception as e:
+        print(f"[PRAZO] Erro ao calcular prazo total: {e}")
+        return 3  # Fallback
+
+def obter_bases_rota(opcao, tipo_rota):
+    """
+    Extrai as bases de origem e destino da rota
+    """
+    try:
+        detalhes = opcao.get('detalhes', {})
+        base_origem = 'N/A'
+        base_destino = 'N/A'
+        
+        if tipo_rota == 'transferencia_direta':
+            transferencia = opcao.get('transferencia', {})
+            base_origem = transferencia.get('origem', transferencia.get('base_origem', 'N/A'))
+            base_destino = transferencia.get('destino', transferencia.get('base_destino', 'N/A'))
+            
+        elif tipo_rota == 'agente_direto':
+            agente_direto = opcao.get('agente_direto', {})
+            base_origem = agente_direto.get('origem', agente_direto.get('base_origem', 'N/A'))
+            base_destino = agente_direto.get('destino', agente_direto.get('base_destino', 'N/A'))
+            
+        elif tipo_rota == 'coleta_transferencia':
+            agente_coleta = opcao.get('agente_coleta', {})
+            transferencia = opcao.get('transferencia', {})
+            base_origem = agente_coleta.get('base_destino', agente_coleta.get('destino', 'N/A'))
+            base_destino = transferencia.get('destino', transferencia.get('base_destino', 'N/A'))
+            
+        elif tipo_rota == 'transferencia_entrega':
+            transferencia = opcao.get('transferencia', {})
+            agente_entrega = opcao.get('agente_entrega', {})
+            base_origem = transferencia.get('origem', transferencia.get('base_origem', 'N/A'))
+            base_destino = agente_entrega.get('base_origem', agente_entrega.get('origem', 'N/A'))
+            
+        elif tipo_rota == 'coleta_transferencia_entrega':
+            agente_coleta = opcao.get('agente_coleta', {})
+            transferencia = opcao.get('transferencia', {})
+            agente_entrega = opcao.get('agente_entrega', {})
+            base_origem = transferencia.get('base_origem', transferencia.get('origem', 'N/A'))
+            base_destino = transferencia.get('base_destino', transferencia.get('destino', 'N/A'))
+            
+        return base_origem, base_destino
+        
+    except Exception as e:
+        print(f"[BASES] Erro ao extrair bases: {e}")
+        return 'N/A', 'N/A'
+
+# Carregar variáveis de ambiente
+load_dotenv()
+
+# Imports para PostgreSQL (com fallback se não disponível)
+try:
+    from models import db, HistoricoCalculo, LogSistema
+    POSTGRESQL_AVAILABLE = True
+    print("[PostgreSQL] ✅ Modelos importados com sucesso")
+except ImportError as e:
+    POSTGRESQL_AVAILABLE = False
+    print(f"[PostgreSQL] ⚠️ PostgreSQL não disponível: {e}")
+    print("[PostgreSQL] Usando fallback para logs em arquivo")
+
+# Cache global para base unificada
+_BASE_UNIFICADA_CACHE = None
+_ULTIMO_CARREGAMENTO_BASE = 0
+_CACHE_VALIDADE_BASE = 300  # 5 minutos
+
+# Cache global para agentes
+_BASE_AGENTES_CACHE = None
+_ULTIMO_CARREGAMENTO = 0
+_CACHE_VALIDADE = 300  # 5 minutos
+
+# SISTEMA DE USUÁRIOS E CONTROLE DE ACESSO
+USUARIOS_SISTEMA = {
+    'comercial.ptx': {
+        'senha': 'ptx@123',
+        'tipo': 'comercial',
+        'nome': 'Usuário Comercial',
+        'permissoes': ['calcular', 'historico', 'exportar']
+    },
+    'adm.ptx': {
+        'senha': 'portoex@123', 
+        'tipo': 'administrador',
+        'nome': 'Administrador',
+        'permissoes': ['calcular', 'historico', 'exportar', 'logs', 'setup', 'admin']
+    }
+}
+
+# Controle de logs de acesso
+LOGS_SISTEMA = []
+HISTORICO_DETALHADO = []
+
+def log_acesso(usuario, acao, ip, detalhes=""):
+    """Registra log de acesso do sistema"""
+    import datetime
+    log_entry = {
+        'timestamp': datetime.datetime.now(),
+        'data_hora': datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        'usuario': usuario,
+        'acao': acao,
+        'ip': ip,
+        'detalhes': detalhes,
+        'user_agent': request.headers.get('User-Agent', 'N/A') if request else 'N/A'
+    }
+    LOGS_SISTEMA.append(log_entry)
+    
+    # Manter apenas os últimos 1000 logs
+    if len(LOGS_SISTEMA) > 200:
+        LOGS_SISTEMA.pop(0)
+    
+    print(f"[LOG] {log_entry['data_hora']} - {usuario} - {acao} - IP: {ip}")
+
+def obter_ip_cliente():
+    """Obtém o IP real do cliente considerando proxies"""
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+    elif request.headers.get('X-Real-IP'):
+        return request.headers.get('X-Real-IP')
+    else:
+        return request.remote_addr
+
+def verificar_autenticacao():
+    """Verifica se o usuário está autenticado"""
+    usuario_na_sessao = 'usuario_logado' in session
+    usuario_existe = session.get('usuario_logado') in USUARIOS_SISTEMA if usuario_na_sessao else False
+    
+    return usuario_na_sessao and usuario_existe
+
+def verificar_permissao(permissao_requerida):
+    """Verifica se o usuário tem a permissão específica"""
+    if not verificar_autenticacao():
+        return False
+    
+    usuario = session['usuario_logado']
+    permissoes = USUARIOS_SISTEMA[usuario]['permissoes']
+    return permissao_requerida in permissoes
+
+def usuario_logado():
+    """Retorna dados do usuário logado"""
+    if verificar_autenticacao():
+        usuario = session['usuario_logado']
+        return USUARIOS_SISTEMA[usuario]
+    return None
+
+def middleware_auth(f):
+    """Decorator para rotas que precisam de autenticação"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not verificar_autenticacao():
+            if request.is_json:
+                return jsonify({'error': 'Acesso negado. Faça login primeiro.', 'redirect': '/login'}), 401
+            else:
+                flash('Você precisa fazer login para acessar esta página.', 'error')
+                return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+def middleware_admin(f):
+    """Decorator para rotas que precisam de permissão de administrador"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not verificar_autenticacao():
+            return redirect(url_for('login'))
+        
+        if not verificar_permissao('admin'):
+            if request.is_json:
+                return jsonify({'error': 'Acesso negado. Permissão de administrador requerida.'}), 403
+            else:
+                flash('Acesso negado. Você não tem permissão de administrador.', 'error')
+                return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Lista de estados como fallback
+ESTADOS_FALLBACK = [
+    {"id": "AC", "text": "Acre"}, {"id": "AL", "text": "Alagoas"}, {"id": "AP", "text": "Amapá"},
+    {"id": "AM", "text": "Amazonas"}, {"id": "BA", "text": "Bahia"}, {"id": "CE", "text": "Ceará"},
+    {"id": "DF", "text": "Distrito Federal"}, {"id": "ES", "text": "Espírito Santo"}, {"id": "GO", "text": "Goiás"},
+    {"id": "MA", "text": "Maranhão"}, {"id": "MT", "text": "Mato Grosso"}, {"id": "MS", "text": "Mato Grosso do Sul"},
+    {"id": "MG", "text": "Minas Gerais"}, {"id": "PA", "text": "Pará"}, {"id": "PB", "text": "Paraíba"},
+    {"id": "PR", "text": "Paraná"}, {"id": "PE", "text": "Pernambuco"}, {"id": "PI", "text": "Piauí"},
+    {"id": "RJ", "text": "Rio de Janeiro"}, {"id": "RN", "text": "Rio Grande do Norte"}, {"id": "RS", "text": "Rio Grande do Sul"},
+    {"id": "RO", "text": "Rondônia"}, {"id": "RR", "text": "Roraima"}, {"id": "SC", "text": "Santa Catarina"},
+    {"id": "SP", "text": "São Paulo"}, {"id": "SE", "text": "Sergipe"}, {"id": "TO", "text": "Tocantins"}
+]
+
+@lru_cache(maxsize=200)
+def normalizar_cidade(cidade):
+    """
+    Normaliza o nome da cidade removendo acentos, caracteres especiais e padronizando o formato.
+    """
+    if not cidade:
+        return ""
+    
+    cidade = str(cidade).strip()
+    
+    # Mapeamento de cidades conhecidas - EXPANDIDO
+    mapeamento_cidades = {
+        "SAO PAULO": "SAO PAULO",
+        "SÃO PAULO": "SAO PAULO",
+        "S. PAULO": "SAO PAULO",
+        "S PAULO": "SAO PAULO",
+        "SP": "SAO PAULO",
+        "SAOPAULO": "SAO PAULO",
+        "SAÕPAULO": "SAO PAULO",
+        "SALVADOR": "SALVADOR",
+        "SSA": "SALVADOR",
+        "NAVEGANTES": "NAVEGANTES",
+        "RIO DE JANEIRO": "RIO DE JANEIRO",
+        "RJ": "RIO DE JANEIRO",
+        "RIODEJANEIRO": "RIO DE JANEIRO",
+        "RIO": "RIO DE JANEIRO",
+        "R. DE JANEIRO": "RIO DE JANEIRO",
+        "R DE JANEIRO": "RIO DE JANEIRO",
+        "BELO HORIZONTE": "BELO HORIZONTE",
+        "BH": "BELO HORIZONTE",
+        "BELOHORIZONTE": "BELO HORIZONTE",
+        "B. HORIZONTE": "BELO HORIZONTE",
+        "B HORIZONTE": "BELO HORIZONTE",
+        "BRASILIA": "BRASILIA",
+        "BRASÍLIA": "BRASILIA",
+        "BSB": "BRASILIA",
+        "ARACAJU": "ARACAJU",
+        "RIBEIRAO PRETO": "RIBEIRAO PRETO",
+        "RIBEIRÃO PRETO": "RIBEIRAO PRETO",
+        "RIBEIRÃOPRETO": "RIBEIRAO PRETO",
+        "RIBEIRAOPRETO": "RIBEIRAO PRETO",
+        "RAO": "RIBEIRAO PRETO",
+        "SALVADOR": "SALVADOR",
+        "PORTO ALEGRE": "PORTO ALEGRE",
+        "PORTOALEGRE": "PORTO ALEGRE",
+        "RECIFE": "RECIFE",
+        "FORTALEZA": "FORTALEZA",
+        "CURITIBA": "CURITIBA",
+        "GOIANIA": "GOIANIA",
+        "GOIÂNIA": "GOIANIA",
+        "MANAUS": "MANAUS",
+        "BELÉM": "BELEM",
+        "BELEM": "BELEM",
+        "ITAJAI": "ITAJAI",
+        "ITAJAÍ": "ITAJAI",
+        "ITAJAY": "ITAJAI",
+        "ITJ": "ITAJAI",
+        "CAXIAS DO SUL": "CAXIAS DO SUL",
+        "CAXIAS": "CAXIAS DO SUL",
+        "CXS": "CAXIAS DO SUL",
+        "CXJ": "CAXIAS DO SUL",
+        "CAXIASDOSUL": "CAXIAS DO SUL",
+        "CAXIAS-RS": "CAXIAS DO SUL",
+        "CAXIAS DO SUL-RS": "CAXIAS DO SUL",
+        "JARAGUA DO SUL": "JARAGUA DO SUL",
+        "JARAGUÁ DO SUL": "JARAGUA DO SUL",
+        "JARAGUA": "JARAGUA DO SUL",
+        "JGS": "JARAGUA DO SUL",
+        "JARAGUADOSUL": "JARAGUA DO SUL",
+        "JARAGUA-SC": "JARAGUA DO SUL",
+        "JARAGUA DO SUL-SC": "JARAGUA DO SUL",
+        "JARAGUÁ-SC": "JARAGUA DO SUL",
+        "JARAGUÁ DO SUL-SC": "JARAGUA DO SUL"
+    }
+    
+    cidade_upper = cidade.upper()
+    if cidade_upper in mapeamento_cidades:
+        return mapeamento_cidades[cidade_upper]
+    
+    # Remover acentos
+    cidade = unicodedata.normalize('NFKD', cidade).encode('ASCII', 'ignore').decode('ASCII')
+    
+    # Remover caracteres especiais e converter para maiúsculas
+    cidade = re.sub(r'[^a-zA-Z0-9\s]', '', cidade).upper()
+    
+    # Remover espaços extras
+    cidade = re.sub(r'\s+', ' ', cidade).strip()
+    
+    # Remover sufixos de UF
+    cidade = re.sub(r'\s+[A-Z]{2}$', '', cidade)
+    
+    # Substituir abreviações comuns
+    cidade = cidade.replace(" S ", " SANTO ")
+    cidade = cidade.replace(" STO ", " SANTO ")
+    cidade = cidade.replace(" STA ", " SANTA ")
+    
+    return cidade
+
+@lru_cache(maxsize=30)
+def normalizar_uf(uf):
+    """
+    Normaliza a UF, tratando abreviações e nomes completos.
+    """
+    if not uf:
+        return ""
+    
+    uf = str(uf).strip().upper()
+    
+    # Mapeamento de estados
+    mapeamento_estados = {
+        "ACRE": "AC", "ALAGOAS": "AL", "AMAPA": "AP", "AMAPÁ": "AP",
+        "AMAZONAS": "AM", "BAHIA": "BA", "CEARA": "CE", "CEARÁ": "CE",
+        "DISTRITO FEDERAL": "DF", "ESPIRITO SANTO": "ES", "ESPÍRITO SANTO": "ES",
+        "GOIAS": "GO", "GOIÁS": "GO", "MARANHAO": "MA", "MARANHÃO": "MA",
+        "MATO GROSSO": "MT", "MATO GROSSO DO SUL": "MS", "MINAS GERAIS": "MG",
+        "PARA": "PA", "PARÁ": "PA", "PARAIBA": "PB", "PARAÍBA": "PB",
+        "PARANA": "PR", "PARANÁ": "PR", "PERNAMBUCO": "PE", "PIAUI": "PI",
+        "PIAUÍ": "PI", "RIO DE JANEIRO": "RJ", "RIO GRANDE DO NORTE": "RN",
+        "RIO GRANDE DO SUL": "RS", "RONDONIA": "RO", "RONDÔNIA": "RO",
+        "RORAIMA": "RR", "SANTA CATARINA": "SC", "SAO PAULO": "SP",
+        "SÃO PAULO": "SP", "SERGIPE": "SE", "TOCANTINS": "TO"
+    }
+    
+    if uf in mapeamento_estados:
+        return mapeamento_estados[uf]
+    
+    if len(uf) == 2 and uf.isalpha():
+        return uf
+    
+    match = re.search(r'\(([A-Z]{2})\)', uf)
+    if match:
+        return match.group(1)
+    
+    match = re.search(r'\s+([A-Z]{2})$', uf)
+    if match:
+        return match.group(1)
+    
+    if len(uf) >= 2 and uf[:2].isalpha():
+        return uf[:2]
+    
+    return ""
+
+@lru_cache(maxsize=1000)
+def normalizar_cidade_nome(cidade):
+    """
+    Normaliza o nome da cidade, removendo a parte após o hífen.
+    Com cache para melhorar performance
+    """
+    if not cidade:
+        return ""
+    
+    cidade = str(cidade)
+    partes = cidade.split("-")
+    cidade_sem_uf = partes[0].strip()
+    
+    return normalizar_cidade(cidade_sem_uf)
+
+app = Flask(__name__, static_folder='static')
+app.secret_key = os.getenv("SECRET_KEY", "chave_secreta_portoex_2025_muito_segura")
+
+# Configurações de sessão mais robustas
+app.config["SESSION_PERMANENT"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=7)
+app.config["SESSION_COOKIE_SECURE"] = False  # Para desenvolvimento local
+app.config["SESSION_COOKIE_HTTPONLY"] = True  # Segurança
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Compatibilidade com AJAX
+
+# Configurações para evitar cache
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+
+# Desabilitar cache em todas as respostas
+@app.after_request
+def after_request(response):
+    # Não aplicar cache apenas para conteúdo estático, mas manter sessões
+    if request.endpoint != 'static':
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Expires"] = "0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+# Rota para limpar dados do navegador
+@app.route("/clear-cache")
+def clear_cache():
+    response = redirect("/")
+    # Não limpar cookies de sessão
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+# Rotas de autenticação
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        if request.is_json:
+            data = request.get_json()
+            usuario = data.get('usuario')
+            senha = data.get('senha')
+        else:
+            usuario = request.form.get('usuario')
+            senha = request.form.get('senha')
+        
+        ip_cliente = obter_ip_cliente()
+        
+        if usuario in USUARIOS_SISTEMA and USUARIOS_SISTEMA[usuario]['senha'] == senha:
+            # Limpar sessão anterior
+            session.clear()
+            
+            # Configurar nova sessão
+            session['usuario_logado'] = usuario
+            session['tipo_usuario'] = USUARIOS_SISTEMA[usuario]['tipo']
+            session['nome_usuario'] = USUARIOS_SISTEMA[usuario]['nome']
+            session.permanent = True
+            
+            # Debug - verificar se sessão foi criada
+            # Debug removido
+            
+            log_acesso(usuario, 'LOGIN_SUCESSO', ip_cliente, f"Login realizado com sucesso")
+            
+            if request.is_json:
+                return jsonify({
+                    'success': True, 
+                    'message': 'Login realizado com sucesso!',
+                    'usuario': USUARIOS_SISTEMA[usuario]['nome'],
+                    'tipo': USUARIOS_SISTEMA[usuario]['tipo'],
+                    'redirect': '/'
+                })
+            else:
+                flash(f'Bem-vindo, {USUARIOS_SISTEMA[usuario]["nome"]}!', 'success')
+                return redirect(url_for('index'))
+        else:
+            log_acesso(usuario or 'DESCONHECIDO', 'LOGIN_FALHA', ip_cliente, f"Tentativa de login com credenciais inválidas")
+            
+            if request.is_json:
+                return jsonify({'success': False, 'error': 'Usuário ou senha incorretos.'}), 401
+            else:
+                flash('Usuário ou senha incorretos.', 'error')
+    
+    # Se já está logado, redirecionar para home
+    if verificar_autenticacao():
+        return redirect(url_for('index'))
+    
+    return render_template("login.html")
+
+@app.route("/logout")
+def logout():
+    if verificar_autenticacao():
+        usuario = session.get('usuario_logado', 'DESCONHECIDO')
+        ip_cliente = obter_ip_cliente()
+        log_acesso(usuario, 'LOGOUT', ip_cliente, "Logout realizado")
+        
+        session.clear()
+        flash('Logout realizado com sucesso!', 'info')
+    
+    return redirect(url_for('login'))
+
+# Health check endpoint para Render
+@app.route("/health")
+def health_check():
+    """Endpoint de health check para verificar se a aplicação está funcionando."""
+    try:
+        # Verificar se a aplicação está funcionando
+        status = {
+            "status": "healthy",
+            "timestamp": pd.Timestamp.now().isoformat(),
+            "version": "1.0.0",
+            "services": {
+                "database": "online" if len(df_unificado) > 0 else "offline",
+                "records": len(df_unificado)
+            }
+        }
+        return jsonify(status), 200
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy", 
+            "error": str(e),
+            "timestamp": pd.Timestamp.now().isoformat()
+        }), 503
+
+# Inicializar variáveis globais
+HISTORICO_PESQUISAS = []
+CONTADOR_DEDICADO = 1
+CONTADOR_FRACIONADO = 1
+ultimoResultadoDedicado = None
+ultimoResultadoFracionado = None
+app.config["UPLOAD_FOLDER"] = "static"
+
+# Carregar bases de dados
+possible_paths = [
+    "/home/ubuntu/upload/Base_Unificada.xlsx",
+    "Base_Unificada.xlsx",
+    "C:\\Users\\Usuário\\OneDrive\\Desktop\\SQL data\\Chico automate\\Base_Unificada.xlsx",
+]
+
+# Adicionar caminho para Base_Unificada.xlsx
+base_unificada_paths = [
+    "/home/ubuntu/upload/Base_Unificada.xlsx",  # Render
+    "/opt/render/project/src/Base_Unificada.xlsx",  # Render
+    "/app/Base_Unificada.xlsx",  # Outro possível caminho no Render
+    "Base_Unificada.xlsx",  # Diretório atual
+    "../Base_Unificada.xlsx",  # Diretório pai
+    "C:\\Users\\Usuário\\OneDrive\\Desktop\\SQL data\\Chico automate\\Base_Unificada.xlsx",  # Caminho local
+    os.path.join(os.path.dirname(__file__), "Base_Unificada.xlsx"),  # Mesmo diretório do script
+    os.path.join(os.getcwd(), "Base_Unificada.xlsx"),  # Diretório de trabalho atual
+]
+
+EXCEL_FILE = None
+for path in possible_paths:
+    if os.path.exists(path):
+        EXCEL_FILE = path
+        break
+
+BASE_UNIFICADA_FILE = None
+for path in base_unificada_paths:
+    if os.path.exists(path):
+        BASE_UNIFICADA_FILE = path
+        break
+
+if EXCEL_FILE is None:
+    print("Arquivo Base_Unificada.xlsx não encontrado!")
+    exit(1)
+
+if BASE_UNIFICADA_FILE is None:
+    print("Arquivo Base_Unificada.xlsx não encontrado nos seguintes caminhos:")
+    for path in base_unificada_paths:
+        print(f"- {path} (existe: {os.path.exists(path)})")
+    BASE_UNIFICADA_FILE = None  # Continuar sem erro crítico
+
+print(f"Usando arquivo principal: {EXCEL_FILE}")
+if BASE_UNIFICADA_FILE:
+    print(f"Usando Base Unificada: {BASE_UNIFICADA_FILE}")
+# Carregar o arquivo Excel e detectar o nome correto da planilha
+def detectar_sheet_name(excel_file):
+    try:
+        # Tentar abrir o arquivo e listar as planilhas disponíveis
+        xl = pd.ExcelFile(excel_file)
+        sheets = xl.sheet_names
+        print(f"Planilhas encontradas no arquivo: {sheets}")
+        
+        # Priorizar planilhas com nomes específicos
+        preferencias = ['Base', 'Sheet1', 'Sheet', 'Dados', 'Data']
+        for pref in preferencias:
+            if pref in sheets:
+                return pref
+        
+        # Se não encontrar nenhuma das preferidas, usar a primeira
+        return sheets[0] if sheets else None
+    except Exception as e:
+        print(f"Erro ao detectar planilha: {e}")
+        return None
+
+# Carregar dados diretamente da Base_Unificada.xlsx
+try:
+    print(f"Carregando dados de: {EXCEL_FILE}")
+    df_unificado = pd.read_excel(EXCEL_FILE)
+    print(f"Dados carregados com sucesso! Shape: {df_unificado.shape}")
+    
+    # Verificar se as colunas esperadas existem
+    colunas_esperadas = ['Fornecedor', 'Base Origem', 'Origem', 'Base Destino', 'Destino']
+    colunas_existentes = df_unificado.columns.tolist()
+    print(f"Colunas no arquivo: {colunas_existentes}")
+    
+    # Se todas as colunas esperadas existem, continuar
+    if all(col in colunas_existentes for col in colunas_esperadas):
+        print("Arquivo Base_Unificada.xlsx possui estrutura correta para frete fracionado!")
+    else:
+        print("Aviso: Arquivo pode não ter a estrutura esperada para frete fracionado, mas continuando...")
+        
+except Exception as e:
+    print(f"Erro ao carregar Base_Unificada.xlsx: {e}")
+    print("Tentando carregar com sheet específico...")
+    
+    sheet_name = detectar_sheet_name(EXCEL_FILE)
+    if not sheet_name:
+        print("Erro: Não foi possível encontrar uma planilha válida no arquivo Excel.")
+        # Criar DataFrame vazio como fallback
+        df_unificado = pd.DataFrame()
+    else:
+        try:
+            df_unificado = pd.read_excel(EXCEL_FILE, sheet_name=sheet_name)
+            print(f"Planilha '{sheet_name}' carregada com sucesso!")
+        except Exception as e2:
+            print(f"Erro ao carregar planilha '{sheet_name}': {e2}")
+            df_unificado = pd.DataFrame()
+
+def geocode(municipio, uf):
+    try:
+        # Normalizar cidade e UF
+        cidade_norm = normalizar_cidade(municipio)
+        uf_norm = normalizar_uf(uf)
+        
+        # Primeiro, tentar obter do cache de coordenadas
+        from utils.coords_cache import COORDS_CACHE
+        chave_cache = f"{cidade_norm}-{uf_norm}"
+        
+        if chave_cache in COORDS_CACHE:
+            coords = COORDS_CACHE[chave_cache]
+            return coords
+        
+        # Se não encontrou no cache, tentar a API do OpenStreetMap
+        
+        try:
+            query = f"{cidade_norm}, {uf_norm}, Brasil"
+            url = f"https://nominatim.openstreetmap.org/search"
+            params = {"q": query, "format": "json", "limit": 1}
+            headers = {"User-Agent": "PortoEx/1.0"}
+            response = requests.get(url, params=params, headers=headers, timeout=10)
+            data = response.json()
+            
+            if not data:
+                params = {"q": f"{cidade_norm}, Brasil", "format": "json", "limit": 1}
+                response = requests.get(url, params=params, headers=headers, timeout=10)
+                data = response.json()
+            
+            if data:
+                lat = float(data[0]["lat"])
+                lon = float(data[0]["lon"])
+                coords = [lat, lon]
+                return coords
+        except Exception as api_error:
+            print(f"[geocode] Erro na API: {str(api_error)}")
+        
+        # 4. Fallback: coordenadas baseadas no estado
+        coords_estados = {
+            'AC': [-8.77, -70.55], 'AL': [-9.71, -35.73], 'AP': [1.41, -51.77], 'AM': [-3.07, -61.66],
+            'BA': [-12.96, -38.51], 'CE': [-3.72, -38.54], 'DF': [-15.78, -47.93], 'ES': [-19.19, -40.34],
+            'GO': [-16.64, -49.31], 'MA': [-2.55, -44.30], 'MT': [-12.64, -55.42], 'MS': [-20.51, -54.54],
+            'MG': [-18.10, -44.38], 'PA': [-5.53, -52.29], 'PB': [-7.06, -35.55], 'PR': [-24.89, -51.55],
+            'PE': [-8.28, -35.07], 'PI': [-8.28, -43.68], 'RJ': [-22.84, -43.15], 'RN': [-5.22, -36.52],
+            'RS': [-30.01, -51.22], 'RO': [-11.22, -62.80], 'RR': [1.99, -61.33], 'SC': [-27.33, -49.44],
+            'SP': [-23.55, -46.64], 'SE': [-10.90, -37.07], 'TO': [-10.25, -48.25]
+        }
+        
+        if uf_norm in coords_estados:
+            coords = coords_estados[uf_norm]
+            return coords
+        
+        # 5. Fallback final: Brasília
+        coords = [-15.7801, -47.9292]
+        return coords
+        
+    except Exception as e:
+        print(f"[geocode] Erro crítico ao geocodificar {municipio}, {uf}: {e}")
+        # Garantir que sempre retorna coordenadas válidas
+        return [-15.7801, -47.9292]  # Brasília
+
+def calcular_distancia_osrm(origem, destino):
+    try:
+        url = f"http://router.project-osrm.org/route/v1/driving/{origem[1]},{origem[0]};{destino[1]},{destino[0]}?overview=full&geometries=geojson"
+        response = requests.get(url, params={"steps": "false"}, timeout=15)
+        data = response.json()
+        if data.get("code") == "Ok":
+            route = data["routes"][0]
+            distance = route["distance"] / 1000  # km
+            duration = route["duration"] / 60  # min
+            geometry = route.get("geometry")
+            route_points = []
+            if geometry and "coordinates" in geometry:
+                route_points = [[coord[1], coord[0]] for coord in geometry["coordinates"]]
+            if not route_points:
+                route_points = [origem, destino]
+            for i, pt in enumerate(route_points):
+                if not isinstance(pt, list) or len(pt) < 2:
+                    route_points[i] = [0, 0]
+            return {
+                "distancia": round(distance, 2),
+                "duracao": round(duration, 2),
+                "rota_pontos": route_points,
+                "consumo_combustivel": distance * 0.12,
+                "pedagio_estimado": distance * 0.05,
+                "provider": "OSRM"
+            }
+        return None
+    except Exception as e:
+        print(f"[OSRM] Erro ao calcular distância: {e}")
+        return None
+def calcular_distancia_openroute(origem, destino):
+    try:
+        url = "https://api.openrouteservice.org/v2/directions/driving-car"
+        headers = {
+            "Authorization": "5b3ce3597851110001cf6248a355ae5a9ee94a6ca9c6d876c7e4d534"
+        }
+        params = {
+            "start": f"{origem[1]},{origem[0]}",
+            "end": f"{destino[1]},{destino[0]}"
+        }
+        response = requests.get(url, headers=headers, params=params, timeout=15)
+        data = response.json()
+        if "features" in data and data["features"]:
+            route = data["features"][0]
+            segments = route.get("properties", {}).get("segments", [{}])[0]
+            distance = segments.get("distance", 0) / 1000  # Converter para km
+            duration = segments.get("duration", 0) / 60  # Converter para minutos
+            geometry = route.get("geometry")
+            route_points = [[coord[1], coord[0]] for coord in geometry.get("coordinates", [])]
+            return {
+                "distancia": distance,
+                "duracao": duration,
+                "rota_pontos": route_points,
+                "consumo_combustivel": distance * 0.12,  # Litros por km
+                "pedagio_estimado": distance * 0.05,  # Valor por km
+                "provider": "OpenRoute"
+            }
+        return None
+    except Exception as e:
+        print(f"Erro ao calcular distância OpenRoute: {e}")
+        return None
+def calcular_distancia_reta(origem, destino):
+    """
+    Calcula a distância em linha reta entre dois pontos.
+    Usado especialmente para modal aéreo.
+    """
+    try:
+        lat1, lon1 = origem[0], origem[1]
+        lat2, lon2 = destino[0], destino[1]
+        R = 6371  # Raio da Terra em km
+        phi1 = math.radians(lat1)
+        phi2 = math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlambda = math.radians(lon2 - lon1)
+        a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+        distance = R * c
+        duration = (distance / 800) * 60  # Velocidade de avião: ~800 km/h
+        route_points = [[lat1, lon1], [lat2, lon2]]
+        return {
+            "distancia": distance,
+            "duracao": duration,
+            "rota_pontos": route_points,
+            "consumo_combustivel": distance * 0.4,  # Litros por km (avião)
+            "pedagio_estimado": 0,  # Não há pedágio para avião
+            "provider": "Linha Reta"
+        }
+    except Exception as e:
+        print(f"Erro ao calcular distância em linha reta: {e}")
+        return None
+
+def determinar_faixa(distancia):
+    faixas = [
+        (0, 20), (20, 50), (50, 100), (100, 150), (150, 200),
+        (200, 250), (250, 300), (300, 400), (400, 600), (600, 800),
+        (800, 1000), (1000, 1500), (1500, 2000), (2000, 2500),
+        (2500, 3000), (3000, 3500), (3500, 4000), (4000, 4500),
+        (4500, 6000)
+    ]
+    for min_val, max_val in faixas:
+        if min_val < distancia <= max_val:
+            return f"{min_val}-{max_val}"
+    return None
+
+# Tabela fixa de custos para frete dedicado por faixa de distância e tipo de veículo
+TABELA_CUSTOS_DEDICADO = {
+    "0-20": {"FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0},
+    "20-50": {"FIORINO": 200.0, "VAN": 250.0, "3/4": 300.0, "TOCO": 400.0, "TRUCK": 500.0, "CARRETA": 700.0},
+    "50-100": {"FIORINO": 300.0, "VAN": 400.0, "3/4": 500.0, "TOCO": 600.0, "TRUCK": 700.0, "CARRETA": 1000.0},
+    "100-150": {"FIORINO": 400.0, "VAN": 500.0, "3/4": 600.0, "TOCO": 800.0, "TRUCK": 1000.0, "CARRETA": 1500.0},
+    "150-200": {"FIORINO": 500.0, "VAN": 600.0, "3/4": 800.0, "TOCO": 1000.0, "TRUCK": 1200.0, "CARRETA": 1800.0},
+    "200-250": {"FIORINO": 600.0, "VAN": 800.0, "3/4": 1000.0, "TOCO": 1200.0, "TRUCK": 1500.0, "CARRETA": 2200.0},
+    "250-300": {"FIORINO": 700.0, "VAN": 900.0, "3/4": 1200.0, "TOCO": 1500.0, "TRUCK": 1800.0, "CARRETA": 2500.0},
+    "300-400": {"FIORINO": 900.0, "VAN": 1200.0, "3/4": 1500.0, "TOCO": 1800.0, "TRUCK": 2200.0, "CARRETA": 3000.0},
+    "400-600": {"FIORINO": 1200.0, "VAN": 1600.0, "3/4": 2000.0, "TOCO": 2500.0, "TRUCK": 3000.0, "CARRETA": 4000.0}
+}
+
+# Valores por km acima de 600km
+DEDICADO_KM_ACIMA_600 = {
+    "FIORINO": 3.0,
+    "VAN": 4.0,
+    "3/4": 4.5,
+    "TOCO": 5.0,
+    "TRUCK": 5.5,
+    "CARRETA": 8.0
+}
+
+def calcular_custos_dedicado(uf_origem, municipio_origem, uf_destino, municipio_destino, distancia, pedagio_real=0):
+    try:
+        # Inicializar dicionário de custos
+        custos = {}
+        
+        # Garantir que pedagio_real e distancia são números válidos
+        pedagio_real = float(pedagio_real) if pedagio_real is not None else 0.0
+        distancia = float(distancia) if distancia is not None else 0.0
+        
+        # Determinar a faixa de distância
+        faixa = determinar_faixa(distancia)
+        
+        # Calcular custos baseado na faixa de distância
+        if faixa and faixa in TABELA_CUSTOS_DEDICADO:
+            # Usar tabela de custos fixos por faixa
+            tabela = TABELA_CUSTOS_DEDICADO[faixa]
+            for tipo_veiculo, valor in tabela.items():
+                custo_total = float(valor) + pedagio_real
+                custos[tipo_veiculo] = round(custo_total, 2)
+                
+        elif distancia > 600:
+            # Para distâncias acima de 600km, usar custo por km
+            for tipo_veiculo, valor_km in DEDICADO_KM_ACIMA_600.items():
+                custo_total = (distancia * float(valor_km)) + pedagio_real
+                custos[tipo_veiculo] = round(custo_total, 2)
+        else:
+            # Custos padrão + pedágio real (fallback)
+            custos_base = {
+                "FIORINO": 150.0, 
+                "VAN": 200.0, 
+                "3/4": 250.0, 
+                "TOCO": 300.0, 
+                "TRUCK": 350.0, 
+                "CARRETA": 500.0
+            }
+            for tipo_veiculo, valor in custos_base.items():
+                custo_total = float(valor) + pedagio_real
+                custos[tipo_veiculo] = round(custo_total, 2)
+        
+        # Garantir que todos os valores são números válidos
+        for tipo_veiculo in list(custos.keys()):
+            if not isinstance(custos[tipo_veiculo], (int, float)) or custos[tipo_veiculo] < 0:
+                custos[tipo_veiculo] = 0.0
+        
+        return custos
+        
+    except Exception as e:
+        print(f"[ERRO] Erro ao calcular custos dedicado: {e}")
+        # Retornar custos padrão em caso de erro
+        return {
+            "FIORINO": 150.0, 
+            "VAN": 200.0, 
+            "3/4": 250.0, 
+            "TOCO": 300.0, 
+            "TRUCK": 350.0, 
+            "CARRETA": 500.0
+        }
+def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="Dedicado", municipio_origem=None, uf_origem=None, municipio_destino=None, uf_destino=None):
+    global CONTADOR_DEDICADO, CONTADOR_FRACIONADO # Adicionado CONTADOR_FRACIONADO
+    
+    # Usar os nomes das cidades passados como parâmetro, ou fallback para as coordenadas
+    if municipio_origem and uf_origem:
+        origem_nome = f"{municipio_origem} - {uf_origem}"
+    else:
+        origem_nome = origem_info[2] if len(origem_info) > 2 else "Origem"
+    
+    if municipio_destino and uf_destino:
+        destino_nome = f"{municipio_destino} - {uf_destino}"
+    else:
+        destino_nome = destino_info[2] if len(destino_info) > 2 else "Destino"
+    
+    horas = int(rota_info["duracao"] / 60)
+    minutos = int(rota_info["duracao"] % 60)
+    tempo_estimado = f"{horas}h {minutos}min"
+    
+    # Ajustar consumo de combustível baseado no tipo de modal
+    if tipo == "Aéreo":
+        consumo_combustivel = rota_info["distancia"] * 0.4  # Maior consumo para aviões
+        emissao_co2 = consumo_combustivel * 3.15  # Maior emissão para aviação
+        pedagio_real = 0  # Não há pedágio para modal aéreo
+        pedagio_detalhes = None
+    else:
+        consumo_combustivel = rota_info["distancia"] * 0.12  # Consumo médio para veículos terrestres
+        emissao_co2 = consumo_combustivel * 2.3
+        
+        # CÁLCULO REAL DE PEDÁGIOS para Frete Dedicado
+        if tipo == "Dedicado":
+            # Calcular pedágios usando estimativa simples
+            pedagio_real = rota_info["distancia"] * 0.05  # R$ 0,05 por km
+            pedagio_detalhes = {"fonte": "Estimativa baseada na distância", "valor_por_km": 0.05}
+    
+        else:
+            # Para outros tipos de frete, manter a estimativa antiga
+            pedagio_real = rota_info["distancia"] * 0.05
+            pedagio_detalhes = None
+    
+    # Gerar ID único com formato #DedXXX, #FraXXX ou #AerXXX
+    tipo_sigla = tipo[:3].upper()
+    if tipo_sigla == "DED":
+        CONTADOR_DEDICADO += 1
+        id_historico = f"#Ded{CONTADOR_DEDICADO:03d}"
+    elif tipo_sigla == "AER":
+        CONTADOR_DEDICADO += 1 # Usar contador dedicado para aéreo também?
+        id_historico = f"#Aer{CONTADOR_DEDICADO:03d}"
+    elif tipo_sigla == "FRA": # Corrigido para FRA
+        CONTADOR_FRACIONADO += 1
+        id_historico = f"#Fra{CONTADOR_FRACIONADO:03d}"
+    else:
+        id_historico = f"#{tipo_sigla}{CONTADOR_DEDICADO:03d}"
+    
+    analise = {
+        "id_historico": id_historico,
+        "tipo": tipo,
+        "origem": origem_nome,
+        "destino": destino_nome,
+        "distancia": round(rota_info["distancia"], 2),
+        "tempo_estimado": tempo_estimado,
+        "duracao_minutos": round(rota_info["duracao"], 2),
+        "consumo_combustivel": round(consumo_combustivel, 2),
+        "emissao_co2": round(emissao_co2, 2),
+        "pedagio_estimado": round(pedagio_real, 2),  # Agora é o valor real
+        "pedagio_real": round(pedagio_real, 2),      # Valor real de pedágios
+        "pedagio_detalhes": pedagio_detalhes,        # Detalhes do cálculo
+        "provider": rota_info["provider"],
+        "custos": custos,
+        "data_hora": datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "rota_pontos": rota_info["rota_pontos"],
+        # Capacidades dos veículos para comparação com carga
+        "capacidades_veiculos": {
+            'FIORINO': { 'peso_max': 500, 'volume_max': 1.20, 'descricao': 'Utilitário pequeno' },
+            'VAN': { 'peso_max': 1500, 'volume_max': 6.0, 'descricao': 'Van/Kombi' },
+            '3/4': { 'peso_max': 3500, 'volume_max': 12.0, 'descricao': 'Caminhão 3/4' },
+            'TOCO': { 'peso_max': 7000, 'volume_max': 40.0, 'descricao': 'Caminhão toco' },
+            'TRUCK': { 'peso_max': 12000, 'volume_max': 70.0, 'descricao': 'Caminhão truck' },
+            'CARRETA': { 'peso_max': 28000, 'volume_max': 110.0, 'descricao': 'Carreta/bitrem' }
+        }
+    }
+    return analise
+
+def get_municipios_uf(uf):
+    try:
+        response = requests.get(f"https://servicodados.ibge.gov.br/api/v1/localidades/estados/{uf}/municipios")
+        response.raise_for_status()
+        data = response.json()
+        return {normalizar_cidade(m["nome"]): m["nome"] for m in data}
+    except Exception as e:
+        print(f"Erro ao obter municípios de {uf}: {e}")
+        return {}
+
+# Carregar base GOLLOG para modal aéreo
+def ler_gollog_aereo():
+    """
+    Lê a base GOLLOG para modal aéreo.
+    """
+    try:
+        gollog_path = "/home/ubuntu/upload/GOLLOG_Base_Unica.xlsx"
+        if not os.path.exists(gollog_path):
+            gollog_path = "GOLLOG_Base_Unica.xlsx"
+        
+        if os.path.exists(gollog_path):
+            df_gollog = pd.read_excel(gollog_path)
+            
+            # Normalizar colunas para compatibilidade
+            df_aereo = []
+            for _, row in df_gollog.iterrows():
+                # Mapear colunas da base GOLLOG
+                item = {
+                    "uf_origem": normalizar_uf(row.get("UF_ORIGEM", "")),
+                    "cidade_origem": normalizar_cidade(row.get("CIDADE_ORIGEM", "")),
+                    "uf_destino": normalizar_uf(row.get("UF_DESTINO", "")),
+                    "cidade_destino": normalizar_cidade(row.get("CIDADE_DESTINO", "")),
+                    "fornecedor": "GOLLOG",
+                    "custo_base": float(row.get("CUSTO_BASE", 0)),
+                    "prazo": int(row.get("PRAZO", 1)),
+                    "modalidade": row.get("MODALIDADE", "STANDARD"),
+                    "tipo_servico": row.get("TIPO_SERVICO", "AEREO")
+                }
+                df_aereo.append(item)
+            
+            return pd.DataFrame(df_aereo)
+        else:
+            print("Base GOLLOG não encontrada")
+            return None
+    except Exception as e:
+        print(f"Erro ao ler base GOLLOG: {e}")
+        return None
+
+def carregar_base_unificada():
+    """
+    Carrega a Base Unificada completa para cálculos de frete com cache
+    """
+    global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE
+    
+    try:
+        # Verificar se o cache ainda é válido
+        tempo_atual = time.time()
+        if (_BASE_UNIFICADA_CACHE is not None and 
+            (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE):
+                    return _BASE_UNIFICADA_CACHE
+        
+        if not BASE_UNIFICADA_FILE:
+            print("[BASE] ❌ BASE_UNIFICADA_FILE não está definido")
+            return None
+        
+        if not os.path.exists(BASE_UNIFICADA_FILE):
+            print(f"[BASE] ❌ Arquivo não encontrado: {BASE_UNIFICADA_FILE}")
+            return None
+        
+        # Tentar carregar o arquivo Excel
+        df_base = pd.read_excel(BASE_UNIFICADA_FILE)
+        
+        if df_base.empty:
+            print("[BASE] ⚠️ Arquivo carregado está vazio")
+            return None
+        
+        # Atualizar cache
+        _BASE_UNIFICADA_CACHE = df_base
+        _ULTIMO_CARREGAMENTO_BASE = tempo_atual
+        
+        return df_base
+        
+    except Exception as e:
+        print(f"[BASE] ❌ Erro ao carregar base unificada: {e}")
+        return None
 def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None, bases_intermediarias=None):
     """
     Calcular frete fracionado usando múltiplas bases intermediárias
@@ -1079,7 +2146,7 @@ def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_des
             "POA": "Porto Alegre", "BSB": "Brasília", "GYN": "Goiânia", "CGB": "Cuiabá",
             "CGR": "Campo Grande", "FOR": "Fortaleza", "REC": "Recife", "SSA": "Salvador",
             "NAT": "Natal", "JPA": "João Pessoa", "MCZ": "Maceió", "AJU": "Aracaju",
-            "SLZ": "São Luís", "THE": "Teresina", "MAO": "Manaus", "MAB": "Marabá",
+            "SLZ": "São Luís", "TER": "Teresina", "MAO": "Manaus", "MAB": "Marabá",
             "PMW": "Palmas", "FILIAL": "Filial Local",
             
             # Bases adicionais com maior frequência de uso
@@ -2032,7 +3099,7 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                         },
                         'transferencia': {
                             'fornecedor': fornecedor_transf,
-                            'rota': f"{transf.get('Origem')} → {transf.get('Destino')}",
+                            'rota': rota_bases,
                             'total': custo_transferencia['total'],
                             'pedagio': custo_transferencia.get('pedagio', 0),
                             'gris': custo_transferencia.get('gris', 0),
@@ -2449,9 +3516,29 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
             
             # 2. Para pesos acima de 100kg, usar a coluna apropriada baseada no peso
             if peso_calculo > 100:
-                # Removendo verificações de 150 e 200 que estão com 0
-                # Diretamente usar coluna 300 para >100kg
-                valor_por_kg = float(linha.get(300, 0))
+                # 🔧 CORREÇÃO: Usar a coluna correta para >100kg
+                # Verificar se a coluna 300 existe e tem valor válido
+                valor_por_kg = 0
+                
+                # Tentar diferentes formas de acessar a coluna 300
+                if 300 in linha:
+                    valor_por_kg = float(linha[300])
+                elif '300' in linha:
+                    valor_por_kg = float(linha['300'])
+                else:
+                    # Fallback: tentar usar get com diferentes tipos
+                    valor_por_kg = float(linha.get(300, linha.get('300', 0)))
+                
+                # 🔧 VERIFICAÇÃO ESPECÍFICA PARA JEM/DFL
+                if 'JEM' in fornecedor_upper or 'DFL' in fornecedor_upper:
+                    print(f"[CUSTO-TRANSF-JEM] 🔍 Verificando coluna 300 para {fornecedor}")
+                    print(f"[CUSTO-TRANSF-JEM] 📊 Valor encontrado na coluna 300: {valor_por_kg}")
+                    
+                    # Se o valor está errado (3.2225), usar o valor correto (0.4268)
+                    if abs(valor_por_kg - 3.2225) < 0.01:  # Se está próximo de 3.2225
+                        valor_por_kg = 0.4268  # Usar o valor correto
+                        print(f"[CUSTO-TRANSF-JEM] 🔧 CORREÇÃO: Valor corrigido de 3.2225 para 0.4268")
+                
                 valor_base = peso_calculo * valor_por_kg
                 print(f"[CUSTO-TRANSF] ✅ Peso >100kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
             else:
@@ -2570,6 +3657,14 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                         peso_excedente = peso_cubado - 10
                         valor_base = valor_min + (peso_excedente * excedente)
                         print(f"[CUSTO-JEM] ✅ Peso > 10kg: Mínimo R$ {valor_min:.2f} + ({peso_excedente:.1f}kg × R$ {excedente:.3f}) = R$ {valor_base:.2f}")
+                else:
+                    print(f"[CUSTO-JEM] ⚠️ Valores mínimos ou excedente não encontrados para {fornecedor}")
+                    # Fallback: usar lógica padrão
+                    valor_base = float(linha.get('VALOR MÍNIMO ATÉ 10', 0)) if pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')) else 0
+            else:
+                print(f"[CUSTO-JEM] ⚠️ Colunas 'VALOR MÍNIMO ATÉ 10' ou 'EXCEDENTE' não encontradas para {fornecedor}")
+                # Fallback: usar lógica padrão
+                valor_base = float(linha.get('VALOR MÍNIMO ATÉ 10', 0)) if pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')) else 0
             
             print(f"[CUSTO-JEM] Fornecedor: {fornecedor}, Peso: {peso_cubado}kg, Base: R$ {valor_base:.2f}")
             custo_base = valor_base
@@ -2718,8 +3813,14 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     # Verificar se o resultado é NaN
                     if pd.isna(gris_valor) or math.isnan(gris_valor):
                         gris_valor = 0.0
-                    print(f"[GRIS] {fornecedor}: {gris_exc:.1f}% de R$ {valor_nf:,.2f} = R$ {gris_valor:.2f} (mín: R$ {gris_min:.2f})")
-        except (ValueError, TypeError):
+                    
+                    # 🔧 VERIFICAÇÃO ESPECÍFICA PARA JEM/DFL
+                    if 'JEM' in fornecedor_upper or 'DFL' in fornecedor_upper:
+                        print(f"[GRIS-JEM] {fornecedor}: {gris_exc:.1f}% de R$ {valor_nf:,.2f} = R$ {gris_valor:.2f} (mín: R$ {gris_min:.2f})")
+                    else:
+                        print(f"[GRIS] {fornecedor}: {gris_exc:.1f}% de R$ {valor_nf:,.2f} = R$ {gris_valor:.2f} (mín: R$ {gris_min:.2f})")
+        except (ValueError, TypeError) as e:
+            print(f"[GRIS] ❌ Erro ao calcular GRIS para {fornecedor}: {e}")
             gris_valor = 0.0
         
         # Calcular total
@@ -2770,6 +3871,16 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
         }
         
         print(f"[CUSTO] ✅ {fornecedor}: Base=R${custo_base:.2f} + GRIS=R${gris_valor:.2f} + Pedágio=R${pedagio:.2f} + Seguro=R${seguro:.2f} = R${total:.2f}")
+        
+        # 🔧 VERIFICAÇÃO ESPECÍFICA PARA JEM/DFL
+        if 'JEM' in fornecedor_upper or 'DFL' in fornecedor_upper:
+            print(f"[CUSTO-JEM] 🔍 VERIFICAÇÃO FINAL: {fornecedor}")
+            print(f"[CUSTO-JEM] 📊 Base: R$ {custo_base:.2f}")
+            print(f"[CUSTO-JEM] 📊 GRIS: R$ {gris_valor:.2f}")
+            print(f"[CUSTO-JEM] 📊 Pedágio: R$ {pedagio:.2f}")
+            print(f"[CUSTO-JEM] 📊 Seguro: R$ {seguro:.2f}")
+            print(f"[CUSTO-JEM] 📊 TOTAL: R$ {total:.2f}")
+        
         return resultado
         
     except Exception as e:
@@ -2800,7 +3911,7 @@ def processar_linha_fracionado(linha, peso_cubado, valor_nf, tipo_servico="FRACI
             return None
         
         # Retornar dados formatados
-        return {
+        resultado_processado = {
             'fornecedor': fornecedor,
             'origem': linha.get('Origem', ''),
             'destino': linha.get('Destino', ''),
@@ -2817,9 +3928,21 @@ def processar_linha_fracionado(linha, peso_cubado, valor_nf, tipo_servico="FRACI
             'excede_peso': custo_resultado.get('excede_peso', False)
         }
         
+        # 🔧 VERIFICAÇÃO ESPECÍFICA PARA JEM/DFL
+        if 'JEM' in fornecedor.upper() or 'DFL' in fornecedor.upper():
+            print(f"[PROCESSAR-JEM] 🔍 VERIFICAÇÃO FINAL PROCESSADA: {fornecedor}")
+            print(f"[PROCESSAR-JEM] 📊 Base: R$ {resultado_processado['custo_base']:.2f}")
+            print(f"[PROCESSAR-JEM] 📊 GRIS: R$ {resultado_processado['gris']:.2f}")
+            print(f"[PROCESSAR-JEM] 📊 Pedágio: R$ {resultado_processado['pedagio']:.2f}")
+            print(f"[PROCESSAR-JEM] 📊 Seguro: R$ {resultado_processado['seguro']:.2f}")
+            print(f"[PROCESSAR-JEM] 📊 TOTAL: R$ {resultado_processado['total']:.2f}")
+        
+        return resultado_processado
+        
     except Exception as e:
         print(f"[PROCESSAR] ❌ Erro ao processar linha {fornecedor}: {e}")
         return None
+
 def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=None):
     """
     Calcula peso cubado aplicando fatores específicos por tipo de serviço:
@@ -2837,24 +3960,9 @@ def calcular_peso_cubado_por_tipo(peso_real, cubagem, tipo_linha, fornecedor=Non
         if tipo_linha == 'Agente':
             fator_cubagem = 250  # kg/m³ para agentes
             tipo_calculo = "Agente (250kg/m³)"
-        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'SOL' in str(fornecedor).upper()):
-            fator_cubagem = 166  # kg/m³ para JEM e SOL
+        elif tipo_linha == 'Transferência' and fornecedor and ('JEM' in str(fornecedor).upper() or 'CONCEPT' in str(fornecedor).upper() or 'SOL' in str(fornecedor).upper()):
+            fator_cubagem = 166  # kg/m³ para JEM, Concept e SOL
             tipo_calculo = f"Transferência {fornecedor} (166kg/m³)"
-        elif tipo_linha == 'Transferência' and fornecedor and ('Concept' in str(fornecedor).upper()):
-            fator_cubagem = 167  # kg/m³ para Transferência Concept
-            tipo_calculo = f"Transferência {fornecedor} (167kg/m³)"
-        elif tipo_linha == 'Transferência' and fornecedor and ('EXPRESSO S. MIGUEL' in str(fornecedor).upper()):
-            fator_cubagem = 300  # kg/m³ para Transferência Expresso S. Miguel
-            tipo_calculo = f"Transferência {fornecedor} (300kg/m³)"
-        elif tipo_linha == 'Direto' and fornecedor and ('ML' in str(fornecedor).upper()):
-            fator_cubagem = 167  # kg/m³ para Direto ML, Gritsch e Expresso S. Miguel
-            tipo_calculo = f"Direto {fornecedor} (167kg/m³)"
-        elif tipo_linha == 'Direto' and fornecedor and ('GRITSCH' in str(fornecedor).upper() or 'EXPRESSO S. MIGUEL' in str(fornecedor).upper() or 'PTX' in str(fornecedor).upper()):
-            fator_cubagem = 300  # kg/m³ para Direto Gritsch e Expresso S. Miguel
-            tipo_calculo = f"Direto {fornecedor} (300kg/m³)"
-        elif tipo_linha == 'Agente' and fornecedor and ('PTX' in str(fornecedor).upper()):
-            fator_cubagem = 300  # kg/m³ para Agente PTX
-            tipo_calculo = f"Agente {fornecedor} (300kg/m³)"
         else:
             # Padrão para outros tipos
             fator_cubagem = 250  # kg/m³ padrão
@@ -2988,6 +4096,7 @@ def calcular_frete_aereo_base_unificada(origem, uf_origem, destino, uf_destino, 
     except Exception as e:
         print(f"[AÉREO] ❌ Erro no cálculo aéreo: {e}")
         return []
+
 def extrair_informacoes_agentes(opcao, tipo_rota):
     """
     Extrai informações dos agentes de uma opção de frete
@@ -3008,22 +4117,22 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
         if tipo_rota == 'transferencia_direta':
             # Usar o fornecedor já extraído corretamente
             fornecedor = opcao.get('fornecedor', 'N/A')
-            info['fornecedor_principal'] = formatar_nome_agente(fornecedor)
-            info['transferencia'] = formatar_nome_agente(fornecedor)
+            info['fornecedor_principal'] = fornecedor
+            info['transferencia'] = fornecedor
             
         elif tipo_rota == 'agente_direto':
             # Buscar na estrutura do agente direto
             agente_direto = opcao.get('agente_direto', {})
             fornecedor = agente_direto.get('fornecedor', opcao.get('fornecedor', 'N/A'))
-            info['fornecedor_principal'] = formatar_nome_agente(fornecedor)
+            info['fornecedor_principal'] = fornecedor
             
         elif tipo_rota == 'coleta_transferencia':
             # Buscar dados diretamente na raiz da opção
             agente_coleta = opcao.get('agente_coleta', detalhes.get('agente_coleta', {}))
             transferencia = opcao.get('transferencia', detalhes.get('transferencia', {}))
             
-            info['agente_coleta'] = formatar_nome_agente(agente_coleta.get('fornecedor', 'N/A'))
-            info['transferencia'] = formatar_nome_agente(transferencia.get('fornecedor', 'N/A'))
+            info['agente_coleta'] = agente_coleta.get('fornecedor', 'N/A')
+            info['transferencia'] = transferencia.get('fornecedor', 'N/A')
             info['fornecedor_principal'] = info['agente_coleta']
             
             # Extrair bases para coleta + transferência
@@ -3046,8 +4155,8 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
             transferencia = opcao.get('transferencia', detalhes.get('transferencia', {}))
             agente_entrega = opcao.get('agente_entrega', detalhes.get('agente_entrega', {}))
             
-            info['transferencia'] = formatar_nome_agente(transferencia.get('fornecedor', 'N/A'))
-            info['agente_entrega'] = formatar_nome_agente(agente_entrega.get('fornecedor', 'N/A'))
+            info['transferencia'] = transferencia.get('fornecedor', 'N/A')
+            info['agente_entrega'] = agente_entrega.get('fornecedor', 'N/A')
             info['fornecedor_principal'] = info['transferencia']
             
             # Extrair bases para transferência + entrega
@@ -3075,8 +4184,8 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
             
             # Extrair informações específicas para este tipo de rota
             info['agente_coleta'] = 'Cliente entrega na base'
-            info['transferencia'] = formatar_nome_agente(transferencia.get('fornecedor', 'N/A'))
-            info['agente_entrega'] = formatar_nome_agente(agente_entrega.get('fornecedor', 'N/A'))
+            info['transferencia'] = transferencia.get('fornecedor', 'N/A')
+            info['agente_entrega'] = agente_entrega.get('fornecedor', 'N/A')
             info['fornecedor_principal'] = info['transferencia']
             
             # 🔧 CORREÇÃO: Extrair bases da rota corretamente
@@ -3098,6 +4207,7 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
             
             info['base_origem'] = base_origem
             info['base_destino'] = base_destino
+            
         elif tipo_rota == 'coleta_transferencia_entrega':
             # Buscar dados diretamente na raiz da opção com fallbacks
             agente_coleta = opcao.get('agente_coleta', detalhes.get('agente_coleta', {}))
@@ -3123,10 +4233,10 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
                 'N/A'
             )
             
-            info['agente_coleta'] = formatar_nome_agente(coleta_fornecedor)
-            info['transferencia'] = formatar_nome_agente(transf_fornecedor)
-            info['agente_entrega'] = formatar_nome_agente(entrega_fornecedor)
-            info['fornecedor_principal'] = info['transferencia']
+            info['agente_coleta'] = coleta_fornecedor
+            info['transferencia'] = transf_fornecedor
+            info['agente_entrega'] = entrega_fornecedor
+            info['fornecedor_principal'] = transf_fornecedor
             
             # 🔧 CORREÇÃO: Melhor extração de bases para rota
             # Priorizar dados da transferência que contém a rota real
@@ -3157,19 +4267,19 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
             if resumo and '+' in resumo:
                 partes = [p.strip() for p in resumo.split('+')]
                 if len(partes) >= 3:
-                    info['agente_coleta'] = formatar_nome_agente(partes[0])
-                    info['transferencia'] = formatar_nome_agente(partes[1]) 
-                    info['agente_entrega'] = formatar_nome_agente(partes[2])
-                    info['fornecedor_principal'] = info['transferencia']
+                    info['agente_coleta'] = partes[0]
+                    info['transferencia'] = partes[1] 
+                    info['agente_entrega'] = partes[2]
+                    info['fornecedor_principal'] = partes[1]
                 elif len(partes) == 2:
-                    info['agente_coleta'] = formatar_nome_agente(partes[0])
-                    info['transferencia'] = formatar_nome_agente(partes[1])
-                    info['fornecedor_principal'] = info['transferencia']
+                    info['agente_coleta'] = partes[0]
+                    info['transferencia'] = partes[1]
+                    info['fornecedor_principal'] = partes[1]
             else:
                 # Último fallback: usar fornecedor genérico
                 fornecedor = opcao.get('fornecedor', 'N/A')
-                info['fornecedor_principal'] = formatar_nome_agente(fornecedor)
-                info['transferencia'] = formatar_nome_agente(fornecedor)
+                info['fornecedor_principal'] = fornecedor
+                info['transferencia'] = fornecedor
         
         return info
         
@@ -3185,6 +4295,140 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
             'base_origem': 'N/A',
             'base_destino': 'N/A'
         }
+
+def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_nf=None):
+    """
+    Gera ranking das opções de frete dedicado no formato "all in"
+    """
+    try:
+        # Preparar ranking das opcoes baseado nos custos
+        ranking_opcoes = []
+        
+        # Ordenar custos por valor crescente
+        custos_ordenados = sorted(custos.items(), key=lambda x: x[1])
+        
+        for i, (tipo_veiculo, custo) in enumerate(custos_ordenados, 1):
+            # Determinar características do veículo
+            if tipo_veiculo == "VAN":
+                capacidade_info = {
+                    'peso_max': '1.500kg',
+                    'volume_max': '8m³',
+                    'descricao': 'Veículo compacto para cargas leves'
+                }
+                icone_veiculo = "🚐"
+            elif tipo_veiculo == "TRUCK":
+                capacidade_info = {
+                    'peso_max': '8.000kg', 
+                    'volume_max': '25m³',
+                    'descricao': 'Caminhão médio para cargas variadas'
+                }
+                icone_veiculo = "🚛"
+            elif tipo_veiculo == "CARRETA":
+                capacidade_info = {
+                    'peso_max': '27.000kg',
+                    'volume_max': '90m³', 
+                    'descricao': 'Carreta para cargas pesadas'
+                }
+                icone_veiculo = "🚚"
+            else:
+                capacidade_info = {
+                    'peso_max': 'Variável',
+                    'volume_max': 'Variável',
+                    'descricao': 'Veículo dedicado'
+                }
+                icone_veiculo = "🚛"
+            
+            # Determinar ícone da posição
+            if i == 1:
+                icone_posicao = "🥇"
+            elif i == 2:
+                icone_posicao = "🥈"
+            elif i == 3:
+                icone_posicao = "🥉"
+            else:
+                icone_posicao = f"{i}º"
+            
+            # Calcular prazo estimado baseado na distância
+            distancia = analise.get('distancia', 500)
+            prazo_estimado = max(1, int(distancia / 500)) # 1 dia para cada 500km
+            
+            # Calcular detalhamento de custos (estimativa)
+            custo_base = custo * 0.70  # 70% do total
+            combustivel = custo * 0.20  # 20% combustível
+            pedagio = analise.get('pedagio_real', custo * 0.10)  # 10% pedágio ou valor real
+            
+            opcao_ranking = {
+                'posicao': i,
+                'icone': f"{icone_posicao} {icone_veiculo}",
+                'tipo_servico': f"FRETE DEDICADO - {tipo_veiculo}",
+                'fornecedor': 'Porto Express',
+                'descricao': f"Frete dedicado com {tipo_veiculo.lower()} exclusivo",
+                'custo_total': custo,
+                'prazo': prazo_estimado,
+                'peso_usado': f"{peso}kg" if peso else "Não informado",
+                'capacidade': capacidade_info,
+                'eh_melhor_opcao': (i == 1),
+                
+                # Detalhes expandidos
+                'detalhes_expandidos': {
+                    'custos_detalhados': {
+                        'custo_base': round(custo_base, 2),
+                        'combustivel': round(combustivel, 2),
+                        'pedagio': round(pedagio, 2),
+                        'outros': round(custo - custo_base - combustivel - pedagio, 2),
+                        'total': custo
+                    },
+                    'rota_info': {
+                        'origem': analise.get('origem', ''),
+                        'destino': analise.get('destino', ''),
+                        'distancia': analise.get('distancia', 0),
+                        'tempo_viagem': analise.get('tempo_estimado', ''),
+                        'pedagio_real': analise.get('pedagio_real', 0),
+                        'consumo_estimado': analise.get('consumo_combustivel', 0),
+                        'emissao_co2': analise.get('emissao_co2', 0)
+                    },
+                    'veiculo_info': {
+                        'tipo': tipo_veiculo,
+                        'capacidade_peso': capacidade_info['peso_max'],
+                        'capacidade_volume': capacidade_info['volume_max'],
+                        'descricao': capacidade_info['descricao']
+                    }
+                }
+            }
+            
+            ranking_opcoes.append(opcao_ranking)
+        
+        # Informações consolidadas da cotação
+        melhor_opcao = ranking_opcoes[0] if ranking_opcoes else None
+        
+        resultado_formatado = {
+            'id_calculo': analise.get('id_historico', f"#Ded{len(ranking_opcoes):03d}"),
+            'tipo_frete': 'Dedicado',
+            'origem': analise.get('origem', ''),
+            'destino': analise.get('destino', ''),
+            'peso': peso,
+            'cubagem': cubagem,
+            'valor_nf': valor_nf,
+            'distancia': analise.get('distancia', 0),
+            'tempo_estimado': analise.get('tempo_estimado', ''),
+            'consumo_estimado': analise.get('consumo_combustivel', 0),
+            'emissao_co2': analise.get('emissao_co2', 0),
+            'pedagio_real': analise.get('pedagio_real', 0),
+            'pedagio_estimado': analise.get('pedagio_estimado', 0),
+            'melhor_opcao': melhor_opcao,
+            'ranking_opcoes': ranking_opcoes,
+            'total_opcoes': len(ranking_opcoes),
+            'data_calculo': analise.get('data_hora', ''),
+            'provider': analise.get('provider', 'OSRM'),
+            'rota_pontos': rota_info.get('rota_pontos', [])
+        }
+        
+        return resultado_formatado
+    except Exception as e:
+        print(f"[RANKING DEDICADO] Erro ao gerar ranking: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
     """
@@ -3446,144 +4690,6 @@ def extrair_detalhamento_custos(opcao, peso_cubado, valor_nf):
             'outros': 0,
             'total_custos': opcao.get('total', 0)
         }
-
-def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_nf=None):
-    """
-    Gera ranking das opções de frete dedicado no formato "all in"
-    """
-    try:
-        # Preparar ranking das opcoes baseado nos custos
-        ranking_opcoes = []
-        
-        # Verificar se custos é válido
-        if not custos or not isinstance(custos, dict) or len(custos) == 0:
-            return None
-        
-        # Ordenar custos por valor crescente
-        custos_ordenados = sorted(custos.items(), key=lambda x: x[1])
-        
-        for i, (tipo_veiculo, custo) in enumerate(custos_ordenados, 1):
-            # Determinar características do veículo
-            if tipo_veiculo == "VAN":
-                capacidade_info = {
-                    'peso_max': '1.500kg',
-                    'volume_max': '8m³',
-                    'descricao': 'Veículo compacto para cargas leves'
-                }
-                icone_veiculo = "🚐"
-            elif tipo_veiculo == "TRUCK":
-                capacidade_info = {
-                    'peso_max': '8.000kg', 
-                    'volume_max': '25m³',
-                    'descricao': 'Caminhão médio para cargas variadas'
-                }
-                icone_veiculo = "🚛"
-            elif tipo_veiculo == "CARRETA":
-                capacidade_info = {
-                    'peso_max': '27.000kg',
-                    'volume_max': '90m³', 
-                    'descricao': 'Carreta para cargas pesadas'
-                }
-                icone_veiculo = "🚚"
-            else:
-                capacidade_info = {
-                    'peso_max': 'Variável',
-                    'volume_max': 'Variável',
-                    'descricao': 'Veículo dedicado'
-                }
-                icone_veiculo = "🚛"
-            
-            # Determinar ícone da posição
-            if i == 1:
-                icone_posicao = "🥇"
-            elif i == 2:
-                icone_posicao = "🥈"
-            elif i == 3:
-                icone_posicao = "🥉"
-            else:
-                icone_posicao = f"{i}º"
-            
-            # Calcular prazo estimado baseado na distância
-            distancia = analise.get('distancia', 500)
-            prazo_estimado = max(1, int(distancia / 500)) # 1 dia para cada 500km
-            
-            # Calcular detalhamento de custos (estimativa)
-            custo_base = custo * 0.70  # 70% do total
-            combustivel = custo * 0.20  # 20% combustível
-            pedagio = analise.get('pedagio_real', custo * 0.10)  # 10% pedágio ou valor real
-            
-            opcao_ranking = {
-                'posicao': i,
-                'icone': f"{icone_posicao} {icone_veiculo}",
-                'tipo_servico': f"FRETE DEDICADO - {tipo_veiculo}",
-                'fornecedor': 'Porto Express',
-                'descricao': f"Frete dedicado com {tipo_veiculo.lower()} exclusivo",
-                'custo_total': custo,
-                'prazo': prazo_estimado,
-                'peso_usado': f"{peso}kg" if peso else "Não informado",
-                'capacidade': capacidade_info,
-                'eh_melhor_opcao': (i == 1),
-                
-                # Detalhes expandidos
-                'detalhes_expandidos': {
-                    'custos_detalhados': {
-                        'custo_base': round(custo_base, 2),
-                        'combustivel': round(combustivel, 2),
-                        'pedagio': round(pedagio, 2),
-                        'outros': round(custo - custo_base - combustivel - pedagio, 2),
-                        'total': custo
-                    },
-                    'rota_info': {
-                        'origem': analise.get('origem', ''),
-                        'destino': analise.get('destino', ''),
-                        'distancia': analise.get('distancia', 0),
-                        'tempo_viagem': analise.get('tempo_estimado', ''),
-                        'pedagio_real': analise.get('pedagio_real', 0),
-                        'consumo_estimado': analise.get('consumo_combustivel', 0),
-                        'emissao_co2': analise.get('emissao_co2', 0)
-                    },
-                    'veiculo_info': {
-                        'tipo': tipo_veiculo,
-                        'capacidade_peso': capacidade_info['peso_max'],
-                        'capacidade_volume': capacidade_info['volume_max'],
-                        'descricao': capacidade_info['descricao']
-                    }
-                }
-            }
-            
-            ranking_opcoes.append(opcao_ranking)
-        
-        # Informações consolidadas da cotação
-        melhor_opcao = ranking_opcoes[0] if ranking_opcoes else None
-        
-        resultado_formatado = {
-            'id_calculo': analise.get('id_historico', f"#Ded{len(ranking_opcoes):03d}"),
-            'tipo_frete': 'Dedicado',
-            'origem': analise.get('origem', ''),
-            'destino': analise.get('destino', ''),
-            'peso': peso,
-            'cubagem': cubagem,
-            'valor_nf': valor_nf,
-            'distancia': analise.get('distancia', 0),
-            'tempo_estimado': analise.get('tempo_estimado', ''),
-            'consumo_estimado': analise.get('consumo_combustivel', 0),
-            'emissao_co2': analise.get('emissao_co2', 0),
-            'pedagio_real': analise.get('pedagio_real', 0),
-            'pedagio_estimado': analise.get('pedagio_estimado', 0),
-            'melhor_opcao': melhor_opcao,
-            'ranking_opcoes': ranking_opcoes,
-            'total_opcoes': len(ranking_opcoes),
-            'data_calculo': analise.get('data_hora', ''),
-            'provider': analise.get('provider', 'OSRM'),
-            'rota_pontos': rota_info.get('rota_pontos', [])
-        }
-        
-        return resultado_formatado
-    except Exception as e:
-        print(f"[RANKING DEDICADO] Erro ao gerar ranking: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
 
 def gerar_ranking_fracionado(opcoes_fracionado, origem, destino, peso, cubagem, valor_nf=None):
     """
@@ -4005,7 +5111,7 @@ def api_bases_disponiveis():
             {"codigo": "MCZ", "nome": "Maceió", "regiao": "Nordeste"},
             {"codigo": "AJU", "nome": "Aracaju", "regiao": "Nordeste"},
             {"codigo": "SLZ", "nome": "São Luís", "regiao": "Nordeste"},
-            {"codigo": "THE", "nome": "Teresina", "regiao": "Nordeste"},
+            {"codigo": "TER", "nome": "Teresina", "regiao": "Nordeste"},
             {"codigo": "MAO", "nome": "Manaus", "regiao": "Norte"},
             {"codigo": "MAB", "nome": "Marabá", "regiao": "Norte"},
             {"codigo": "PMW", "nome": "Palmas", "regiao": "Norte"},
