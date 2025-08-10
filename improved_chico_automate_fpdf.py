@@ -3529,15 +3529,7 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     # Fallback: tentar usar get com diferentes tipos
                     valor_por_kg = float(linha.get(300, linha.get('300', 0)))
                 
-                # 🔧 VERIFICAÇÃO ESPECÍFICA PARA JEM/DFL
-                if 'JEM' in fornecedor_upper or 'DFL' in fornecedor_upper:
-                    print(f"[CUSTO-TRANSF-JEM] 🔍 Verificando coluna 300 para {fornecedor}")
-                    print(f"[CUSTO-TRANSF-JEM] 📊 Valor encontrado na coluna 300: {valor_por_kg}")
-                    
-                    # Se o valor está errado (3.2225), usar o valor correto (0.4268)
-                    if abs(valor_por_kg - 3.2225) < 0.01:  # Se está próximo de 3.2225
-                        valor_por_kg = 0.4268  # Usar o valor correto
-                        print(f"[CUSTO-TRANSF-JEM] 🔧 CORREÇÃO: Valor corrigido de 3.2225 para 0.4268")
+                # Manter o valor lido da planilha, sem correção fixa específica por fornecedor
                 
                 valor_base = peso_calculo * valor_por_kg
                 print(f"[CUSTO-TRANSF] ✅ Peso >100kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
