@@ -987,19 +987,32 @@ def carregar_base_unificada():
     # Tentar PostgreSQL primeiro
     try:
         import psycopg2
-        db_name = os.getenv("DB_NAME", "base_unificada")
-        db_user = os.getenv("DB_USER", "postgres")
-        db_password = os.getenv("DB_PASSWORD", "Git@2564")
-        db_host = os.getenv("DB_HOST", "localhost")
-        db_port = os.getenv("DB_PORT", "5432")
-
-        conn = psycopg2.connect(
-            dbname=db_name,
-            user=db_user,
-            password=db_password,
-            host=db_host,
-            port=db_port,
+        db_url = (
+            os.getenv("DATABASE_URL")
+            or os.getenv("POSTGRES_URL")
+            or os.getenv("DATABASE_URL_INTERNAL")
+            or os.getenv("DATABASE_URI")
+            or None
         )
+        if db_url:
+            # Garantir sslmode=require se não presente (Render e outros providers)
+            if "sslmode=" not in db_url:
+                sep = "&" if "?" in db_url else "?"
+                db_url = f"{db_url}{sep}sslmode=require"
+            conn = psycopg2.connect(db_url)
+        else:
+            db_name = os.getenv("DB_NAME", "base_unificada")
+            db_user = os.getenv("DB_USER", "postgres")
+            db_password = os.getenv("DB_PASSWORD", "Git@2564")
+            db_host = os.getenv("DB_HOST", "localhost")
+            db_port = os.getenv("DB_PORT", "5432")
+            conn = psycopg2.connect(
+                dbname=db_name,
+                user=db_user,
+                password=db_password,
+                host=db_host,
+                port=db_port,
+            )
         cur = conn.cursor()
         cur.execute("SELECT * FROM public.base_unificada")
         rows = cur.fetchall()
