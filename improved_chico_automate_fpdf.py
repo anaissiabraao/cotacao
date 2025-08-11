@@ -137,6 +137,15 @@ except ImportError as e:
 _BASE_UNIFICADA_CACHE = None
 _ULTIMO_CARREGAMENTO_BASE = 0
 _CACHE_VALIDADE_BASE = 300  # 5 minutos
+# Índices e recortes pré-processados para acelerar filtros
+_BASE_INDICES_PRONTOS = False
+_DF_DIRETOS = None
+_DF_AGENTES = None
+_DF_TRANSFERENCIAS = None
+
+# Cache de cálculos por rota
+_CACHE_ROTAS = {}
+_CACHE_ROTAS_TTL = 300  # 5 minutos
 
 # Cache global para agentes
 _BASE_AGENTES_CACHE = None
@@ -440,10 +449,11 @@ def after_request(response):
 # Rota para limpar dados do navegador
 @app.route("/clear-cache")
 def clear_cache():
-    response = redirect("/")
-    # Não limpar cookies de sessão
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    return response
+    global _CACHE_ROTAS, _BASE_UNIFICADA_CACHE, _BASE_INDICES_PRONTOS
+    _CACHE_ROTAS = {}
+    _BASE_UNIFICADA_CACHE = None
+    _BASE_INDICES_PRONTOS = False
+    return jsonify({"ok": True, "message": "Cache limpo"})
 # Rotas de autenticação
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -516,13 +526,15 @@ def health_check():
     """Endpoint de health check para verificar se a aplicação está funcionando."""
     try:
         # Verificar se a aplicação está funcionando
+        base_df = carregar_base_unificada()
+        total_registros = len(base_df) if base_df is not None else 0
         status = {
             "status": "healthy",
             "timestamp": pd.Timestamp.now().isoformat(),
             "version": "1.0.0",
             "services": {
-                "database": "online" if len(df_unificado) > 0 else "offline",
-                "records": len(df_unificado)
+                "database": "online" if total_registros > 0 else "offline",
+                "records": total_registros
             }
         }
         return jsonify(status), 200
@@ -541,103 +553,11 @@ ultimoResultadoDedicado = None
 ultimoResultadoFracionado = None
 app.config["UPLOAD_FOLDER"] = "static"
 
-# Carregar bases de dados
-possible_paths = [
-    "/home/ubuntu/upload/Base_Unificada.xlsx",
-    "Base_Unificada.xlsx",
-    "C:\\Users\\Usuário\\OneDrive\\Desktop\\SQL data\\Chico automate\\Base_Unificada.xlsx",
-]
-
-# Adicionar caminho para Base_Unificada.xlsx
-base_unificada_paths = [
-    "/home/ubuntu/upload/Base_Unificada.xlsx",  # Render
-    "/opt/render/project/src/Base_Unificada.xlsx",  # Render
-    "/app/Base_Unificada.xlsx",  # Outro possível caminho no Render
-    "Base_Unificada.xlsx",  # Diretório atual
-    "../Base_Unificada.xlsx",  # Diretório pai
-    "C:\\Users\\Usuário\\OneDrive\\Desktop\\SQL data\\Chico automate\\Base_Unificada.xlsx",  # Caminho local
-    os.path.join(os.path.dirname(__file__), "Base_Unificada.xlsx"),  # Mesmo diretório do script
-    os.path.join(os.getcwd(), "Base_Unificada.xlsx"),  # Diretório de trabalho atual
-]
-
-EXCEL_FILE = None
-for path in possible_paths:
-    if os.path.exists(path):
-        EXCEL_FILE = path
-        break
-
-BASE_UNIFICADA_FILE = None
-for path in base_unificada_paths:
-    if os.path.exists(path):
-        BASE_UNIFICADA_FILE = path
-        break
-
-if EXCEL_FILE is None:
-    print("Arquivo Base_Unificada.xlsx não encontrado!")
-    exit(1)
-
-if BASE_UNIFICADA_FILE is None:
-    print("Arquivo Base_Unificada.xlsx não encontrado nos seguintes caminhos:")
-    for path in base_unificada_paths:
-        print(f"- {path} (existe: {os.path.exists(path)})")
-    BASE_UNIFICADA_FILE = None  # Continuar sem erro crítico
-
-print(f"Usando arquivo principal: {EXCEL_FILE}")
-if BASE_UNIFICADA_FILE:
-    print(f"Usando Base Unificada: {BASE_UNIFICADA_FILE}")
-# Carregar o arquivo Excel e detectar o nome correto da planilha
-def detectar_sheet_name(excel_file):
-    try:
-        # Tentar abrir o arquivo e listar as planilhas disponíveis
-        xl = pd.ExcelFile(excel_file)
-        sheets = xl.sheet_names
-        print(f"Planilhas encontradas no arquivo: {sheets}")
-        
-        # Priorizar planilhas com nomes específicos
-        preferencias = ['Base', 'Sheet1', 'Sheet', 'Dados', 'Data']
-        for pref in preferencias:
-            if pref in sheets:
-                return pref
-        
-        # Se não encontrar nenhuma das preferidas, usar a primeira
-        return sheets[0] if sheets else None
-    except Exception as e:
-        print(f"Erro ao detectar planilha: {e}")
-        return None
-
-# Carregar dados diretamente da Base_Unificada.xlsx
-try:
-    print(f"Carregando dados de: {EXCEL_FILE}")
-    df_unificado = pd.read_excel(EXCEL_FILE)
-    print(f"Dados carregados com sucesso! Shape: {df_unificado.shape}")
-    
-    # Verificar se as colunas esperadas existem
-    colunas_esperadas = ['Fornecedor', 'Base Origem', 'Origem', 'Base Destino', 'Destino']
-    colunas_existentes = df_unificado.columns.tolist()
-    print(f"Colunas no arquivo: {colunas_existentes}")
-    
-    # Se todas as colunas esperadas existem, continuar
-    if all(col in colunas_existentes for col in colunas_esperadas):
-        print("Arquivo Base_Unificada.xlsx possui estrutura correta para frete fracionado!")
-    else:
-        print("Aviso: Arquivo pode não ter a estrutura esperada para frete fracionado, mas continuando...")
-        
-except Exception as e:
-    print(f"Erro ao carregar Base_Unificada.xlsx: {e}")
-    print("Tentando carregar com sheet específico...")
-    
-    sheet_name = detectar_sheet_name(EXCEL_FILE)
-    if not sheet_name:
-        print("Erro: Não foi possível encontrar uma planilha válida no arquivo Excel.")
-        # Criar DataFrame vazio como fallback
-        df_unificado = pd.DataFrame()
-    else:
-        try:
-            df_unificado = pd.read_excel(EXCEL_FILE, sheet_name=sheet_name)
-            print(f"Planilha '{sheet_name}' carregada com sucesso!")
-        except Exception as e2:
-            print(f"Erro ao carregar planilha '{sheet_name}': {e2}")
-            df_unificado = pd.DataFrame()
+"""
+Removido suporte a Excel no boot (bloco duplicado). Startup não faz mais I/O de Excel
+e não exibe logs relacionados ao arquivo. A base é carregada sob demanda do PostgreSQL.
+"""
+df_unificado = pd.DataFrame()
 
 def geocode(municipio, uf):
     try:
@@ -966,6 +886,42 @@ def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="De
     }
     return analise
 
+def gerar_pedagios_estimados_mapa(rota_info, veiculo, pedagio_real, distancia_km):
+    """
+    Gera estrutura de pedágios para exibição no mapa (placeholder leve).
+    - Retorna None se não houver pedágio real.
+    - Caso exista, distribui o total em marcadores ao longo da rota.
+    """
+    try:
+        if not rota_info or not isinstance(rota_info, dict):
+            return None
+        if not pedagio_real or pedagio_real <= 0:
+            return None
+        pontos = rota_info.get("rota_pontos") or []
+        if not pontos or len(pontos) < 2:
+            return None
+
+        # Distribuir em até 3 marcadores ao longo da rota
+        num_marcos = min(3, max(1, len(pontos) // max(1, len(pontos) // 3)))
+        interval = max(1, len(pontos) // (num_marcos + 1))
+        marcadores = []
+        for i in range(1, num_marcos + 1):
+            idx = min(len(pontos) - 1, i * interval)
+            latlon = pontos[idx]
+            marcadores.append({
+                "pos": latlon,
+                "valor": round(pedagio_real / num_marcos, 2)
+            })
+
+        return {
+            "total": round(pedagio_real, 2),
+            "marcadores": marcadores,
+            "veiculo": veiculo,
+            "distancia_km": distancia_km
+        }
+    except Exception:
+        return None
+
 def get_municipios_uf(uf):
     try:
         response = requests.get(f"https://servicodados.ibge.gov.br/api/v1/localidades/estados/{uf}/municipios")
@@ -1016,41 +972,73 @@ def ler_gollog_aereo():
 
 def carregar_base_unificada():
     """
-    Carrega a Base Unificada completa para cálculos de frete com cache
+    Carrega a Base Unificada do PostgreSQL (schema public, tabela base_unificada) com cache.
+    Sem fallback para Excel.
     """
-    global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE
-    
+    global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE, _BASE_INDICES_PRONTOS, _DF_DIRETOS, _DF_AGENTES, _DF_TRANSFERENCIAS
+
+    tempo_atual = time.time()
+    if (
+        _BASE_UNIFICADA_CACHE is not None
+        and (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE
+    ):
+        return _BASE_UNIFICADA_CACHE
+
+    # Tentar PostgreSQL primeiro
     try:
-        # Verificar se o cache ainda é válido
-        tempo_atual = time.time()
-        if (_BASE_UNIFICADA_CACHE is not None and 
-            (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE):
-                    return _BASE_UNIFICADA_CACHE
-        
-        if not BASE_UNIFICADA_FILE:
-            print("[BASE] ❌ BASE_UNIFICADA_FILE não está definido")
-            return None
-        
-        if not os.path.exists(BASE_UNIFICADA_FILE):
-            print(f"[BASE] ❌ Arquivo não encontrado: {BASE_UNIFICADA_FILE}")
-            return None
-        
-        # Tentar carregar o arquivo Excel
-        df_base = pd.read_excel(BASE_UNIFICADA_FILE)
-        
-        if df_base.empty:
-            print("[BASE] ⚠️ Arquivo carregado está vazio")
-            return None
-        
-        # Atualizar cache
+        import psycopg2
+        db_name = os.getenv("DB_NAME", "base_unificada")
+        db_user = os.getenv("DB_USER", "postgres")
+        db_password = os.getenv("DB_PASSWORD", "Git@2564")
+        db_host = os.getenv("DB_HOST", "localhost")
+        db_port = os.getenv("DB_PORT", "5432")
+
+        conn = psycopg2.connect(
+            dbname=db_name,
+            user=db_user,
+            password=db_password,
+            host=db_host,
+            port=db_port,
+        )
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM public.base_unificada")
+        rows = cur.fetchall()
+        colnames = [desc[0] for desc in cur.description]
+        cur.close()
+        conn.close()
+
+        df_base = pd.DataFrame(rows, columns=colnames)
+        # Pré-processar: normalizar textos frequentes e criar recortes por tipo
+        for col in [
+            'Fornecedor', 'Tipo', 'Origem', 'Destino', 'Base Origem', 'Base Destino', 'UF'
+        ]:
+            if col in df_base.columns:
+                df_base[col] = df_base[col].astype(str).str.strip()
+
+        # Recortes
+        _DF_DIRETOS = df_base[df_base['Tipo'] == 'Direto'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+        _DF_AGENTES = df_base[df_base['Tipo'] == 'Agente'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+        _DF_TRANSFERENCIAS = df_base[df_base['Tipo'] == 'Transferência'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+        _BASE_INDICES_PRONTOS = True
+
         _BASE_UNIFICADA_CACHE = df_base
         _ULTIMO_CARREGAMENTO_BASE = tempo_atual
-        
+        print("[BASE] ✅ Base Unificada carregada do PostgreSQL")
         return df_base
-        
-    except Exception as e:
-        print(f"[BASE] ❌ Erro ao carregar base unificada: {e}")
-        return None
+    except Exception as db_err:
+        print(f"[BASE] ⚠️ Falha ao carregar do PostgreSQL: {db_err}")
+
+    print("[BASE] ❌ Banco indisponível para carregar base_unificada")
+    return None
+
+# Substituir o DataFrame carregado do Excel por dados do PostgreSQL, se disponível
+try:
+    _df_db_boot = carregar_base_unificada()
+    if _df_db_boot is not None and len(_df_db_boot) > 0:
+        df_unificado = _df_db_boot
+        print("[BASE] 🔄 df_unificado substituído pelos dados do PostgreSQL no boot")
+except Exception as _boot_e:
+    print(f"[BASE] ⚠️ Não foi possível substituir df_unificado pelo DB no boot: {_boot_e}")
 
 
 def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None, bases_intermediarias=None):
@@ -1582,14 +1570,15 @@ def logout():
 def health_check():
     """Endpoint de health check para verificar se a aplicação está funcionando."""
     try:
-        # Verificar se a aplicação está funcionando
+        base_df = carregar_base_unificada()
+        total_registros = len(base_df) if base_df is not None else 0
         status = {
             "status": "healthy",
             "timestamp": pd.Timestamp.now().isoformat(),
             "version": "1.0.0",
             "services": {
-                "database": "online" if len(df_unificado) > 0 else "offline",
-                "records": len(df_unificado)
+                "database": "online" if total_registros > 0 else "offline",
+                "records": total_registros
             }
         }
         return jsonify(status), 200
@@ -1608,103 +1597,11 @@ ultimoResultadoDedicado = None
 ultimoResultadoFracionado = None
 app.config["UPLOAD_FOLDER"] = "static"
 
-# Carregar bases de dados
-possible_paths = [
-    "/home/ubuntu/upload/Base_Unificada.xlsx",
-    "Base_Unificada.xlsx",
-    "C:\\Users\\Usuário\\OneDrive\\Desktop\\SQL data\\Chico automate\\Base_Unificada.xlsx",
-]
-
-# Adicionar caminho para Base_Unificada.xlsx
-base_unificada_paths = [
-    "/home/ubuntu/upload/Base_Unificada.xlsx",  # Render
-    "/opt/render/project/src/Base_Unificada.xlsx",  # Render
-    "/app/Base_Unificada.xlsx",  # Outro possível caminho no Render
-    "Base_Unificada.xlsx",  # Diretório atual
-    "../Base_Unificada.xlsx",  # Diretório pai
-    "C:\\Users\\Usuário\\OneDrive\\Desktop\\SQL data\\Chico automate\\Base_Unificada.xlsx",  # Caminho local
-    os.path.join(os.path.dirname(__file__), "Base_Unificada.xlsx"),  # Mesmo diretório do script
-    os.path.join(os.getcwd(), "Base_Unificada.xlsx"),  # Diretório de trabalho atual
-]
-
-EXCEL_FILE = None
-for path in possible_paths:
-    if os.path.exists(path):
-        EXCEL_FILE = path
-        break
-
-BASE_UNIFICADA_FILE = None
-for path in base_unificada_paths:
-    if os.path.exists(path):
-        BASE_UNIFICADA_FILE = path
-        break
-
-if EXCEL_FILE is None:
-    print("Arquivo Base_Unificada.xlsx não encontrado!")
-    exit(1)
-
-if BASE_UNIFICADA_FILE is None:
-    print("Arquivo Base_Unificada.xlsx não encontrado nos seguintes caminhos:")
-    for path in base_unificada_paths:
-        print(f"- {path} (existe: {os.path.exists(path)})")
-    BASE_UNIFICADA_FILE = None  # Continuar sem erro crítico
-
-print(f"Usando arquivo principal: {EXCEL_FILE}")
-if BASE_UNIFICADA_FILE:
-    print(f"Usando Base Unificada: {BASE_UNIFICADA_FILE}")
-# Carregar o arquivo Excel e detectar o nome correto da planilha
-def detectar_sheet_name(excel_file):
-    try:
-        # Tentar abrir o arquivo e listar as planilhas disponíveis
-        xl = pd.ExcelFile(excel_file)
-        sheets = xl.sheet_names
-        print(f"Planilhas encontradas no arquivo: {sheets}")
-        
-        # Priorizar planilhas com nomes específicos
-        preferencias = ['Base', 'Sheet1', 'Sheet', 'Dados', 'Data']
-        for pref in preferencias:
-            if pref in sheets:
-                return pref
-        
-        # Se não encontrar nenhuma das preferidas, usar a primeira
-        return sheets[0] if sheets else None
-    except Exception as e:
-        print(f"Erro ao detectar planilha: {e}")
-        return None
-
-# Carregar dados diretamente da Base_Unificada.xlsx
-try:
-    print(f"Carregando dados de: {EXCEL_FILE}")
-    df_unificado = pd.read_excel(EXCEL_FILE)
-    print(f"Dados carregados com sucesso! Shape: {df_unificado.shape}")
-    
-    # Verificar se as colunas esperadas existem
-    colunas_esperadas = ['Fornecedor', 'Base Origem', 'Origem', 'Base Destino', 'Destino']
-    colunas_existentes = df_unificado.columns.tolist()
-    print(f"Colunas no arquivo: {colunas_existentes}")
-    
-    # Se todas as colunas esperadas existem, continuar
-    if all(col in colunas_existentes for col in colunas_esperadas):
-        print("Arquivo Base_Unificada.xlsx possui estrutura correta para frete fracionado!")
-    else:
-        print("Aviso: Arquivo pode não ter a estrutura esperada para frete fracionado, mas continuando...")
-        
-except Exception as e:
-    print(f"Erro ao carregar Base_Unificada.xlsx: {e}")
-    print("Tentando carregar com sheet específico...")
-    
-    sheet_name = detectar_sheet_name(EXCEL_FILE)
-    if not sheet_name:
-        print("Erro: Não foi possível encontrar uma planilha válida no arquivo Excel.")
-        # Criar DataFrame vazio como fallback
-        df_unificado = pd.DataFrame()
-    else:
-        try:
-            df_unificado = pd.read_excel(EXCEL_FILE, sheet_name=sheet_name)
-            print(f"Planilha '{sheet_name}' carregada com sucesso!")
-        except Exception as e2:
-            print(f"Erro ao carregar planilha '{sheet_name}': {e2}")
-            df_unificado = pd.DataFrame()
+"""
+Removido suporte a Excel no boot. A aplicação usa exclusivamente PostgreSQL
+para carregar `df_unificado` via `carregar_base_unificada()`.
+"""
+df_unificado = pd.DataFrame()  # placeholder até a primeira chamada real
 
 def geocode(municipio, uf):
     try:
@@ -2083,41 +1980,59 @@ def ler_gollog_aereo():
 
 def carregar_base_unificada():
     """
-    Carrega a Base Unificada completa para cálculos de frete com cache
+    Carrega a Base Unificada do PostgreSQL (schema public, tabela base_unificada) com cache.
+    Sem fallback para Excel.
     """
-    global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE
-    
+    global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE, _BASE_INDICES_PRONTOS, _DF_DIRETOS, _DF_AGENTES, _DF_TRANSFERENCIAS
+
+    tempo_atual = time.time()
+    if (
+        _BASE_UNIFICADA_CACHE is not None
+        and (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE
+    ):
+        return _BASE_UNIFICADA_CACHE
+
     try:
-        # Verificar se o cache ainda é válido
-        tempo_atual = time.time()
-        if (_BASE_UNIFICADA_CACHE is not None and 
-            (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE):
-                    return _BASE_UNIFICADA_CACHE
-        
-        if not BASE_UNIFICADA_FILE:
-            print("[BASE] ❌ BASE_UNIFICADA_FILE não está definido")
-            return None
-        
-        if not os.path.exists(BASE_UNIFICADA_FILE):
-            print(f"[BASE] ❌ Arquivo não encontrado: {BASE_UNIFICADA_FILE}")
-            return None
-        
-        # Tentar carregar o arquivo Excel
-        df_base = pd.read_excel(BASE_UNIFICADA_FILE)
-        
-        if df_base.empty:
-            print("[BASE] ⚠️ Arquivo carregado está vazio")
-            return None
-        
-        # Atualizar cache
+        import psycopg2
+        db_name = os.getenv("DB_NAME", "base_unificada")
+        db_user = os.getenv("DB_USER", "postgres")
+        db_password = os.getenv("DB_PASSWORD", "Git@2564")
+        db_host = os.getenv("DB_HOST", "localhost")
+        db_port = os.getenv("DB_PORT", "5432")
+
+        conn = psycopg2.connect(
+            dbname=db_name,
+            user=db_user,
+            password=db_password,
+            host=db_host,
+            port=db_port,
+        )
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM public.base_unificada")
+        rows = cur.fetchall()
+        colnames = [desc[0] for desc in cur.description]
+        cur.close()
+        conn.close()
+
+        df_base = pd.DataFrame(rows, columns=colnames)
+        for col in ['Fornecedor', 'Tipo', 'Origem', 'Destino', 'Base Origem', 'Base Destino', 'UF']:
+            if col in df_base.columns:
+                df_base[col] = df_base[col].astype(str).str.strip()
+
+        _DF_DIRETOS = df_base[df_base['Tipo'] == 'Direto'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+        _DF_AGENTES = df_base[df_base['Tipo'] == 'Agente'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+        _DF_TRANSFERENCIAS = df_base[df_base['Tipo'] == 'Transferência'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+        _BASE_INDICES_PRONTOS = True
+
         _BASE_UNIFICADA_CACHE = df_base
         _ULTIMO_CARREGAMENTO_BASE = tempo_atual
-        
+        print("[BASE] ✅ Base Unificada carregada do PostgreSQL")
         return df_base
-        
-    except Exception as e:
-        print(f"[BASE] ❌ Erro ao carregar base unificada: {e}")
-        return None
+    except Exception as db_err:
+        print(f"[BASE] ⚠️ Falha ao carregar do PostgreSQL: {db_err}")
+
+    print("[BASE] ❌ Banco indisponível para carregar base_unificada")
+    return None
 def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None, bases_intermediarias=None):
     """
     Calcular frete fracionado usando múltiplas bases intermediárias
@@ -2427,7 +2342,8 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         print(f"[FRACIONADO] 🔍 Buscando serviços para: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
         
         # 1. BUSCAR SERVIÇOS DIRETOS - APENAS CORRESPONDÊNCIA EXATA
-        df_diretos = df_base[df_base['Tipo'] == 'Direto']
+        # Usar recorte pré-processado quando disponível
+        df_diretos = _DF_DIRETOS if _BASE_INDICES_PRONTOS else df_base[df_base['Tipo'] == 'Direto']
         
         # Busca rigorosa - apenas correspondência exata
         servicos_diretos = df_diretos[
@@ -2438,7 +2354,13 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         print(f"[FRACIONADO] 📊 Serviços diretos encontrados: {len(servicos_diretos)}")
         
         # 2. BUSCAR ML, GRITSCH E EXPRESSO S. MIGUEL - APENAS CORRESPONDÊNCIA EXATA
-        df_ml_gritsch = df_base[df_base['Fornecedor'].str.contains(r'ML|GRITSCH|EXPRESSO S\. MIGUEL', case=False, na=False)]
+        df_ml_gritsch = (
+            (_DF_DIRETOS if _BASE_INDICES_PRONTOS else df_base)
+            [
+                (_DF_DIRETOS if _BASE_INDICES_PRONTOS else df_base)['Fornecedor']
+                .str.contains(r'ML|GRITSCH|EXPRESSO S\. MIGUEL', case=False, na=False)
+            ]
+        )
         
         ml_gritsch_services = df_ml_gritsch[
             (df_ml_gritsch['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
@@ -2638,15 +2560,18 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             return None
 
         # Separar tipos - ML, GRITSCH e EXPRESSO S. MIGUEL tratados como agentes diretos porta-porta
-        df_agentes = df_base[
-            (df_base['Tipo'] == 'Agente') & 
-            (~df_base['Fornecedor'].str.contains(r'ML|GRITSCH|EXPRESSO S\. MIGUEL', case=False, na=False))  # EXCLUIR ML, GRITSCH e EXPRESSO S. MIGUEL (são DIRETOS)
+        # Usar recortes pré-processados
+        base_agentes = _DF_AGENTES if _BASE_INDICES_PRONTOS else df_base[df_base['Tipo'] == 'Agente']
+        df_agentes = base_agentes[
+            ~base_agentes['Fornecedor'].str.contains(r'ML|GRITSCH|EXPRESSO S\. MIGUEL', case=False, na=False)
         ].copy()
-        df_transferencias = df_base[
-            (df_base['Tipo'] == 'Transferência') & 
-            (~df_base['Fornecedor'].str.contains(r'EXPRESSO S\. MIGUEL', case=False, na=False))  # EXCLUIR EXPRESSO S. MIGUEL das transferências (é DIRETO)
+
+        base_transf = _DF_TRANSFERENCIAS if _BASE_INDICES_PRONTOS else df_base[df_base['Tipo'] == 'Transferência']
+        df_transferencias = base_transf[
+            ~base_transf['Fornecedor'].str.contains(r'EXPRESSO S\. MIGUEL', case=False, na=False)
         ].copy()
-        df_diretos = df_base[df_base['Tipo'] == 'Direto'].copy()
+
+        df_diretos = _DF_DIRETOS.copy() if _BASE_INDICES_PRONTOS else df_base[df_base['Tipo'] == 'Direto'].copy()
         
 
         
@@ -2675,12 +2600,15 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         df_agentes_origem_uf = df_agentes[df_agentes['UF'] == uf_origem]
         df_agentes_destino_uf = df_agentes[df_agentes['UF'] == uf_destino]
         
+        # Usar `.str` vetorizado quando possível para acelerar
         agentes_origem = df_agentes_origem_uf[
-            df_agentes_origem_uf['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)
+            df_agentes_origem_uf['Origem'].astype(str).str.upper().str.normalize('NFKD').str.encode('ascii', 'ignore').str.decode('ascii')
+            == normalizar_cidade_nome(str(origem))
         ]
         
         agentes_destino = df_agentes_destino_uf[
-            df_agentes_destino_uf['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm)
+            df_agentes_destino_uf['Origem'].astype(str).str.upper().str.normalize('NFKD').str.encode('ascii', 'ignore').str.decode('ascii')
+            == normalizar_cidade_nome(str(destino))
         ]
         
         # 🔧 CORREÇÃO: Se origem e destino são do mesmo estado, filtrar agentes apenas do estado correto
@@ -3485,76 +3413,67 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     excede_peso = True
             except (ValueError, TypeError):
                 pass
+        # Função auxiliar: cálculo básico de transferência (mesma regra para todos)
+        def _calc_transfer_like():
+            peso_calculo_local = float(peso_cubado)
+            # 1) Valor mínimo até 10kg
+            valor_minimo_local = None
+            if 'VALOR MÍNIMO ATÉ 10' in linha and pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')):
+                try:
+                    valor_minimo_local = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
+                except (ValueError, TypeError):
+                    valor_minimo_local = None
+
+            if peso_calculo_local <= 10 and valor_minimo_local is not None and valor_minimo_local > 0:
+                return valor_minimo_local
+
+            # 2) Seleção de faixa por peso (10–∞)
+            faixas_kg = [20, 30, 50, 70, 100, 150, 200, 300, 500]
+            valor_por_kg_local = 0.0
+
+            # Encontrar a menor faixa >= peso
+            for faixa in faixas_kg:
+                if peso_calculo_local <= float(faixa):
+                    try:
+                        valor_por_kg_local = float(linha.get(faixa, 0) or 0)
+                    except (ValueError, TypeError):
+                        valor_por_kg_local = 0.0
+                    if valor_por_kg_local > 0:
+                        return peso_calculo_local * valor_por_kg_local
+                    # Se a coluna da faixa estiver vazia, continua procurando próxima
+
+            # 3) Acima de 500kg: tentar colunas "Acima 500"/"Acima 1000"/"Acima 2000"
+            for col_acima in ['Acima 500', 'Acima 1000', 'Acima 2000']:
+                if col_acima in linha and pd.notna(linha.get(col_acima)):
+                    try:
+                        valor_por_kg_local = float(linha.get(col_acima, 0) or 0)
+                    except (ValueError, TypeError):
+                        valor_por_kg_local = 0.0
+                    if valor_por_kg_local > 0:
+                        return peso_calculo_local * valor_por_kg_local
+
+            # 4) Fallbacks: usar a maior faixa disponível com valor > 0
+            for faixa in reversed(faixas_kg):
+                try:
+                    v = float(linha.get(faixa, 0) or 0)
+                except (ValueError, TypeError):
+                    v = 0.0
+                if v > 0:
+                    return peso_calculo_local * v
+
+            # 5) Se nada encontrado e há valor mínimo, retorna valor mínimo como último recurso
+            if valor_minimo_local and valor_minimo_local > 0:
+                return valor_minimo_local
+
+            return 0.0
+
         # 🔧 LÓGICA ESPECÍFICA PARA TRANSFERÊNCIAS
         fornecedor_upper = str(fornecedor).upper()
         tipo_servico = str(linha.get('Tipo', '')).upper()
         
         if tipo_servico == 'TRANSFERÊNCIA' or 'TRANSFERENCIA' in tipo_servico:
             print(f"[CUSTO-TRANSF] 🔧 Aplicando lógica para transferência: {fornecedor}")
-            
-            # Para transferências, usar o maior entre peso real e cubado
-            peso_calculo = peso_cubado  # Já é o máximo entre peso real e cubado
-            
-            # 1. Verificar valor mínimo para até 10kg
-            if 'VALOR MÍNIMO ATÉ 10' in linha and pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')):
-                valor_minimo = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
-                
-                # Se peso for até 10kg, usar valor mínimo
-                if peso_calculo <= 10:
-                    valor_base = valor_minimo
-                    print(f"[CUSTO-TRANSF] ✅ Peso ≤ 10kg: Valor mínimo R$ {valor_base:.2f}")
-                    return {
-                        'custo_base': round(valor_base, 2),
-                        'pedagio': 0.0,
-                        'gris': 0.0,
-                        'total': round(valor_base, 2),
-                        'prazo': prazo,
-                        'peso_maximo': peso_maximo,
-                        'alerta_peso': alerta_peso,
-                        'excede_peso': excede_peso
-                    }
-            
-            # 2. Para pesos acima de 100kg, usar a coluna apropriada baseada no peso
-            if peso_calculo > 100:
-                # 🔧 CORREÇÃO: Usar a coluna correta para >100kg
-                # Verificar se a coluna 300 existe e tem valor válido
-                valor_por_kg = 0
-                
-                # Tentar diferentes formas de acessar a coluna 300
-                if 300 in linha:
-                    valor_por_kg = float(linha[300])
-                elif '300' in linha:
-                    valor_por_kg = float(linha['300'])
-                else:
-                    # Fallback: tentar usar get com diferentes tipos
-                    valor_por_kg = float(linha.get(300, linha.get('300', 0)))
-                
-                # Manter o valor lido da planilha, sem correção fixa específica por fornecedor
-                
-                valor_base = peso_calculo * valor_por_kg
-                print(f"[CUSTO-TRANSF] ✅ Peso >100kg: {peso_calculo}kg × R$ {valor_por_kg:.4f} = R$ {valor_base:.2f}")
-            else:
-                # 3. Para pesos entre 10kg e 100kg, encontrar a faixa correta
-                # Mapeamento de faixas de peso para colunas (usando as colunas reais da base)
-                faixas_peso = [20, 30, 50, 70, 100]
-                colunas_peso = [20, 30, 50, 70, 100]
-                
-                # Encontrar a menor faixa que seja maior ou igual ao peso
-                valor_base_kg = 0
-                for i, faixa in enumerate(faixas_peso):
-                    if peso_calculo <= faixa:
-                        coluna_key = colunas_peso[i]
-                        valor_base_kg = float(linha.get(coluna_key, 0))
-                        valor_base = peso_calculo * valor_base_kg
-                        print(f"[CUSTO-TRANSF] ✅ Peso {peso_calculo}kg na faixa até {faixa}kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
-                        break
-                else:
-                    # Se não encontrou faixa, usar coluna 100
-                    valor_base_kg = float(linha.get(100, 0))
-                    valor_base = peso_calculo * valor_base_kg
-                    print(f"[CUSTO-TRANSF] ⚠️ Usando faixa 100kg: {peso_calculo}kg × R$ {valor_base_kg:.4f} = R$ {valor_base:.2f}")
-            
-            custo_base = valor_base
+            custo_base = _calc_transfer_like()
             
         # 🔧 LÓGICA ESPECÍFICA PARA REUNIDAS - VALOR FIXO POR FAIXA
         elif 'REUNIDAS' in fornecedor_upper:
@@ -3629,37 +3548,9 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                 
         # 🔧 LÓGICA ESPECÍFICA PARA JEM/DFL - CORREÇÃO DO CÁLCULO
         elif 'JEM' in fornecedor_upper or 'DFL' in fornecedor_upper:
-            print(f"[CUSTO-JEM] 🔧 Aplicando lógica específica para JEM/DFL: {fornecedor}")
-            
-            # JEM/DFL usa VALOR MÍNIMO + EXCEDENTE
-            valor_base = 0
-            
-            if 'VALOR MÍNIMO ATÉ 10' in linha and 'EXCEDENTE' in linha:
-                valor_min = linha.get('VALOR MÍNIMO ATÉ 10', 0)
-                excedente = linha.get('EXCEDENTE', 0)
-                
-                if pd.notna(valor_min) and pd.notna(excedente):
-                    valor_min = float(valor_min)
-                    excedente = float(excedente)
-                    
-                    if peso_cubado <= 10:
-                        valor_base = valor_min
-                        print(f"[CUSTO-JEM] ✅ Peso ≤ 10kg: Valor mínimo R$ {valor_base:.2f}")
-                    else:
-                        peso_excedente = peso_cubado - 10
-                        valor_base = valor_min + (peso_excedente * excedente)
-                        print(f"[CUSTO-JEM] ✅ Peso > 10kg: Mínimo R$ {valor_min:.2f} + ({peso_excedente:.1f}kg × R$ {excedente:.3f}) = R$ {valor_base:.2f}")
-                else:
-                    print(f"[CUSTO-JEM] ⚠️ Valores mínimos ou excedente não encontrados para {fornecedor}")
-                    # Fallback: usar lógica padrão
-                    valor_base = float(linha.get('VALOR MÍNIMO ATÉ 10', 0)) if pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')) else 0
-            else:
-                print(f"[CUSTO-JEM] ⚠️ Colunas 'VALOR MÍNIMO ATÉ 10' ou 'EXCEDENTE' não encontradas para {fornecedor}")
-                # Fallback: usar lógica padrão
-                valor_base = float(linha.get('VALOR MÍNIMO ATÉ 10', 0)) if pd.notna(linha.get('VALOR MÍNIMO ATÉ 10')) else 0
-            
-            print(f"[CUSTO-JEM] Fornecedor: {fornecedor}, Peso: {peso_cubado}kg, Base: R$ {valor_base:.2f}")
-            custo_base = valor_base
+            # Tratar JEM/DFL exatamente como transferência padrão (exceto colunas M-N já ignoradas)
+            print(f"[CUSTO-JEM] 🔧 Aplicando regra padrão de transferência para JEM/DFL: {fornecedor}")
+            custo_base = _calc_transfer_like()
         
         # 🔧 LÓGICA ESPECÍFICA PARA PTX - VALOR DA BASE × PESO
         elif 'PTX' in fornecedor_upper:
@@ -5553,12 +5444,24 @@ def calcular_frete_fracionado():
         if not all([uf_origem, municipio_origem, uf_destino, municipio_destino]):
             return jsonify({"error": "Origem e destino são obrigatórios"})
 
-        # Buscar dados fracionados da Base Unificada
-        resultado_fracionado = calcular_frete_fracionado_base_unificada(
-            municipio_origem, uf_origem,
-            municipio_destino, uf_destino,
-            peso, cubagem, valor_nf
+        # Cache por chave de rota
+        chave_cache = (
+            f"{normalizar_cidade_nome(municipio_origem)}|{normalizar_uf(uf_origem)}|"
+            f"{normalizar_cidade_nome(municipio_destino)}|{normalizar_uf(uf_destino)}|{float(peso)}|{float(cubagem or 0)}|{float(valor_nf or 0)}"
         )
+        agora = time.time()
+        item_cache = _CACHE_ROTAS.get(chave_cache)
+        if item_cache and (agora - item_cache['ts'] < _CACHE_ROTAS_TTL):
+            resultado_fracionado = item_cache['resultado']
+        else:
+            # Buscar dados fracionados da Base Unificada
+            resultado_fracionado = calcular_frete_fracionado_base_unificada(
+                municipio_origem, uf_origem,
+                municipio_destino, uf_destino,
+                peso, cubagem, valor_nf
+            )
+            if resultado_fracionado:
+                _CACHE_ROTAS[chave_cache] = { 'ts': agora, 'resultado': resultado_fracionado }
         
         # Verificar se há avisos especiais (sem agente de entrega)
         if resultado_fracionado and resultado_fracionado.get('tipo_aviso') == 'SEM_AGENTE_ENTREGA':
