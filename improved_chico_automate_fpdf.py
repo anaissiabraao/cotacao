@@ -970,7 +970,7 @@ def ler_gollog_aereo():
         print(f"Erro ao ler base GOLLOG: {e}")
         return None
 
-def carregar_base_unificada():
+def carregar_base_unificada_db_only():
     """
     Carrega a Base Unificada do PostgreSQL (schema public, tabela base_unificada) com cache.
     Sem fallback para Excel.
@@ -2110,59 +2110,9 @@ def ler_gollog_aereo():
 
 def carregar_base_unificada():
     """
-    Carrega a Base Unificada do PostgreSQL (schema public, tabela base_unificada) com cache.
-    Sem fallback para Excel.
+    Carrega a Base Unificada com cache: tenta DB e, se necessário, usa CSV automaticamente.
     """
-    global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE, _BASE_INDICES_PRONTOS, _DF_DIRETOS, _DF_AGENTES, _DF_TRANSFERENCIAS
-    
-    tempo_atual = time.time()
-    if (
-        _BASE_UNIFICADA_CACHE is not None
-        and (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE
-    ):
-                    return _BASE_UNIFICADA_CACHE
-        
-    try:
-        import psycopg2
-        db_name = os.getenv("DB_NAME", "base_unificada")
-        db_user = os.getenv("DB_USER", "postgres")
-        db_password = os.getenv("DB_PASSWORD", "Git@2564")
-        db_host = os.getenv("DB_HOST", "localhost")
-        db_port = os.getenv("DB_PORT", "5432")
-
-        conn = psycopg2.connect(
-            dbname=db_name,
-            user=db_user,
-            password=db_password,
-            host=db_host,
-            port=db_port,
-        )
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM public.base_unificada")
-        rows = cur.fetchall()
-        colnames = [desc[0] for desc in cur.description]
-        cur.close()
-        conn.close()
-
-        df_base = pd.DataFrame(rows, columns=colnames)
-        for col in ['Fornecedor', 'Tipo', 'Origem', 'Destino', 'Base Origem', 'Base Destino', 'UF']:
-            if col in df_base.columns:
-                df_base[col] = df_base[col].astype(str).str.strip()
-
-        _DF_DIRETOS = df_base[df_base['Tipo'] == 'Direto'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
-        _DF_AGENTES = df_base[df_base['Tipo'] == 'Agente'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
-        _DF_TRANSFERENCIAS = df_base[df_base['Tipo'] == 'Transferência'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
-        _BASE_INDICES_PRONTOS = True
-
-        _BASE_UNIFICADA_CACHE = df_base
-        _ULTIMO_CARREGAMENTO_BASE = tempo_atual
-        print("[BASE] ✅ Base Unificada carregada do PostgreSQL")
-        return df_base
-    except Exception as db_err:
-        print(f"[BASE] ⚠️ Falha ao carregar do PostgreSQL: {db_err}")
-        
-    print("[BASE] ❌ Banco indisponível para carregar base_unificada")
-    return None
+    return carregar_base_unificada_db_only()
 def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None, bases_intermediarias=None):
     """
     Calcular frete fracionado usando múltiplas bases intermediárias
@@ -2701,6 +2651,33 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             ~base_transf['Fornecedor'].str.contains(r'EXPRESSO S\. MIGUEL', case=False, na=False)
         ].copy()
 
+        # Mapeamentos cidade <-> código de base a partir das transferências (para conectar agentes)
+        try:
+            def _norm(s):
+                return str(s).upper().strip()
+            if {'Base Origem', 'Origem'}.issubset(df_transferencias.columns):
+                cidade_to_cod_origem = dict(
+                    df_transferencias[['Origem', 'Base Origem']]
+                    .dropna()
+                    .apply(lambda r: (_norm(r['Origem']), _norm(r['Base Origem'])), axis=1)
+                    .drop_duplicates()
+                    .tolist()
+                )
+            else:
+                cidade_to_cod_origem = {}
+            if {'Base Destino', 'Destino'}.issubset(df_transferencias.columns):
+                cidade_to_cod_destino = dict(
+                    df_transferencias[['Destino', 'Base Destino']]
+                    .dropna()
+                    .apply(lambda r: (_norm(r['Destino']), _norm(r['Base Destino'])), axis=1)
+                    .drop_duplicates()
+                    .tolist()
+                )
+            else:
+                cidade_to_cod_destino = {}
+        except Exception:
+            cidade_to_cod_origem, cidade_to_cod_destino = {}, {}
+
         df_diretos = _DF_DIRETOS.copy() if _BASE_INDICES_PRONTOS else df_base[df_base['Tipo'] == 'Direto'].copy()
         
 
@@ -2800,13 +2777,8 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         print(f"[AGENTES] 📊 Agentes de coleta encontrados: {len(agentes_coleta)}")
         print(f"[AGENTES] 📊 Agentes de entrega encontrados: {len(agentes_entrega)}")
         
-        # Buscar transferências entre bases (prefiltradas por UF quando disponível)
-        col_uf_t = 'uf_upper' if 'uf_upper' in df_transferencias.columns else 'UF'
-        transferencias_bases = df_transferencias
-        if col_uf_t in df_transferencias.columns:
-            transferencias_bases = df_transferencias[
-                (df_transferencias[col_uf_t] == uf_origem_upper) | (df_transferencias[col_uf_t] == uf_destino_upper)
-            ]
+        # Buscar transferências entre bases (usar conjunto completo; filtros ocorrerão por conexão de base)
+        transferencias_bases = df_transferencias.copy()
         
         # Buscar transferências diretas também
         transferencias_origem_destino = df_transferencias[
@@ -2818,63 +2790,61 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         rotas_encontradas = []
         
-        # 🆕 CENÁRIO 1: Agente de coleta + Transferência + Agente de entrega (rota completa)
+        # 🆕 CENÁRIO 1: Agente de coleta + Transferência + Agente de entrega (rota completa com conexão flexível)
         if not agentes_coleta.empty and not agentes_entrega.empty and not transferencias_bases.empty:
-            print(f"[AGENTES] 🔄 Criando rotas completas com agentes nas pontas...")
-            
-            # Restringir combinações: conectar somente quando bases coincidem
+            print(f"[AGENTES] 🔄 Conectando agentes com transferências (rota completa)...")
+            orig_cols = [c for c in ['base_origem_norm', 'origem_norm', 'Origem'] if c in transferencias_bases.columns]
+            dest_cols = [c for c in ['base_destino_norm', 'destino_norm', 'Destino'] if c in transferencias_bases.columns]
             for _, agente_col in agentes_coleta.iterrows():
-                base_dest_coleta = normalizar_cidade_nome(str(agente_col.get('Base Destino', '')))
+                start_candidates = set()
+                for key in ['base_destino_norm', 'base_origem_norm']:
+                    if key in agente_col and agente_col.get(key):
+                        start_candidates.add(agente_col.get(key))
+                start_candidates.update([
+                    normalizar_cidade_nome(str(agente_col.get('Base Origem', ''))),
+                    normalizar_cidade_nome(str(agente_col.get('Base Destino', ''))),
+                    (agente_col.get('origem_norm') if 'origem_norm' in agente_col else normalizar_cidade_nome(str(agente_col.get('Origem', ''))))
+                ])
+                start_candidates = {s for s in start_candidates if s}
                 for _, agente_ent in agentes_entrega.iterrows():
-                    base_origem_entrega = normalizar_cidade_nome(str(agente_ent.get('Base Origem', '')))
-                    if not base_dest_coleta or not base_origem_entrega:
+                    end_candidates = set()
+                    for key in ['base_origem_norm', 'base_destino_norm']:
+                        if key in agente_ent and agente_ent.get(key):
+                            end_candidates.add(agente_ent.get(key))
+                    end_candidates.update([
+                        normalizar_cidade_nome(str(agente_ent.get('Base Origem', ''))),
+                        normalizar_cidade_nome(str(agente_ent.get('Base Destino', ''))),
+                        (agente_ent.get('origem_norm') if 'origem_norm' in agente_ent else normalizar_cidade_nome(str(agente_ent.get('Origem', ''))))
+                    ])
+                    end_candidates = {e for e in end_candidates if e}
+                    if not start_candidates or not end_candidates:
                         continue
-                    # Pré-filtrar transferências onde origem == base_dest_coleta e destino == base_origem_entrega
-                    col_bo = 'base_origem_norm' if 'base_origem_norm' in transferencias_bases.columns else 'Origem'
-                    col_bd = 'base_destino_norm' if 'base_destino_norm' in transferencias_bases.columns else 'Destino'
-                    transf_candidatas = transferencias_bases[
-                        (transferencias_bases[col_bo] == base_dest_coleta) &
-                        (transferencias_bases[col_bd] == base_origem_entrega)
-                    ]
+                    mask_o = False
+                    for col in orig_cols:
+                        mask_o = mask_o | transferencias_bases[col].isin(start_candidates)
+                    mask_d = False
+                    for col in dest_cols:
+                        mask_d = mask_d | transferencias_bases[col].isin(end_candidates)
+                    transf_candidatas = transferencias_bases[mask_o & mask_d]
+                    print(f"[AGENTES] 🔎 Candidatas completas: {len(transf_candidatas)}")
                     for _, transferencia in transf_candidatas.iterrows():
-                        
-                        # Verificar se a transferência conecta as bases dos agentes
-                        # O agente de coleta deve ter uma base que conecte com a origem da transferência
-                        # O agente de entrega deve ter uma base que conecte com o destino da transferência
-                        base_origem_transf = normalizar_cidade_nome(str(transferencia.get('Origem', '')))
-                        base_destino_transf = normalizar_cidade_nome(str(transferencia.get('Destino', '')))
-                        
-                        # Verificar se há conexão lógica entre as bases
-                        # Por enquanto, vamos aceitar todas as combinações e deixar o usuário decidir
-                        
-                        # Gerar chave única para controle de duplicatas
                         chave_rota = gerar_chave_rota(
                             agente_col.get('Fornecedor', 'N/A'),
                             transferencia.get('Fornecedor', 'N/A'),
                             agente_ent.get('Fornecedor', 'N/A')
                         )
-                        
                         if chave_rota in rotas_processadas:
                             continue
                         rotas_processadas.add(chave_rota)
-                        
-                        # Calcular custos para cada etapa
                         peso_cubado_col = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_col.get('Tipo', 'Agente'), agente_col.get('Fornecedor'))
                         peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transferencia.get('Tipo', 'Transferência'), transferencia.get('Fornecedor'))
                         peso_cubado_ent = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_ent.get('Tipo', 'Agente'), agente_ent.get('Fornecedor'))
-                        
                         custo_coleta = calcular_custo_agente(agente_col, peso_cubado_col, valor_nf)
                         custo_transferencia = calcular_custo_agente(transferencia, peso_cubado_transf, valor_nf)
                         custo_entrega = calcular_custo_agente(agente_ent, peso_cubado_ent, valor_nf)
-                        
                         if custo_coleta and custo_transferencia and custo_entrega:
                             total = custo_coleta['total'] + custo_transferencia['total'] + custo_entrega['total']
-                            prazo_total = max(
-                                custo_coleta.get('prazo', 1),
-                                custo_transferencia.get('prazo', 1),
-                                custo_entrega.get('prazo', 1)
-                            )
-                            
+                            prazo_total = max(custo_coleta.get('prazo', 1), custo_transferencia.get('prazo', 1), custo_entrega.get('prazo', 1))
                             rota = {
                                 'tipo_rota': 'agente_transferencia_agente_completa',
                                 'resumo': f"{formatar_nome_agente(agente_col.get('Fornecedor'))} (Coleta) + {formatar_nome_agente(transferencia.get('Fornecedor'))} (Transferência) + {formatar_nome_agente(agente_ent.get('Fornecedor'))} (Entrega)",
@@ -2897,70 +2867,127 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                                 'chave_unica': chave_rota
                             }
                             rotas_encontradas.append(rota)
-                            
-                            # Verificar limite máximo
                             if len(rotas_encontradas) >= MAX_ROTAS:
                                 break
-                    
                     if len(rotas_encontradas) >= MAX_ROTAS:
                         break
-                
                 if len(rotas_encontradas) >= MAX_ROTAS:
                     break
         
-        # 🆕 CENÁRIO 2: Apenas agente de coleta + transferência (rota parcial)
-        elif not agentes_coleta.empty and not transferencias_bases.empty:
-            print(f"[AGENTES] 🔄 Criando rotas parciais (apenas coleta + transferência)...")
-            
+        # 🆕 CENÁRIO 2: Coleta + Transferência + Entrega (rota completa conectando bases)
+        elif not agentes_coleta.empty and not agentes_entrega.empty and not transferencias_bases.empty:
+            print(f"[AGENTES] 🔄 Conectando agentes com transferências (rota completa)...")
+            # Colunas normalizadas disponíveis nas transferências
+            orig_cols = [c for c in ['base_origem_norm', 'origem_norm'] if c in transferencias_bases.columns]
+            dest_cols = [c for c in ['base_destino_norm', 'destino_norm'] if c in transferencias_bases.columns]
+            if not orig_cols:
+                orig_cols = ['Origem'] if 'Origem' in transferencias_bases.columns else []
+            if not dest_cols:
+                dest_cols = ['Destino'] if 'Destino' in transferencias_bases.columns else []
+
             for _, agente_col in agentes_coleta.iterrows():
-                for _, transferencia in transferencias_bases.iterrows():
-                    
-                    chave_rota = gerar_chave_rota(
-                        agente_col.get('Fornecedor', 'N/A'),
-                        transferencia.get('Fornecedor', 'N/A'),
-                        "SEM_ENTREGA"
-                    )
-                    
-                    if chave_rota in rotas_processadas:
+                # Conjunto de bases possíveis de saída após coleta
+                base_dest_coleta = agente_col.get('base_destino_norm') if 'base_destino_norm' in agente_col else None
+                base_origem_coleta = agente_col.get('base_origem_norm') if 'base_origem_norm' in agente_col else None
+                fallback_coleta_bo = normalizar_cidade_nome(str(agente_col.get('Base Origem', '')))
+                fallback_coleta_bd = normalizar_cidade_nome(str(agente_col.get('Base Destino', '')))
+                # Também permitir conectar pela cidade do agente de coleta
+                agente_coleta_cidade = agente_col.get('origem_norm') if 'origem_norm' in agente_col else normalizar_cidade_nome(str(agente_col.get('Origem', '')))
+                # Mapear cidade do agente para possíveis códigos de base pelas transferências
+                possiveis_cod_start = set()
+                if agente_coleta_cidade:
+                    cod1 = cidade_to_cod_origem.get(agente_coleta_cidade)
+                    cod2 = cidade_to_cod_destino.get(agente_coleta_cidade)
+                    if cod1: possiveis_cod_start.add(cod1)
+                    if cod2: possiveis_cod_start.add(cod2)
+                start_bases = {b for b in [base_dest_coleta, base_origem_coleta, fallback_coleta_bd, fallback_coleta_bo, agente_coleta_cidade] if b}
+                start_bases |= possiveis_cod_start
+                if not start_bases:
+                    continue
+                for _, agente_ent in agentes_entrega.iterrows():
+                    # Conjunto de bases possíveis de entrada antes da entrega
+                    base_origem_entrega = agente_ent.get('base_origem_norm') if 'base_origem_norm' in agente_ent else None
+                    base_destino_entrega = agente_ent.get('base_destino_norm') if 'base_destino_norm' in agente_ent else None
+                    fallback_ent_bo = normalizar_cidade_nome(str(agente_ent.get('Base Origem', '')))
+                    fallback_ent_bd = normalizar_cidade_nome(str(agente_ent.get('Base Destino', '')))
+                    # Também permitir conectar pela cidade do agente de entrega
+                    agente_entrega_cidade = agente_ent.get('origem_norm') if 'origem_norm' in agente_ent else normalizar_cidade_nome(str(agente_ent.get('Origem', '')))
+                    possiveis_cod_end = set()
+                    if agente_entrega_cidade:
+                        cod1 = cidade_to_cod_origem.get(agente_entrega_cidade)
+                        cod2 = cidade_to_cod_destino.get(agente_entrega_cidade)
+                        if cod1: possiveis_cod_end.add(cod1)
+                        if cod2: possiveis_cod_end.add(cod2)
+                    end_bases = {b for b in [base_origem_entrega, base_destino_entrega, fallback_ent_bo, fallback_ent_bd, agente_entrega_cidade] if b}
+                    end_bases |= possiveis_cod_end
+                    if not end_bases:
                         continue
-                    rotas_processadas.add(chave_rota)
-                    
-                    peso_cubado_col = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_col.get('Tipo', 'Agente'), agente_col.get('Fornecedor'))
-                    peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transferencia.get('Tipo', 'Transferência'), transferencia.get('Fornecedor'))
-                    
-                    custo_coleta = calcular_custo_agente(agente_col, peso_cubado_col, valor_nf)
-                    custo_transferencia = calcular_custo_agente(transferencia, peso_cubado_transf, valor_nf)
-                    
-                    if custo_coleta and custo_transferencia:
-                        total = custo_coleta['total'] + custo_transferencia['total']
-                        prazo_total = max(custo_coleta.get('prazo', 1), custo_transferencia.get('prazo', 1))
-                        
-                        rota = {
-                            'tipo_rota': 'agente_transferencia_parcial',
-                            'resumo': f"{formatar_nome_agente(agente_col.get('Fornecedor'))} (Coleta) + {formatar_nome_agente(transferencia.get('Fornecedor'))} (Transferência) - SEM AGENTE DE ENTREGA",
-                            'total': total,
-                            'prazo_total': prazo_total,
-                            'maior_peso': peso_cubado,
-                            'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
-                            'detalhamento_custos': {
-                                'coleta': custo_coleta['total'],
-                                'transferencia': custo_transferencia['total'],
-                                'entrega': 0,
-                                'pedagio': custo_coleta.get('pedagio', 0) + custo_transferencia.get('pedagio', 0),
-                                'gris_total': custo_coleta.get('gris', 0) + custo_transferencia.get('gris', 0)
-                            },
-                            'observacoes': f"Rota parcial: {origem} → {transferencia.get('Origem')} → {transferencia.get('Destino')} (sem agente de entrega)",
-                            'status_rota': 'PARCIAL_SEM_ENTREGA',
-                            'agente_coleta': custo_coleta,
-                            'transferencia': custo_transferencia,
-                            'agente_entrega': None,
-                            'chave_unica': chave_rota
-                        }
-                        rotas_encontradas.append(rota)
-                        
-                        if len(rotas_encontradas) >= MAX_ROTAS:
-                            break
-                
+
+                    # Máscaras de correspondência nas transferências considerando múltiplas colunas
+                    mask_orig = False
+                    for col in orig_cols:
+                        mask_orig = mask_orig | transferencias_bases[col].isin(start_bases)
+                    mask_dest = False
+                    for col in dest_cols:
+                        mask_dest = mask_dest | transferencias_bases[col].isin(end_bases)
+                    # Fallback: também permitir correspondência direta por cidade (origem_norm/destino_norm)
+                    if 'origem_norm' in transferencias_bases.columns:
+                        mask_orig = mask_orig | transferencias_bases['origem_norm'].isin(start_bases)
+                    if 'destino_norm' in transferencias_bases.columns:
+                        mask_dest = mask_dest | transferencias_bases['destino_norm'].isin(end_bases)
+                    transf_candidatas = transferencias_bases[mask_orig & mask_dest]
+                    print(f"[AGENTES] 🔎 Candidatas entre {len(transferencias_bases)} transferências: {len(transf_candidatas)} (start={list(start_bases)[:2]}..., end={list(end_bases)[:2]}...)")
+                    if transf_candidatas.empty:
+                        continue
+                    for _, transferencia in transf_candidatas.iterrows():
+                        chave_rota = gerar_chave_rota(
+                            agente_col.get('Fornecedor', 'N/A'),
+                            transferencia.get('Fornecedor', 'N/A'),
+                            agente_ent.get('Fornecedor', 'N/A')
+                        )
+                        if chave_rota in rotas_processadas:
+                            continue
+                        rotas_processadas.add(chave_rota)
+                        # custos
+                        peso_cubado_col = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_col.get('Tipo', 'Agente'), agente_col.get('Fornecedor'))
+                        peso_cubado_transf = calcular_peso_cubado_por_tipo(peso_real, cubagem, transferencia.get('Tipo', 'Transferência'), transferencia.get('Fornecedor'))
+                        peso_cubado_ent = calcular_peso_cubado_por_tipo(peso_real, cubagem, agente_ent.get('Tipo', 'Agente'), agente_ent.get('Fornecedor'))
+                        custo_coleta = calcular_custo_agente(agente_col, peso_cubado_col, valor_nf)
+                        custo_transferencia = calcular_custo_agente(transferencia, peso_cubado_transf, valor_nf)
+                        custo_entrega = calcular_custo_agente(agente_ent, peso_cubado_ent, valor_nf)
+                        if custo_coleta and custo_transferencia and custo_entrega:
+                            total = custo_coleta['total'] + custo_transferencia['total'] + custo_entrega['total']
+                            prazo_total = max(
+                                custo_coleta.get('prazo', 1),
+                                custo_transferencia.get('prazo', 1),
+                                custo_entrega.get('prazo', 1)
+                            )
+                            rota = {
+                                'tipo_rota': 'agente_transferencia_agente_completa',
+                                'resumo': f"{formatar_nome_agente(agente_col.get('Fornecedor'))} (Coleta) + {formatar_nome_agente(transferencia.get('Fornecedor'))} (Transferência) + {formatar_nome_agente(agente_ent.get('Fornecedor'))} (Entrega)",
+                                'total': total,
+                                'prazo_total': prazo_total,
+                                'maior_peso': peso_cubado,
+                                'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
+                                'detalhamento_custos': {
+                                    'coleta': custo_coleta['total'],
+                                    'transferencia': custo_transferencia['total'],
+                                    'entrega': custo_entrega['total'],
+                                    'pedagio': custo_coleta.get('pedagio', 0) + custo_transferencia.get('pedagio', 0) + custo_entrega.get('pedagio', 0),
+                                    'gris_total': custo_coleta.get('gris', 0) + custo_transferencia.get('gris', 0) + custo_entrega.get('gris', 0)
+                                },
+                                'observacoes': f"Rota completa: {origem} → {transferencia.get('Origem')} → {transferencia.get('Destino')} → {destino}",
+                                'status_rota': 'COMPLETA',
+                                'agente_coleta': custo_coleta,
+                                'transferencia': custo_transferencia,
+                                'agente_entrega': custo_entrega,
+                                'chave_unica': chave_rota
+                            }
+                            rotas_encontradas.append(rota)
+                            if len(rotas_encontradas) >= MAX_ROTAS:
+                                break
+                    if len(rotas_encontradas) >= MAX_ROTAS:
+                        break
                 if len(rotas_encontradas) >= MAX_ROTAS:
                     break
         
