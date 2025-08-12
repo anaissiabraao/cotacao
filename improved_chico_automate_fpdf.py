@@ -136,7 +136,7 @@ except ImportError as e:
 # Cache global para base unificada
 _BASE_UNIFICADA_CACHE = None
 _ULTIMO_CARREGAMENTO_BASE = 0
-_CACHE_VALIDADE_BASE = 300  # 5 minutos
+_CACHE_VALIDADE_BASE = 900  # 15 minutos
 # Índices e recortes pré-processados para acelerar filtros
 _BASE_INDICES_PRONTOS = False
 _DF_DIRETOS = None
@@ -145,7 +145,7 @@ _DF_TRANSFERENCIAS = None
 
 # Cache de cálculos por rota
 _CACHE_ROTAS = {}
-_CACHE_ROTAS_TTL = 300  # 5 minutos
+_CACHE_ROTAS_TTL = 900  # 15 minutos
 
 # Cache global para agentes
 _BASE_AGENTES_CACHE = None
@@ -976,14 +976,14 @@ def carregar_base_unificada():
     Sem fallback para Excel.
     """
     global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE, _BASE_INDICES_PRONTOS, _DF_DIRETOS, _DF_AGENTES, _DF_TRANSFERENCIAS
-
+    
     tempo_atual = time.time()
     if (
         _BASE_UNIFICADA_CACHE is not None
         and (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE
     ):
-        return _BASE_UNIFICADA_CACHE
-
+                    return _BASE_UNIFICADA_CACHE
+        
     # Tentar PostgreSQL primeiro
     try:
         import psycopg2
@@ -1003,15 +1003,18 @@ def carregar_base_unificada():
         else:
             db_name = os.getenv("DB_NAME", "base_unificada")
             db_user = os.getenv("DB_USER", "postgres")
-            db_password = os.getenv("DB_PASSWORD", "Git@2564")
-            db_host = os.getenv("DB_HOST", "localhost")
+            db_password = os.getenv("DB_PASSWORD", "KIzUlYo78kowk6QkF2Y3F26SJpQPgYHp")
+            db_host = os.getenv("DB_HOST", "dpg-d2d2o524d50c738435jg-a.oregon-postgres.render.com")
             db_port = os.getenv("DB_PORT", "5432")
+            # Garantir SSL para provedores gerenciados (ex.: Render)
+            db_sslmode = os.getenv("DB_SSLMODE") or ("require" if "render.com" in str(db_host) else "prefer")
             conn = psycopg2.connect(
                 dbname=db_name,
                 user=db_user,
                 password=db_password,
                 host=db_host,
                 port=db_port,
+                sslmode=db_sslmode,
             )
         cur = conn.cursor()
         cur.execute("SELECT * FROM public.base_unificada")
@@ -1028,6 +1031,32 @@ def carregar_base_unificada():
             if col in df_base.columns:
                 df_base[col] = df_base[col].astype(str).str.strip()
 
+        # Colunas normalizadas (vetorizadas) para filtros rápidos
+        def _norm_series(s):
+            return (
+                s.astype(str)
+                 .str.upper()
+                 .str.normalize('NFKD')
+                 .str.encode('ascii', 'ignore')
+                 .str.decode('ascii')
+                 .str.strip()
+            )
+
+        if 'Origem' in df_base.columns:
+            df_base['origem_norm'] = _norm_series(df_base['Origem'])
+        if 'Destino' in df_base.columns:
+            df_base['destino_norm'] = _norm_series(df_base['Destino'])
+        if 'Base Origem' in df_base.columns:
+            df_base['base_origem_norm'] = _norm_series(df_base['Base Origem'])
+        if 'Base Destino' in df_base.columns:
+            df_base['base_destino_norm'] = _norm_series(df_base['Base Destino'])
+        if 'Fornecedor' in df_base.columns:
+            df_base['fornecedor_upper'] = df_base['Fornecedor'].astype(str).str.upper()
+        if 'Tipo' in df_base.columns:
+            df_base['tipo_upper'] = df_base['Tipo'].astype(str).str.upper()
+        if 'UF' in df_base.columns:
+            df_base['uf_upper'] = df_base['UF'].astype(str).str.upper()
+
         # Recortes
         _DF_DIRETOS = df_base[df_base['Tipo'] == 'Direto'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
         _DF_AGENTES = df_base[df_base['Tipo'] == 'Agente'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
@@ -1040,8 +1069,96 @@ def carregar_base_unificada():
         return df_base
     except Exception as db_err:
         print(f"[BASE] ⚠️ Falha ao carregar do PostgreSQL: {db_err}")
+        
+    # Fallback: tentar CSV local para não interromper o sistema
+    try:
+        csv_candidates = [
+            os.path.join(os.path.dirname(__file__), 'data', 'Base_Unificada.csv'),
+            os.path.join('cotacao', 'data', 'Base_Unificada.csv'),
+            os.path.join('data', 'Base_Unificada.csv')
+        ]
+        csv_path = next((p for p in csv_candidates if os.path.exists(p)), None)
+        if csv_path:
+            print(f"[BASE] ⚠️ Usando fallback CSV: {csv_path}")
+            # Tentar automaticamente separadores e codificações comuns
+            df_base = None
+            sep_candidates = [',', ';', '\t', None]
+            enc_candidates = ['utf-8', 'utf-8-sig', 'latin-1']
+            for _sep in sep_candidates:
+                for _enc in enc_candidates:
+                    try:
+                        df_try = pd.read_csv(
+                            csv_path,
+                            dtype=str,
+                            keep_default_na=False,
+                            sep=_sep,
+                            encoding=_enc,
+                            engine='python' if _sep is None else 'c'
+                        )
+                        # Considerar válido se tiver colunas chaves
+                        cols = set(df_try.columns.str.strip())
+                        if {'Fornecedor', 'Tipo', 'Origem', 'Destino'}.issubset(cols) or len(cols) > 6:
+                            df_base = df_try
+                            print(f"[BASE] ✅ CSV lido com sep='{_sep}' encoding='{_enc}' colunas={len(cols)}")
+                            break
+                    except Exception:
+                        continue
+                if df_base is not None:
+                    break
+            if df_base is None:
+                # Última tentativa simples
+                df_base = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+            # Ajustar tipos numéricos comuns após leitura como texto quando aplicável
+            for col in ['Prazo']:
+                if col in df_base.columns:
+                    with pd.option_context('mode.chained_assignment', None):
+                        df_base[col] = pd.to_numeric(df_base[col], errors='coerce').fillna(0).astype(int)
 
-    print("[BASE] ❌ Banco indisponível para carregar base_unificada")
+            # Normalizações e colunas auxiliares
+            for col in [
+                'Fornecedor', 'Tipo', 'Origem', 'Destino', 'Base Origem', 'Base Destino', 'UF'
+            ]:
+                if col in df_base.columns:
+                    df_base[col] = df_base[col].astype(str).str.strip()
+
+            def _norm_series(s):
+                return (
+                    s.astype(str)
+                     .str.upper()
+                     .str.normalize('NFKD')
+                     .str.encode('ascii', 'ignore')
+                     .str.decode('ascii')
+                     .str.strip()
+                )
+
+            if 'Origem' in df_base.columns:
+                df_base['origem_norm'] = _norm_series(df_base['Origem'])
+            if 'Destino' in df_base.columns:
+                df_base['destino_norm'] = _norm_series(df_base['Destino'])
+            if 'Base Origem' in df_base.columns:
+                df_base['base_origem_norm'] = _norm_series(df_base['Base Origem'])
+            if 'Base Destino' in df_base.columns:
+                df_base['base_destino_norm'] = _norm_series(df_base['Base Destino'])
+            if 'Fornecedor' in df_base.columns:
+                df_base['fornecedor_upper'] = df_base['Fornecedor'].astype(str).str.upper()
+            if 'Tipo' in df_base.columns:
+                df_base['tipo_upper'] = df_base['Tipo'].astype(str).str.upper()
+            if 'UF' in df_base.columns:
+                df_base['uf_upper'] = df_base['UF'].astype(str).str.upper()
+
+            # Recortes
+            _DF_DIRETOS = df_base[df_base.get('Tipo', '').astype(str) == 'Direto'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+            _DF_AGENTES = df_base[df_base.get('Tipo', '').astype(str) == 'Agente'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+            _DF_TRANSFERENCIAS = df_base[df_base.get('Tipo', '').astype(str) == 'Transferência'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+            _BASE_INDICES_PRONTOS = True
+
+            _BASE_UNIFICADA_CACHE = df_base
+            _ULTIMO_CARREGAMENTO_BASE = time.time()
+            return df_base
+    except Exception as csv_err:
+        print(f"[BASE] ❌ Fallback CSV falhou: {csv_err}")
+
+    print("[BASE] ❌ Banco e CSV indisponíveis para carregar base_unificada")
     return None
 
 # Substituir o DataFrame carregado do Excel por dados do PostgreSQL, se disponível
@@ -1997,14 +2114,14 @@ def carregar_base_unificada():
     Sem fallback para Excel.
     """
     global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE, _BASE_INDICES_PRONTOS, _DF_DIRETOS, _DF_AGENTES, _DF_TRANSFERENCIAS
-
+    
     tempo_atual = time.time()
     if (
         _BASE_UNIFICADA_CACHE is not None
         and (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE
     ):
-        return _BASE_UNIFICADA_CACHE
-
+                    return _BASE_UNIFICADA_CACHE
+        
     try:
         import psycopg2
         db_name = os.getenv("DB_NAME", "base_unificada")
@@ -2043,7 +2160,7 @@ def carregar_base_unificada():
         return df_base
     except Exception as db_err:
         print(f"[BASE] ⚠️ Falha ao carregar do PostgreSQL: {db_err}")
-
+        
     print("[BASE] ❌ Banco indisponível para carregar base_unificada")
     return None
 def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None, bases_intermediarias=None):
@@ -2354,30 +2471,30 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         
         print(f"[FRACIONADO] 🔍 Buscando serviços para: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
         
-        # 1. BUSCAR SERVIÇOS DIRETOS - APENAS CORRESPONDÊNCIA EXATA
-        # Usar recorte pré-processado quando disponível
+        # 1. BUSCAR SERVIÇOS DIRETOS - APENAS CORRESPONDÊNCIA EXATA (vetorizado)
         df_diretos = _DF_DIRETOS if _BASE_INDICES_PRONTOS else df_base[df_base['Tipo'] == 'Direto']
-        
-        # Busca rigorosa - apenas correspondência exata
+        col_on = 'origem_norm' if 'origem_norm' in df_diretos.columns else 'Origem'
+        coldn = 'destino_norm' if 'destino_norm' in df_diretos.columns else 'Destino'
+        val_on = origem_norm if col_on == 'origem_norm' else origem_norm
+        val_dn = destino_norm if coldn == 'destino_norm' else destino_norm
         servicos_diretos = df_diretos[
-            (df_diretos['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
-            (df_diretos['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
+            (df_diretos[col_on] == val_on) &
+            (df_diretos[coldn] == val_dn)
         ]
         
         print(f"[FRACIONADO] 📊 Serviços diretos encontrados: {len(servicos_diretos)}")
         
-        # 2. BUSCAR ML, GRITSCH E EXPRESSO S. MIGUEL - APENAS CORRESPONDÊNCIA EXATA
-        df_ml_gritsch = (
-            (_DF_DIRETOS if _BASE_INDICES_PRONTOS else df_base)
-            [
-                (_DF_DIRETOS if _BASE_INDICES_PRONTOS else df_base)['Fornecedor']
-                .str.contains(r'ML|GRITSCH|EXPRESSO S\. MIGUEL', case=False, na=False)
-            ]
-        )
-        
+        # 2. BUSCAR ML, GRITSCH E EXPRESSO S. MIGUEL - APENAS CORRESPONDÊNCIA EXATA (vetorizado)
+        base_for = _DF_DIRETOS if _BASE_INDICES_PRONTOS else df_base
+        col_for = 'fornecedor_upper' if 'fornecedor_upper' in base_for.columns else 'Fornecedor'
+        df_ml_gritsch = base_for[
+            base_for[col_for].str.contains(r'ML|GRITSCH|EXPRESSO S\. MIGUEL', case=False, na=False)
+        ]
+        col_on_m = 'origem_norm' if 'origem_norm' in df_ml_gritsch.columns else 'Origem'
+        coldn_m = 'destino_norm' if 'destino_norm' in df_ml_gritsch.columns else 'Destino'
         ml_gritsch_services = df_ml_gritsch[
-            (df_ml_gritsch['Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) == origem_norm)) &
-            (df_ml_gritsch['Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
+            (df_ml_gritsch[col_on_m] == origem_norm) &
+            (df_ml_gritsch[coldn_m] == destino_norm)
         ]
         
         print(f"[FRACIONADO] 📊 ML/GRITSCH/EXPRESSO encontrados: {len(ml_gritsch_services)}")
@@ -2608,20 +2725,22 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             """Gera chave única para controle de duplicatas"""
             return f"{agente_col_forn}+{transf_forn}+{agente_ent_forn}"
         
-        # Verificar se existem agentes na origem/destino exatos
-        # Otimização: Pré-filtrar por UF para melhorar performance
-        df_agentes_origem_uf = df_agentes[df_agentes['UF'] == uf_origem]
-        df_agentes_destino_uf = df_agentes[df_agentes['UF'] == uf_destino]
-        
-        # Usar `.str` vetorizado quando possível para acelerar
+        # Verificar se existem agentes na origem/destino exatos (vetorizado + UF)
+        uf_origem_upper = uf_origem
+        uf_destino_upper = uf_destino
+        col_uf = 'uf_upper' if 'uf_upper' in df_agentes.columns else 'UF'
+        col_on_norm = 'origem_norm' if 'origem_norm' in df_agentes.columns else 'Origem'
+        df_agentes_origem_uf = df_agentes[df_agentes[col_uf] == uf_origem_upper]
+        df_agentes_destino_uf = df_agentes[df_agentes[col_uf] == uf_destino_upper]
+
+        origem_norm_str = normalizar_cidade_nome(str(origem))
+        destino_norm_str = normalizar_cidade_nome(str(destino))
+
         agentes_origem = df_agentes_origem_uf[
-            df_agentes_origem_uf['Origem'].astype(str).str.upper().str.normalize('NFKD').str.encode('ascii', 'ignore').str.decode('ascii')
-            == normalizar_cidade_nome(str(origem))
+            df_agentes_origem_uf[col_on_norm] == origem_norm_str
         ]
-        
         agentes_destino = df_agentes_destino_uf[
-            df_agentes_destino_uf['Origem'].astype(str).str.upper().str.normalize('NFKD').str.encode('ascii', 'ignore').str.decode('ascii')
-            == normalizar_cidade_nome(str(destino))
+            df_agentes_destino_uf[col_on_norm] == destino_norm_str
         ]
         
         # 🔧 CORREÇÃO: Se origem e destino são do mesmo estado, filtrar agentes apenas do estado correto
@@ -2681,8 +2800,13 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         print(f"[AGENTES] 📊 Agentes de coleta encontrados: {len(agentes_coleta)}")
         print(f"[AGENTES] 📊 Agentes de entrega encontrados: {len(agentes_entrega)}")
         
-        # Buscar transferências entre bases (não necessariamente origem → destino direto)
-        transferencias_bases = df_transferencias.copy()
+        # Buscar transferências entre bases (prefiltradas por UF quando disponível)
+        col_uf_t = 'uf_upper' if 'uf_upper' in df_transferencias.columns else 'UF'
+        transferencias_bases = df_transferencias
+        if col_uf_t in df_transferencias.columns:
+            transferencias_bases = df_transferencias[
+                (df_transferencias[col_uf_t] == uf_origem_upper) | (df_transferencias[col_uf_t] == uf_destino_upper)
+            ]
         
         # Buscar transferências diretas também
         transferencias_origem_destino = df_transferencias[
@@ -2698,9 +2822,21 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         if not agentes_coleta.empty and not agentes_entrega.empty and not transferencias_bases.empty:
             print(f"[AGENTES] 🔄 Criando rotas completas com agentes nas pontas...")
             
+            # Restringir combinações: conectar somente quando bases coincidem
             for _, agente_col in agentes_coleta.iterrows():
+                base_dest_coleta = normalizar_cidade_nome(str(agente_col.get('Base Destino', '')))
                 for _, agente_ent in agentes_entrega.iterrows():
-                    for _, transferencia in transferencias_bases.iterrows():
+                    base_origem_entrega = normalizar_cidade_nome(str(agente_ent.get('Base Origem', '')))
+                    if not base_dest_coleta or not base_origem_entrega:
+                        continue
+                    # Pré-filtrar transferências onde origem == base_dest_coleta e destino == base_origem_entrega
+                    col_bo = 'base_origem_norm' if 'base_origem_norm' in transferencias_bases.columns else 'Origem'
+                    col_bd = 'base_destino_norm' if 'base_destino_norm' in transferencias_bases.columns else 'Destino'
+                    transf_candidatas = transferencias_bases[
+                        (transferencias_bases[col_bo] == base_dest_coleta) &
+                        (transferencias_bases[col_bd] == base_origem_entrega)
+                    ]
+                    for _, transferencia in transf_candidatas.iterrows():
                         
                         # Verificar se a transferência conecta as bases dos agentes
                         # O agente de coleta deve ter uma base que conecte com a origem da transferência
@@ -5467,12 +5603,12 @@ def calcular_frete_fracionado():
         if item_cache and (agora - item_cache['ts'] < _CACHE_ROTAS_TTL):
             resultado_fracionado = item_cache['resultado']
         else:
-            # Buscar dados fracionados da Base Unificada
+        # Buscar dados fracionados da Base Unificada
             resultado_fracionado = calcular_frete_fracionado_base_unificada(
-                municipio_origem, uf_origem,
-                municipio_destino, uf_destino,
-                peso, cubagem, valor_nf
-            )
+            municipio_origem, uf_origem,
+            municipio_destino, uf_destino,
+            peso, cubagem, valor_nf
+        )
             if resultado_fracionado:
                 _CACHE_ROTAS[chave_cache] = { 'ts': agora, 'resultado': resultado_fracionado }
         
