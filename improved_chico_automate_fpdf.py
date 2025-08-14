@@ -152,6 +152,20 @@ _BASE_AGENTES_CACHE = None
 _ULTIMO_CARREGAMENTO = 0
 _CACHE_VALIDADE = 300  # 5 minutos
 
+# Configuração do token do Melhor Envio (defina MELHOR_ENVIO_TOKEN no ambiente)
+MELHOR_ENVIO_TOKEN = os.environ.get('MELHOR_ENVIO_TOKEN')
+
+def _melhor_envio_headers():
+    """Monta os headers para chamadas à API do Melhor Envio."""
+    if not MELHOR_ENVIO_TOKEN:
+        return None
+    return {
+        'Authorization': f'Bearer {MELHOR_ENVIO_TOKEN}',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'PortoExCotacao/1.0'
+    }
+
 # SISTEMA DE USUÁRIOS E CONTROLE DE ACESSO
 USUARIOS_SISTEMA = {
     'comercial.ptx': {
@@ -5327,6 +5341,52 @@ def aereo():
         return jsonify(dados)
     else:
         return jsonify({"error": "Não foi possível carregar dados aéreos"})
+
+@app.route("/api/melhor-envio/transportadoras", methods=["GET"])
+@middleware_auth
+def melhor_envio_transportadoras():
+    """Lista transportadoras disponíveis via API do Melhor Envio."""
+    try:
+        headers = _melhor_envio_headers()
+        if headers is None:
+            return jsonify({
+                "error": "Token do Melhor Envio não configurado. Defina a variável de ambiente MELHOR_ENVIO_TOKEN.",
+                "codigo": "TOKEN_NAO_CONFIGURADO"
+            }), 400
+
+        # Endpoint público de empresas (transportadoras)
+        # Documentação: app.melhorenvio.com.br (requere token com escopos de leitura)
+        url = "https://api.melhorenvio.com.br/v2/companies"
+        resp = requests.get(url, headers=headers, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+
+        # Normalizar campos essenciais
+        transportadoras = []
+        for item in (data or []):
+            transportadoras.append({
+                "id": item.get("id"),
+                "nome": item.get("name"),
+                "document": item.get("document"),
+                "status": item.get("status"),
+                "picture": item.get("picture"),
+                "alias": item.get("alias"),
+            })
+
+        return jsonify({
+            "total": len(transportadoras),
+            "transportadoras": transportadoras
+        })
+    except requests.exceptions.HTTPError as e:
+        try:
+            payload = resp.json()
+        except Exception:
+            payload = {"message": str(e)}
+        return jsonify({"error": "Falha na API do Melhor Envio", "detalhes": payload}), resp.status_code if 'resp' in locals() else 502
+    except requests.exceptions.Timeout:
+        return jsonify({"error": "Timeout ao consultar a API do Melhor Envio"}), 504
+    except Exception as e:
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 @app.route("/calcular", methods=["POST"])
 @middleware_auth
 def calcular():

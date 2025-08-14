@@ -1277,6 +1277,9 @@
         <button class="tab-btn" onclick="openTab(event, 'aereo')" aria-controls="aereo">
             <i class="fa-solid fa-plane"></i> Frete Aéreo
         </button>
+        <button class="tab-btn" onclick="openTab(event, 'melhor-envio')" aria-controls="melhor-envio">
+            <i class="fa-solid fa-truck-fast"></i> Melhor Envio
+        </button>
         <button class="tab-btn" onclick="openTab(event, 'historico')" aria-controls="historico">
             <i class="fa-solid fa-history"></i> Histórico
         </button>
@@ -2113,6 +2116,38 @@
             <div id="resultados-aereo"></div>
             <!-- Container do mapa aéreo sempre presente e visível -->
             <div id="map-aereo" class="map-container" style="height: 400px; width: 100%; margin: 20px 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.1); position: relative; z-index: 1;"></div>
+        </div>
+    </div>
+
+    <div id="melhor-envio" class="tab-content">
+        <div class="card">
+            <h2><i class="fa-solid fa-truck-fast"></i> Tabela - Transportadoras (Melhor Envio)</h2>
+            <div id="melhor-envio-alert" style="margin: 10px 0; color: #dc3545;"></div>
+            <div style="display:flex; gap:10px; align-items:center; justify-content: space-between; flex-wrap: wrap;">
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <button id="btn-atualizar-melhor-envio" class="btn-primary" type="button">
+                        <i class="fa-solid fa-rotate"></i> Atualizar
+                    </button>
+                    <div id="loading-melhor-envio" class="loading-spinner" style="display:none;"></div>
+                </div>
+                <div style="min-width:200px;">
+                    <input type="text" id="filtro-melhor-envio" placeholder="Filtrar por nome..." style="width:100%; padding:8px 12px; border:1px solid #e3e8ee; border-radius:8px;">
+                </div>
+            </div>
+            <div style="overflow:auto; margin-top: 12px;">
+                <table style="width:100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background:#f5f7fa; text-align:left;">
+                            <th style="padding:10px; border-bottom: 1px solid #e3e8ee;">Logo</th>
+                            <th style="padding:10px; border-bottom: 1px solid #e3e8ee;">Nome</th>
+                            <th style="padding:10px; border-bottom: 1px solid #e3e8ee;">Alias</th>
+                            <th style="padding:10px; border-bottom: 1px solid #e3e8ee;">Documento</th>
+                            <th style="padding:10px; border-bottom: 1px solid #e3e8ee;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="melhor-envio-tbody"></tbody>
+                </table>
+            </div>
         </div>
     </div>
     <div id="historico" class="tab-content">
@@ -3011,9 +3046,72 @@
                     console.log('[MAPA] Base já carregada:', baseAgentes.length, 'registros');
                 }
             }
+
+            // Carregar dados do Melhor Envio quando a aba for aberta
+            if (tabName === 'melhor-envio') {
+                if (!window.__melhorEnvioLoaded) {
+                    carregarTransportadorasMelhorEnvio();
+                }
+            }
         }
         
         // ===== CALCULADORA AVANÇADA DE VOLUMES =====
+        async function carregarTransportadorasMelhorEnvio() {
+            const alertBox = document.getElementById('melhor-envio-alert');
+            const loading = document.getElementById('loading-melhor-envio');
+            const tbody = document.getElementById('melhor-envio-tbody');
+            try {
+                if (!alertBox || !loading || !tbody) return;
+                alertBox.textContent = '';
+                loading.style.display = 'block';
+                const resp = await fetch('/api/melhor-envio/transportadoras');
+                const data = await resp.json();
+                if (data.error) {
+                    alertBox.textContent = data.error;
+                    tbody.innerHTML = '';
+                    return;
+                }
+                const linhas = (data.transportadoras || []).map(t => `
+                    <tr>
+                        <td style="padding:8px; border-bottom: 1px solid #f0f2f5;">
+                            ${t.picture ? `<img src="${t.picture}" alt="${t.nome}" style="height:28px;">` : ''}
+                        </td>
+                        <td style="padding:8px; border-bottom: 1px solid #f0f2f5; font-weight:600;">${t.nome || '-'}</td>
+                        <td style="padding:8px; border-bottom: 1px solid #f0f2f5;">${t.alias || '-'}</td>
+                        <td style="padding:8px; border-bottom: 1px solid #f0f2f5;">${t.document || '-'}</td>
+                        <td style="padding:8px; border-bottom: 1px solid #f0f2f5;">
+                            <span style="padding:4px 8px; border-radius:12px; background:${t.status === 'active' ? '#e6ffed' : '#fff8e6'}; color:${t.status === 'active' ? '#0f5132' : '#664d03'};">
+                                ${t.status || '-'}
+                            </span>
+                        </td>
+                    </tr>
+                `).join('');
+                tbody.innerHTML = linhas;
+                window.__melhorEnvioLoaded = true;
+                const filtro = document.getElementById('filtro-melhor-envio');
+                if (filtro) {
+                    filtro.oninput = () => {
+                        const termo = filtro.value.toLowerCase();
+                        Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+                            const nome = (tr.children[1]?.textContent || '').toLowerCase();
+                            tr.style.display = nome.includes(termo) ? '' : 'none';
+                        });
+                    };
+                }
+                const btn = document.getElementById('btn-atualizar-melhor-envio');
+                if (btn) {
+                    btn.onclick = async () => {
+                        window.__melhorEnvioLoaded = false;
+                        await carregarTransportadorasMelhorEnvio();
+                    };
+                }
+            } catch (e) {
+                if (alertBox) alertBox.textContent = 'Erro ao carregar transportadoras do Melhor Envio.';
+                if (tbody) tbody.innerHTML = '';
+            } finally {
+                if (loading) loading.style.display = 'none';
+            }
+        }
         
         // Variáveis globais para a calculadora avançada
         let skuCounter = 1;
@@ -4175,6 +4273,14 @@
                     setTimeout(() => {
                         loadSavedPositions();
                     }, 300);
+                }
+
+                if (onclick && onclick.includes('melhor-envio')) {
+                    setTimeout(() => {
+                        if (!window.__melhorEnvioLoaded) {
+                            carregarTransportadorasMelhorEnvio();
+                        }
+                    }, 100);
                 }
             }
         });
