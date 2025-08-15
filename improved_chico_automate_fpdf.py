@@ -134,19 +134,28 @@ except ImportError as e:
     print(f"[PostgreSQL] ⚠️ PostgreSQL não disponível: {e}")
     print("[PostgreSQL] Usando fallback para logs em arquivo")
 
-# Cache global para base unificada
-_BASE_UNIFICADA_CACHE = None
-_ULTIMO_CARREGAMENTO_BASE = 0
-_CACHE_VALIDADE_BASE = 900  # 15 minutos
+# Cache global para base unificada (evitar redefinição)
+if '_BASE_UNIFICADA_CACHE' not in globals():
+    _BASE_UNIFICADA_CACHE = None
+if '_ULTIMO_CARREGAMENTO_BASE' not in globals():
+    _ULTIMO_CARREGAMENTO_BASE = 0
+if '_CACHE_VALIDADE_BASE' not in globals():
+    _CACHE_VALIDADE_BASE = 900  # 15 minutos
 # Índices e recortes pré-processados para acelerar filtros
-_BASE_INDICES_PRONTOS = False
-_DF_DIRETOS = None
-_DF_AGENTES = None
-_DF_TRANSFERENCIAS = None
+if '_BASE_INDICES_PRONTOS' not in globals():
+    _BASE_INDICES_PRONTOS = False
+if '_DF_DIRETOS' not in globals():
+    _DF_DIRETOS = None
+if '_DF_AGENTES' not in globals():
+    _DF_AGENTES = None
+if '_DF_TRANSFERENCIAS' not in globals():
+    _DF_TRANSFERENCIAS = None
 
 # Cache de cálculos por rota
-_CACHE_ROTAS = {}
-_CACHE_ROTAS_TTL = 900  # 15 minutos
+if '_CACHE_ROTAS' not in globals():
+    _CACHE_ROTAS = {}
+if '_CACHE_ROTAS_TTL' not in globals():
+    _CACHE_ROTAS_TTL = 900  # 15 minutos
 
 # Cache global para agentes
 _BASE_AGENTES_CACHE = None
@@ -168,7 +177,12 @@ def _melhor_envio_headers():
     }
 
 # SISTEMA DE USUÁRIOS E CONTROLE DE ACESSO
-USUARIOS_SISTEMA = {
+# Evitar redefinições posteriores: se já existir, não sobrescrever
+if 'USUARIOS_SISTEMA' not in globals():
+    USUARIOS_SISTEMA = {}
+
+# Usuários base
+USUARIOS_SISTEMA.update({
     'comercial.ptx': {
         'senha': 'ptx@123',
         'tipo': 'comercial',
@@ -180,61 +194,50 @@ USUARIOS_SISTEMA = {
         'tipo': 'administrador',
         'nome': 'Administrador',
         'permissoes': ['calcular', 'historico', 'exportar', 'logs', 'setup', 'admin']
-    },
-    # Novos usuários solicitados (senha padrão 1234)
+    }
+})
+
+# Usuários solicitados (senha padrão 1234)
+USUARIOS_SISTEMA.update({
     'tiago.comercial': {
-        'senha': '1234',
-        'tipo': 'comercial',
-        'nome': 'Tiago (Comercial)',
+        'senha': '1234', 'tipo': 'comercial', 'nome': 'Tiago (Comercial)',
         'permissoes': ['calcular', 'historico', 'exportar']
     },
     'sabrina.comercial': {
-        'senha': '1234',
-        'tipo': 'comercial',
-        'nome': 'Sabrina (Comercial)',
+        'senha': '1234', 'tipo': 'comercial', 'nome': 'Sabrina (Comercial)',
         'permissoes': ['calcular', 'historico', 'exportar']
     },
     'uriel.comercial': {
-        'senha': '1234',
-        'tipo': 'comercial',
-        'nome': 'Uriel (Comercial)',
+        'senha': '1234', 'tipo': 'comercial', 'nome': 'Uriel (Comercial)',
         'permissoes': ['calcular', 'historico', 'exportar']
     },
     'caio.comercial': {
-        'senha': '1234',
-        'tipo': 'comercial',
-        'nome': 'Caio (Comercial)',
+        'senha': '1234', 'tipo': 'comercial', 'nome': 'Caio (Comercial)',
         'permissoes': ['calcular', 'historico', 'exportar']
     },
     'stefany.comercial': {
-        'senha': '1234',
-        'tipo': 'comercial',
-        'nome': 'Stefany (Comercial)',
+        'senha': '1234', 'tipo': 'comercial', 'nome': 'Stefany (Comercial)',
         'permissoes': ['calcular', 'historico', 'exportar']
     },
     'gabriel.controladoria': {
-        'senha': '1234',
-        'tipo': 'controladoria',
-        'nome': 'Gabriel (Controladoria)',
+        'senha': '1234', 'tipo': 'controladoria', 'nome': 'Gabriel (Controladoria)',
         'permissoes': ['calcular', 'historico', 'exportar']
     },
     'leo.controladoria': {
-        'senha': '1234',
-        'tipo': 'controladoria',
-        'nome': 'Leo (Controladoria)',
+        'senha': '1234', 'tipo': 'controladoria', 'nome': 'Leo (Controladoria)',
         'permissoes': ['calcular', 'historico', 'exportar']
     },
     'chico.controladoria': {
-        'senha': '1234',
-        'tipo': 'controladoria',
-        'nome': 'Chico (Controladoria)',
+        'senha': '1234', 'tipo': 'controladoria', 'nome': 'Chico (Controladoria)',
         'permissoes': ['calcular', 'historico', 'exportar']
     }
-}
+})
 
-# Controle de logs de acesso
-LOGS_SISTEMA = []
-HISTORICO_DETALHADO = []
+# Controle de logs de acesso (evitar redefinição)
+if 'LOGS_SISTEMA' not in globals():
+    LOGS_SISTEMA = []
+if 'HISTORICO_DETALHADO' not in globals():
+    HISTORICO_DETALHADO = []
 
 def log_acesso(usuario, acao, ip, detalhes=""):
     """Registra log de acesso do sistema"""
@@ -533,6 +536,9 @@ def login():
         else:
             usuario = request.form.get('usuario')
             senha = request.form.get('senha')
+        # Normalizar entradas
+        usuario = (usuario or '').strip().lower()
+        senha = (senha or '').strip()
         
         ip_cliente = obter_ip_cliente()
         
@@ -710,7 +716,6 @@ def health_check():
             "timestamp": pd.Timestamp.now().isoformat()
         }), 503
 
-# Inicializar variáveis globais
 HISTORICO_PESQUISAS = []
 CONTADOR_DEDICADO = 1
 CONTADOR_FRACIONADO = 1
@@ -1493,25 +1498,7 @@ _BASE_AGENTES_CACHE = None
 _ULTIMO_CARREGAMENTO = 0
 _CACHE_VALIDADE = 300  # 5 minutos
 
-# SISTEMA DE USUÁRIOS E CONTROLE DE ACESSO
-USUARIOS_SISTEMA = {
-    'comercial.ptx': {
-        'senha': 'ptx@123',
-        'tipo': 'comercial',
-        'nome': 'Usuário Comercial',
-        'permissoes': ['calcular', 'historico', 'exportar']
-    },
-    'adm.ptx': {
-        'senha': 'portoex@123', 
-        'tipo': 'administrador',
-        'nome': 'Administrador',
-        'permissoes': ['calcular', 'historico', 'exportar', 'logs', 'setup', 'admin']
-    }
-}
-
-# Controle de logs de acesso
-LOGS_SISTEMA = []
-HISTORICO_DETALHADO = []
+# Removido bloco duplicado de definição de USUARIOS_SISTEMA e reinicialização de logs
 
 def log_acesso(usuario, acao, ip, detalhes=""):
     """Registra log de acesso do sistema"""
@@ -1763,140 +1750,6 @@ def normalizar_cidade_nome(cidade):
     cidade_sem_uf = partes[0].strip()
     
     return normalizar_cidade(cidade_sem_uf)
-
-app = Flask(__name__, static_folder='static')
-app.secret_key = os.getenv("SECRET_KEY", "chave_secreta_portoex_2025_muito_segura")
-
-# Configurações de sessão mais robustas
-app.config["SESSION_PERMANENT"] = True
-app.config["PERMANENT_SESSION_LIFETIME"] = datetime.timedelta(days=7)
-app.config["SESSION_COOKIE_SECURE"] = False  # Para desenvolvimento local
-app.config["SESSION_COOKIE_HTTPONLY"] = True  # Segurança
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Compatibilidade com AJAX
-
-# Configurações para evitar cache
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-
-# Desabilitar cache em todas as respostas
-@app.after_request
-def after_request(response):
-    # Não aplicar cache apenas para conteúdo estático, mas manter sessões
-    if request.endpoint != 'static':
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Expires"] = "0"
-        response.headers["Pragma"] = "no-cache"
-    return response
-
-# Rota para limpar dados do navegador
-@app.route("/clear-cache")
-def clear_cache():
-    response = redirect("/")
-    # Não limpar cookies de sessão
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    return response
-# Rotas de autenticação
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        if request.is_json:
-            data = request.get_json()
-            usuario = data.get('usuario')
-            senha = data.get('senha')
-        else:
-            usuario = request.form.get('usuario')
-            senha = request.form.get('senha')
-        
-        ip_cliente = obter_ip_cliente()
-        
-        if usuario in USUARIOS_SISTEMA and USUARIOS_SISTEMA[usuario]['senha'] == senha:
-            # Limpar sessão anterior
-            session.clear()
-            
-            # Configurar nova sessão
-            session['usuario_logado'] = usuario
-            session['tipo_usuario'] = USUARIOS_SISTEMA[usuario]['tipo']
-            session['nome_usuario'] = USUARIOS_SISTEMA[usuario]['nome']
-            session.permanent = True
-            
-            # Debug - verificar se sessão foi criada
-            # Debug removido
-            
-            log_acesso(usuario, 'LOGIN_SUCESSO', ip_cliente, f"Login realizado com sucesso")
-            
-            if request.is_json:
-                return jsonify({
-                    'success': True, 
-                    'message': 'Login realizado com sucesso!',
-                    'usuario': USUARIOS_SISTEMA[usuario]['nome'],
-                    'tipo': USUARIOS_SISTEMA[usuario]['tipo'],
-                    'redirect': '/'
-                })
-            else:
-                flash(f'Bem-vindo, {USUARIOS_SISTEMA[usuario]["nome"]}!', 'success')
-                return redirect(url_for('index'))
-        else:
-            log_acesso(usuario or 'DESCONHECIDO', 'LOGIN_FALHA', ip_cliente, f"Tentativa de login com credenciais inválidas")
-            
-            if request.is_json:
-                return jsonify({'success': False, 'error': 'Usuário ou senha incorretos.'}), 401
-            else:
-                flash('Usuário ou senha incorretos.', 'error')
-    
-    # Se já está logado, redirecionar para home
-    if verificar_autenticacao():
-        return redirect(url_for('index'))
-    
-    return render_template("login.html")
-
-@app.route("/logout")
-def logout():
-    if verificar_autenticacao():
-        usuario = session.get('usuario_logado', 'DESCONHECIDO')
-        ip_cliente = obter_ip_cliente()
-        log_acesso(usuario, 'LOGOUT', ip_cliente, "Logout realizado")
-        
-        session.clear()
-        flash('Logout realizado com sucesso!', 'info')
-    
-    return redirect(url_for('login'))
-
-# Health check endpoint para Render
-@app.route("/health")
-def health_check():
-    """Endpoint de health check para verificar se a aplicação está funcionando."""
-    try:
-        base_df = carregar_base_unificada()
-        total_registros = len(base_df) if base_df is not None else 0
-        status = {
-            "status": "healthy",
-            "timestamp": pd.Timestamp.now().isoformat(),
-            "version": "1.0.0",
-            "services": {
-                "database": "online" if total_registros > 0 else "offline",
-                "records": total_registros
-            }
-        }
-        return jsonify(status), 200
-    except Exception as e:
-        return jsonify({
-            "status": "unhealthy", 
-            "error": str(e),
-            "timestamp": pd.Timestamp.now().isoformat()
-        }), 503
-
-# Inicializar variáveis globais
-HISTORICO_PESQUISAS = []
-CONTADOR_DEDICADO = 1
-CONTADOR_FRACIONADO = 1
-ultimoResultadoDedicado = None
-ultimoResultadoFracionado = None
-app.config["UPLOAD_FOLDER"] = "static"
-
-"""
-Removido suporte a Excel no boot. A aplicação usa exclusivamente PostgreSQL
-para carregar `df_unificado` via `carregar_base_unificada()`.
-"""
-df_unificado = pd.DataFrame()  # placeholder até a primeira chamada real
 
 def geocode(municipio, uf):
     try:
