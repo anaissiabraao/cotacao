@@ -5153,6 +5153,195 @@ def historico():
     except Exception as e:
         print(f"[ERROR] Erro ao carregar histórico: {e}")
         return jsonify([])
+
+# Rotas administrativas
+@app.route("/admin")
+@middleware_admin
+def admin_dashboard():
+    try:
+        from collections import Counter
+        usuario_dados = usuario_logado()
+        ip_cliente = obter_ip_cliente()
+        log_acesso(session.get('usuario_logado', 'DESCONHECIDO'), 'ADMIN_ACESSO_DASHBOARD', ip_cliente, 'Acesso ao painel admin')
+
+        total_logs = len(LOGS_SISTEMA)
+        total_pesquisas = len(HISTORICO_PESQUISAS)
+        usuarios_unicos = len({log['usuario'] for log in LOGS_SISTEMA}) if LOGS_SISTEMA else 0
+        ips_unicos = len({log['ip'] for log in LOGS_SISTEMA}) if LOGS_SISTEMA else 0
+        ultimas_atividades = LOGS_SISTEMA[-10:] if LOGS_SISTEMA else []
+        acoes_mais_comuns = []
+        if LOGS_SISTEMA:
+            contador_acoes = Counter([log.get('acao', 'N/A') for log in LOGS_SISTEMA])
+            acoes_mais_comuns = list(contador_acoes.most_common(6))
+
+        estatisticas = {
+            'total_logs': total_logs,
+            'total_pesquisas': total_pesquisas,
+            'usuarios_unicos': usuarios_unicos,
+            'ips_unicos': ips_unicos,
+            'ultimas_atividades': ultimas_atividades,
+            'acoes_mais_comuns': acoes_mais_comuns
+        }
+
+        return render_template("admin.html", usuario=usuario_dados, estatisticas=estatisticas)
+    except Exception as e:
+        print(f"[ADMIN] Erro no dashboard: {e}")
+        return redirect(url_for('index'))
+
+@app.route("/admin/logs")
+@middleware_admin
+def admin_logs():
+    try:
+        ip_cliente = obter_ip_cliente()
+        log_acesso(session.get('usuario_logado', 'DESCONHECIDO'), 'ADMIN_ACESSO_LOGS', ip_cliente, 'Acesso aos logs do sistema')
+
+        # Filtros
+        filtro_usuario = request.args.get('usuario', '').strip()
+        filtro_acao = request.args.get('acao', '').strip()
+        filtro_data = request.args.get('data', '').strip()  # Formato esperado: DD/MM/YYYY
+        page = int(request.args.get('page', 1) or 1)
+        page_size = 25
+
+        logs_filtrados = LOGS_SISTEMA[:]
+
+        if filtro_usuario:
+            logs_filtrados = [l for l in logs_filtrados if str(l.get('usuario', '')).strip() == filtro_usuario]
+        if filtro_acao:
+            logs_filtrados = [l for l in logs_filtrados if str(l.get('acao', '')).strip() == filtro_acao]
+        if filtro_data:
+            logs_filtrados = [l for l in logs_filtrados if str(l.get('data_hora', '')).startswith(filtro_data)]
+
+        total_logs = len(logs_filtrados)
+        start = (page - 1) * page_size
+        end = start + page_size
+        logs_paginados = logs_filtrados[start:end]
+
+        usuarios_unicos = sorted({l.get('usuario', '') for l in LOGS_SISTEMA if l.get('usuario')})
+        acoes_unicas = sorted({l.get('acao', '') for l in LOGS_SISTEMA if l.get('acao')})
+
+        filtros = {
+            'usuario': filtro_usuario,
+            'acao': filtro_acao,
+            'data': filtro_data
+        }
+
+        has_prev = page > 1
+        has_next = end < total_logs
+
+        return render_template(
+            "admin_logs.html",
+            total_logs=total_logs,
+            logs=logs_paginados,
+            usuarios_unicos=usuarios_unicos,
+            acoes_unicas=acoes_unicas,
+            filtros=filtros,
+            page=page,
+            has_prev=has_prev,
+            has_next=has_next
+        )
+    except Exception as e:
+        print(f"[ADMIN] Erro em /admin/logs: {e}")
+        return redirect(url_for('admin_dashboard'))
+
+@app.route("/admin/historico-detalhado")
+@middleware_admin
+def admin_historico_detalhado():
+    try:
+        ip_cliente = obter_ip_cliente()
+        log_acesso(session.get('usuario_logado', 'DESCONHECIDO'), 'ADMIN_ACESSO_HISTORICO', ip_cliente, 'Acesso ao histórico detalhado')
+
+        historico_view = []
+        for item in HISTORICO_PESQUISAS:
+            if isinstance(item, dict):
+                historico_view.append({
+                    'tipo': item.get('tipo', 'Cálculo'),
+                    'id': item.get('id_historico') or item.get('id_calculo') or 'N/A',
+                    'data_hora': item.get('data_hora') or item.get('data_calculo') or 'N/A',
+                    'detalhes': f"Origem: {item.get('origem', 'N/A')} -> Destino: {item.get('destino', 'N/A')} | Distância: {round(item.get('distancia', 0), 2) if isinstance(item.get('distancia', 0), (int, float)) else item.get('distancia', 'N/A')} | Provedor: {item.get('provider', 'N/A')}"
+                })
+
+        # Ordenar por data se possível (strings no formato DD/MM/YYYY HH:MM:SS)
+        try:
+            from datetime import datetime
+            historico_view.sort(key=lambda x: datetime.strptime(x['data_hora'], "%d/%m/%Y %H:%M:%S"), reverse=True)
+        except Exception:
+            pass
+
+        return render_template("admin_historico.html", historico=historico_view)
+    except Exception as e:
+        print(f"[ADMIN] Erro em /admin/historico-detalhado: {e}")
+        return redirect(url_for('admin_dashboard'))
+
+@app.route("/admin/setup")
+@middleware_admin
+def admin_setup():
+    try:
+        import sys
+        # Tentar carregar a base para obter métricas
+        df_base = None
+        try:
+            df_base = carregar_base_unificada()
+        except Exception as e:
+            print(f"[ADMIN] Falha ao carregar base na tela de setup: {e}")
+
+        total_registros = int(len(df_base)) if df_base is not None else 0
+        colunas_planilha = list(df_base.columns) if df_base is not None else []
+
+        arquivo_excel = os.path.abspath('Base_Unificada.xlsx') if os.path.exists('Base_Unificada.xlsx') else ''
+        base_unificada = os.path.abspath(os.path.join('data', 'Base_Unificada.csv')) if os.path.exists(os.path.join('data', 'Base_Unificada.csv')) else ''
+
+        info_sistema = {
+            'versao_python': sys.version,
+            'usuarios_sistema': len(USUARIOS_SISTEMA),
+            'logs_em_memoria': len(LOGS_SISTEMA),
+            'historico_pesquisas': len(HISTORICO_PESQUISAS),
+            'arquivo_excel': arquivo_excel,
+            'base_unificada': base_unificada,
+            'total_registros': total_registros,
+            'colunas_planilha': colunas_planilha,
+        }
+
+        ip_cliente = obter_ip_cliente()
+        log_acesso(session.get('usuario_logado', 'DESCONHECIDO'), 'ADMIN_ACESSO_SETUP', ip_cliente, 'Acesso às configurações')
+
+        return render_template("admin_setup.html", info_sistema=info_sistema)
+    except Exception as e:
+        print(f"[ADMIN] Erro em /admin/setup: {e}")
+        return redirect(url_for('admin_dashboard'))
+
+@app.route("/admin/limpar-logs", methods=["POST"])
+@middleware_admin
+def admin_limpar_logs():
+    try:
+        LOGS_SISTEMA.clear()
+        flash('Logs limpos com sucesso.', 'success')
+    except Exception as e:
+        print(f"[ADMIN] Erro ao limpar logs: {e}")
+        flash('Erro ao limpar logs.', 'error')
+    return redirect(url_for('admin_logs'))
+
+@app.route("/admin/exportar-logs")
+@middleware_admin
+def admin_exportar_logs():
+    try:
+        import csv
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['data_hora', 'usuario', 'acao', 'ip', 'detalhes', 'user_agent'])
+        for l in LOGS_SISTEMA:
+            writer.writerow([
+                l.get('data_hora', ''),
+                l.get('usuario', ''),
+                l.get('acao', ''),
+                l.get('ip', ''),
+                l.get('detalhes', ''),
+                l.get('user_agent', ''),
+            ])
+        output.seek(0)
+        return send_file(io.BytesIO(output.getvalue().encode('utf-8')), as_attachment=True, download_name='logs.csv', mimetype='text/csv')
+    except Exception as e:
+        print(f"[ADMIN] Erro ao exportar logs: {e}")
+        return redirect(url_for('admin_logs'))
 @app.route("/api/bases-disponiveis")
 def api_bases_disponiveis():
     """API endpoint para fornecer lista de bases disponíveis para frete fracionado"""
