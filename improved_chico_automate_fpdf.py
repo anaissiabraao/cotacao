@@ -162,8 +162,8 @@ _BASE_AGENTES_CACHE = None
 _ULTIMO_CARREGAMENTO = 0
 _CACHE_VALIDADE = 300  # 5 minutos
 
-# Configuração do token do Melhor Envio (defina MELHOR_ENVIO_TOKEN no ambiente)
-MELHOR_ENVIO_TOKEN = os.environ.get('MELHOR_ENVIO_TOKEN')
+# Configuração do token do Melhor Envio
+MELHOR_ENVIO_TOKEN = os.environ.get('eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI5NTYiLCJqdGkiOiJlZTgxMWRiNmNhNjExOWVmOWVmZjEyMGFmMTljMDRlZjAwNzhlZGRmOWM4MTAyYzA1ZTI4ODg1NTA4NjYxOGIyYTIwMDc2YTA1MmRiYTAwMCIsImlhdCI6MTc1NTExMTg5MS45Nzc2NjEsIm5iZiI6MTc1NTExMTg5MS45Nzc2NjMsImV4cCI6MTc4NjY0Nzg5MS45Njk0MjksInN1YiI6IjlmYTA2MGVhLWVhODktNGRkNy05M2M3LTFhMjZkNWI3ZGM1MSIsInNjb3BlcyI6WyJjYXJ0LXJlYWQiLCJjYXJ0LXdyaXRlIiwiY29tcGFuaWVzLXJlYWQiLCJjb21wYW5pZXMtd3JpdGUiLCJjb3Vwb25zLXJlYWQiLCJjb3Vwb25zLXdyaXRlIiwibm90aWZpY2F0aW9ucy1yZWFkIiwib3JkZXJzLXJlYWQiLCJwcm9kdWN0cy1yZWFkIiwicHJvZHVjdHMtZGVzdHJveSIsInByb2R1Y3RzLXdyaXRlIiwicHVyY2hhc2VzLXJlYWQiLCJzaGlwcGluZy1jYWxjdWxhdGUiLCJzaGlwcGluZy1jYW5jZWwiLCJzaGlwcGluZy1jaGVja291dCIsInNoaXBwaW5nLWNvbXBhbmllcyIsInNoaXBwaW5nLWdlbmVyYXRlIiwic2hpcHBpbmctcHJldmlldyIsInNoaXBwaW5nLXByaW50Iiwic2hpcHBpbmctc2hhcmUiLCJzaGlwcGluZy10cmFja2luZyIsImVjb21tZXJjZS1zaGlwcGluZyIsInRyYW5zYWN0aW9ucy1yZWFkIiwidXNlcnMtcmVhZCIsInVzZXJzLXdyaXRlIiwid2ViaG9va3MtcmVhZCIsIndlYmhvb2tzLXdyaXRlIiwid2ViaG9va3MtZGVsZXRlIiwidGRlYWxlci13ZWJob29rIl19.AY552XtpFknBG-czXgZgPlgWhVkbn_SuJuWqttzfcdL02Na9-d1CGOu-J-j8JlDb_cEhN28lMehw4JgPYRgIbhe_-9VyoaP-4uwCWGhCvJWl5rHk2wAuWPXdKsnV4_e8kD0QJNXW7Zzv--oe-nMfJnUvt6onU0JUMpLUmd1PMc4l4BwceUMJUx-3-Nn1Xz2btrw71lM2uOZPAHKyaKL_z31ge8Gl0FL_PcXEtOzzMpoQhuXapUmjL1o-vGXOxrsdiA-gdoiW3Sb8VYL5-VDjzzNOod7tfvzj9E1Tp19447CWSuJm5rF-zKa447Sk71f_xw09I4O6iWqM9k9N2sB8sseTBF7NgOdR24V1equcYCGUqJCmqxcc5wjTNdwvG8bhwFL2WruXAAYVB2D_fAE0ehYg9jau8Ho-9BfhAU2KV-lB3bqZ0uApV-7atTVpfMKHJYXPanSzGvgDwS-kADYXXvjsSORxe_NfFyYQOCCt3nI9z1iQqJ4WVuFUUAmLu_mhfBJgEdlJg70oxYta6JFu3t4ecwFyoVte59NAXsuosah_J9jFmDsS-RXs5N8nHcUFMXGnSmeXGNPLUl3SU2P3vHEt7IVDoB6fVkr_meqoya85vhi1oJ7oi0IQdwIUNLKto_DsTWRYmJXf6dC5zdRb6k87MsOuMWsM8HF_ppyP5rE')
 
 def _melhor_envio_headers():
     """Monta os headers para chamadas à API do Melhor Envio."""
@@ -1194,6 +1194,9 @@ def carregar_base_unificada_db_only():
         conn.close()
 
         df_base = pd.DataFrame(rows, columns=colnames)
+        # Se o banco retornou vazio, forçar fallback CSV
+        if df_base is None or len(df_base) == 0:
+            raise RuntimeError("DB retornou 0 linhas para base_unificada")
         # Pré-processar: normalizar textos frequentes e criar recortes por tipo
         for col in [
             'Fornecedor', 'Tipo', 'Origem', 'Destino', 'Base Origem', 'Base Destino', 'UF'
@@ -1224,13 +1227,34 @@ def carregar_base_unificada_db_only():
             df_base['fornecedor_upper'] = df_base['Fornecedor'].astype(str).str.upper()
         if 'Tipo' in df_base.columns:
             df_base['tipo_upper'] = df_base['Tipo'].astype(str).str.upper()
+            # Normalização robusta do tipo (sem acento, upper)
+            try:
+                df_base['tipo_norm'] = (
+                    df_base['Tipo'].astype(str)
+                    .str.upper()
+                    .str.normalize('NFKD')
+                    .str.encode('ascii', 'ignore')
+                    .str.decode('ascii')
+                    .str.strip()
+                )
+            except Exception:
+                df_base['tipo_norm'] = df_base['tipo_upper']
         if 'UF' in df_base.columns:
             df_base['uf_upper'] = df_base['UF'].astype(str).str.upper()
 
         # Recortes
-        _DF_DIRETOS = df_base[df_base['Tipo'] == 'Direto'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
-        _DF_AGENTES = df_base[df_base['Tipo'] == 'Agente'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
-        _DF_TRANSFERENCIAS = df_base[df_base['Tipo'] == 'Transferência'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+        if 'tipo_norm' in df_base.columns:
+            _DF_DIRETOS = df_base[df_base['tipo_norm'] == 'DIRETO'].copy()
+            _DF_AGENTES = df_base[df_base['tipo_norm'] == 'AGENTE'].copy()
+            _DF_TRANSFERENCIAS = df_base[df_base['tipo_norm'] == 'TRANSFERENCIA'].copy()
+        elif 'Tipo' in df_base.columns:
+            _DF_DIRETOS = df_base[df_base['Tipo'] == 'Direto'].copy()
+            _DF_AGENTES = df_base[df_base['Tipo'] == 'Agente'].copy()
+            _DF_TRANSFERENCIAS = df_base[df_base['Tipo'] == 'Transferência'].copy()
+        else:
+            _DF_DIRETOS = df_base.iloc[0:0]
+            _DF_AGENTES = df_base.iloc[0:0]
+            _DF_TRANSFERENCIAS = df_base.iloc[0:0]
         _BASE_INDICES_PRONTOS = True
 
         _BASE_UNIFICADA_CACHE = df_base
@@ -1313,13 +1337,33 @@ def carregar_base_unificada_db_only():
                 df_base['fornecedor_upper'] = df_base['Fornecedor'].astype(str).str.upper()
             if 'Tipo' in df_base.columns:
                 df_base['tipo_upper'] = df_base['Tipo'].astype(str).str.upper()
+                try:
+                    df_base['tipo_norm'] = (
+                        df_base['Tipo'].astype(str)
+                        .str.upper()
+                        .str.normalize('NFKD')
+                        .str.encode('ascii', 'ignore')
+                        .str.decode('ascii')
+                        .str.strip()
+                    )
+                except Exception:
+                    df_base['tipo_norm'] = df_base['tipo_upper']
             if 'UF' in df_base.columns:
                 df_base['uf_upper'] = df_base['UF'].astype(str).str.upper()
 
             # Recortes
-            _DF_DIRETOS = df_base[df_base.get('Tipo', '').astype(str) == 'Direto'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
-            _DF_AGENTES = df_base[df_base.get('Tipo', '').astype(str) == 'Agente'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
-            _DF_TRANSFERENCIAS = df_base[df_base.get('Tipo', '').astype(str) == 'Transferência'].copy() if 'Tipo' in df_base.columns else df_base.iloc[0:0]
+            if 'tipo_norm' in df_base.columns:
+                _DF_DIRETOS = df_base[df_base['tipo_norm'] == 'DIRETO'].copy()
+                _DF_AGENTES = df_base[df_base['tipo_norm'] == 'AGENTE'].copy()
+                _DF_TRANSFERENCIAS = df_base[df_base['tipo_norm'] == 'TRANSFERENCIA'].copy()
+            elif 'Tipo' in df_base.columns:
+                _DF_DIRETOS = df_base[df_base.get('Tipo', '').astype(str) == 'Direto'].copy()
+                _DF_AGENTES = df_base[df_base.get('Tipo', '').astype(str) == 'Agente'].copy()
+                _DF_TRANSFERENCIAS = df_base[df_base.get('Tipo', '').astype(str) == 'Transferência'].copy()
+            else:
+                _DF_DIRETOS = df_base.iloc[0:0]
+                _DF_AGENTES = df_base.iloc[0:0]
+                _DF_TRANSFERENCIAS = df_base.iloc[0:0]
             _BASE_INDICES_PRONTOS = True
 
             _BASE_UNIFICADA_CACHE = df_base
@@ -2440,7 +2484,9 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         print(f"[FRACIONADO] 🔍 Buscando serviços para: {origem_norm}/{uf_origem_norm} → {destino_norm}/{uf_destino_norm}")
         
         # 1. BUSCAR SERVIÇOS DIRETOS - APENAS CORRESPONDÊNCIA EXATA (vetorizado)
-        df_diretos = _DF_DIRETOS if _BASE_INDICES_PRONTOS else df_base[df_base['Tipo'] == 'Direto']
+        df_diretos = _DF_DIRETOS if _BASE_INDICES_PRONTOS else (
+            df_base[df_base['tipo_norm'] == 'DIRETO'] if 'tipo_norm' in df_base.columns else df_base[df_base['Tipo'] == 'Direto']
+        )
         col_on = 'origem_norm' if 'origem_norm' in df_diretos.columns else 'Origem'
         coldn = 'destino_norm' if 'destino_norm' in df_diretos.columns else 'Destino'
         val_on = origem_norm if col_on == 'origem_norm' else origem_norm
