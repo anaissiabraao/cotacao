@@ -221,7 +221,7 @@ USUARIOS_SISTEMA.update({
     },
     'gabriel.controladoria': {
         'senha': '1234', 'tipo': 'controladoria', 'nome': 'Gabriel (Controladoria)',
-        'permissoes': ['calcular', 'historico', 'exportar']
+        'permissoes': ['calcular', 'historico', 'exportar', 'admin']
     },
     'leo.controladoria': {
         'senha': '1234', 'tipo': 'controladoria', 'nome': 'Leo (Controladoria)',
