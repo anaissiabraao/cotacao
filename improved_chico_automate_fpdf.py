@@ -12,6 +12,7 @@ import re
 import unicodedata
 import json
 import uuid
+import urllib.parse
 from dotenv import load_dotenv
 import tempfile
 from functools import lru_cache, wraps
@@ -179,6 +180,55 @@ USUARIOS_SISTEMA = {
         'tipo': 'administrador',
         'nome': 'Administrador',
         'permissoes': ['calcular', 'historico', 'exportar', 'logs', 'setup', 'admin']
+    },
+    # Novos usuários solicitados (senha padrão 1234)
+    'tiago.comercial': {
+        'senha': '1234',
+        'tipo': 'comercial',
+        'nome': 'Tiago (Comercial)',
+        'permissoes': ['calcular', 'historico', 'exportar']
+    },
+    'sabrina.comercial': {
+        'senha': '1234',
+        'tipo': 'comercial',
+        'nome': 'Sabrina (Comercial)',
+        'permissoes': ['calcular', 'historico', 'exportar']
+    },
+    'uriel.comercial': {
+        'senha': '1234',
+        'tipo': 'comercial',
+        'nome': 'Uriel (Comercial)',
+        'permissoes': ['calcular', 'historico', 'exportar']
+    },
+    'caio.comercial': {
+        'senha': '1234',
+        'tipo': 'comercial',
+        'nome': 'Caio (Comercial)',
+        'permissoes': ['calcular', 'historico', 'exportar']
+    },
+    'stefany.comercial': {
+        'senha': '1234',
+        'tipo': 'comercial',
+        'nome': 'Stefany (Comercial)',
+        'permissoes': ['calcular', 'historico', 'exportar']
+    },
+    'gabriel.controladoria': {
+        'senha': '1234',
+        'tipo': 'controladoria',
+        'nome': 'Gabriel (Controladoria)',
+        'permissoes': ['calcular', 'historico', 'exportar']
+    },
+    'leo.controladoria': {
+        'senha': '1234',
+        'tipo': 'controladoria',
+        'nome': 'Leo (Controladoria)',
+        'permissoes': ['calcular', 'historico', 'exportar']
+    },
+    'chico.controladoria': {
+        'senha': '1234',
+        'tipo': 'controladoria',
+        'nome': 'Chico (Controladoria)',
+        'permissoes': ['calcular', 'historico', 'exportar']
     }
 }
 
@@ -450,6 +500,10 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"  # Compatibilidade com AJAX
 # Configurações para evitar cache
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
+# Configuração OAuth Google - Produção
+app.config['GOOGLE_OAUTH_CLIENT_ID'] = os.getenv('GOOGLE_OAUTH_CLIENT_ID', '1003471136320-kgbh8cgr04qk18fcgc7pqe20np5a7shq.apps.googleusercontent.com')
+app.config['GOOGLE_OAUTH_CLIENT_SECRET'] = os.getenv('GOOGLE_OAUTH_CLIENT_SECRET', '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')
+
 # Desabilitar cache em todas as respostas
 @app.after_request
 def after_request(response):
@@ -533,6 +587,103 @@ def logout():
         flash('Logout realizado com sucesso!', 'info')
     
     return redirect(url_for('login'))
+
+# Login com Google OAuth
+@app.route('/login/google')
+def login_google():
+    try:
+        client_id = app.config.get('GOOGLE_OAUTH_CLIENT_ID')
+        redirect_uri = url_for('google_auth_callback', _external=True)
+        state = uuid.uuid4().hex
+        session['oauth_state'] = state
+        params = {
+            'client_id': client_id,
+            'redirect_uri': redirect_uri,
+            'response_type': 'code',
+            'scope': 'openid email profile',
+            'state': state,
+            'access_type': 'offline',
+            'prompt': 'select_account'
+        }
+        auth_url = 'https://accounts.google.com/o/oauth2/v2/auth?' + urllib.parse.urlencode(params)
+        return redirect(auth_url)
+    except Exception as e:
+        print(f"[OAUTH] Erro ao iniciar login Google: {e}")
+        flash('Erro ao iniciar login com Google.', 'error')
+        return redirect(url_for('login'))
+
+@app.route('/auth/google/callback')
+def google_auth_callback():
+    try:
+        code = request.args.get('code')
+        state = request.args.get('state')
+        if not code or not state or state != session.get('oauth_state'):
+            flash('Requisição inválida de login Google.', 'error')
+            return redirect(url_for('login'))
+
+        token_url = 'https://oauth2.googleapis.com/token'
+        redirect_uri = url_for('google_auth_callback', _external=True)
+        data = {
+            'code': code,
+            'client_id': app.config.get('GOOGLE_OAUTH_CLIENT_ID'),
+            'client_secret': app.config.get('GOOGLE_OAUTH_CLIENT_SECRET'),
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code'
+        }
+        token_resp = requests.post(token_url, data=data, timeout=10)
+        token_json = token_resp.json()
+        access_token = token_json.get('access_token')
+        if not access_token:
+            print(f"[OAUTH] Token response: {token_json}")
+            flash('Não foi possível autenticar com o Google.', 'error')
+            return redirect(url_for('login'))
+
+        userinfo_resp = requests.get(
+            'https://openidconnect.googleapis.com/v1/userinfo',
+            headers={'Authorization': f'Bearer {access_token}'},
+            timeout=10
+        )
+        userinfo = userinfo_resp.json()
+        email = (userinfo.get('email') or '').lower().strip()
+        nome = userinfo.get('name') or email
+        if not email:
+            flash('Conta Google sem e-mail disponível.', 'error')
+            return redirect(url_for('login'))
+
+        # Estratégia de vinculação: parte antes do @ deve existir como usuário do sistema
+        username = email.split('@')[0]
+        if username in USUARIOS_SISTEMA:
+            # Efetivar login
+            session.clear()
+            session['usuario_logado'] = username
+            session['tipo_usuario'] = USUARIOS_SISTEMA[username]['tipo']
+            session['nome_usuario'] = USUARIOS_SISTEMA[username]['nome']
+            session.permanent = True
+
+            ip_cliente = obter_ip_cliente()
+            log_acesso(username, 'LOGIN_GOOGLE_SUCESSO', ip_cliente, f"Login via Google: {email}")
+            flash(f'Bem-vindo, {USUARIOS_SISTEMA[username]["nome"]}!', 'success')
+            return redirect(url_for('index'))
+
+        # Alternativa: procurar por campo 'email' cadastrado no usuário
+        for user, dados in USUARIOS_SISTEMA.items():
+            if str(dados.get('email', '')).lower().strip() == email:
+                session.clear()
+                session['usuario_logado'] = user
+                session['tipo_usuario'] = dados['tipo']
+                session['nome_usuario'] = dados['nome']
+                session.permanent = True
+                ip_cliente = obter_ip_cliente()
+                log_acesso(user, 'LOGIN_GOOGLE_SUCESSO', ip_cliente, f"Login via Google: {email}")
+                flash(f'Bem-vindo, {dados["nome"]}!', 'success')
+                return redirect(url_for('index'))
+
+        flash('Sua conta Google não está vinculada a um usuário do sistema.', 'error')
+        return redirect(url_for('login'))
+    except Exception as e:
+        print(f"[OAUTH] Erro no callback do Google: {e}")
+        flash('Erro ao autenticar com o Google.', 'error')
+        return redirect(url_for('login'))
 
 # Health check endpoint para Render
 @app.route("/health")
