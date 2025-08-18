@@ -1,4 +1,5 @@
 /* === FRETE FRACIONADO - DESIGN LIMPO E MODERNO === */
+:root { color-scheme: light dark; }
 
 /* Container principal das informações da rota */
 .info-rota-fracionado {
@@ -635,3 +636,19 @@
         grid-template-columns: 1fr !important;
     }
 } 
+
+/* Acessibilidade: adaptações para Forced Colors (modo alto contraste moderno) */
+@media (forced-colors: active) {
+  * { forced-color-adjust: auto; }
+  .opcao-fracionado, .info-rota-fracionado, .prazo-info, .detalhes-container, .result-table, .analise-container {
+    background: Canvas !important;
+    color: CanvasText !important;
+    border-color: CanvasText !important;
+  }
+  .btn-detalhes, .btn-secondary {
+    background: ButtonFace !important;
+    color: ButtonText !important;
+    border: 1px solid CanvasText !important;
+  }
+  :focus { outline: 2px solid Highlight; outline-offset: 2px; }
+}

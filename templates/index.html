@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#1e3c72">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -32,6 +33,46 @@
         .btn-info { background: #17a2b8; color: #fff; border: none; border-radius: 6px; padding: 6px 12px; text-decoration: none; font-weight: 500; font-size: 0.8rem; cursor: pointer; transition: all 0.3s; margin: 2px; }
         .btn-info:hover { background: #138496; color: #fff; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(23, 162, 184, 0.3); }
         .tabs { display: flex; justify-content: center; margin: 32px 0 0 0; border-bottom: 2px solid #e3e8ee; }
+        /* Tabs verticais (coluna esquerda com auto-hide) */
+        .tabs-vertical { position: relative; padding-left: 52px; }
+        .tabs-vertical .tabs-toggle { position: absolute; left: 0; top: 0; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: #1e3c72; color: #fff; border-radius: 8px; cursor: pointer; opacity: .7; transition: opacity .2s; }
+        .tabs-vertical .tabs-toggle:hover { opacity: 1; }
+        .tabs-vertical .tabs-list { position: fixed; left: 10px; top: 120px; display: flex; flex-direction: column; gap: 8px; padding: 10px; background: rgba(255,255,255,.95); border-radius: 10px; box-shadow: 0 6px 18px rgba(0,0,0,.12); border: 1px solid #e5e7eb; transform: translateX(-140%); transition: transform .25s ease, opacity .25s ease; opacity: 0; z-index: 9999; }
+        .tabs-vertical:hover .tabs-list, .tabs-vertical .tabs-list:focus-within { transform: translateX(0); opacity: 1; }
+        .tabs-vertical .tab-btn { display: flex; align-items: center; gap: 8px; background: #f8fafc; color: #1f2937; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px; white-space: nowrap; }
+        .tabs-vertical .tab-btn.active { background: #1e3c72; color: #fff; border-color: #1e3c72; }
+        .tabs-vertical .tab-btn i { width: 18px; text-align: center; }
+        .tabs-vertical .tab-btn span { font-size: .9rem; }
+        html[data-theme="dark"] .tabs-vertical .tabs-list { background: rgba(30,41,59,.95); border-color: #334155; }
+        html[data-theme="dark"] .tabs-vertical .tab-btn { background: #0f172a; color: #e2e8f0; border-color: #334155; }
+        html[data-theme="dark"] .tabs-vertical .tab-btn.active { background: #334155; border-color: #334155; }
+        @media (max-width: 992px) { .tabs-vertical .tabs-list { top: 90px; } }
+
+        /* ===== THEME: DARK OVERRIDES (PAGE LEVEL) ===== */
+        html[data-theme="dark"] body { background: #0b1220; color: #e2e8f0; }
+        html[data-theme="dark"] .card { background: #0f172a; box-shadow: 0 1px 10px rgba(0,0,0,.6); }
+        html[data-theme="dark"] .tabs { border-bottom-color: #243244; }
+        html[data-theme="dark"] .tab-btn { color: #93c5fd; }
+        html[data-theme="dark"] .tab-btn.active { background: #0a6ed1; color: #fff; border-bottom-color: #ff9800; }
+        html[data-theme="dark"] .btn-primary { background: linear-gradient(135deg, #fb923c, #f59e0b); color:#0b1220; }
+        html[data-theme="dark"] .btn-primary:hover { background: #f59e0b; }
+        html[data-theme="dark"] .btn-secondary { background: #334155; }
+        html[data-theme="dark"] .btn-secondary:hover { background: #475569; }
+        html[data-theme="dark"] .form-group input,
+        html[data-theme="dark"] .form-group select,
+        html[data-theme="dark"] .select2-standard,
+        html[data-theme="dark"] input[type="number"],
+        html[data-theme="dark"] input[type="text"] {
+            background: #0b1220;
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+        html[data-theme="dark"] .form-group label { color: #e2e8f0; }
+        html[data-theme="dark"] .calculadora-content { background: #0f172a; }
+        html[data-theme="dark"] .calculadora-header { background: linear-gradient(135deg, #1e293b, #0f172a); }
+        html[data-theme="dark"] .calculadora-actions { background: #0b1220; border-top-color: #243244; }
+        html[data-theme="dark"] .calc-btn-primary { background: linear-gradient(135deg, #10b981, #059669); }
+        html[data-theme="dark"] .calc-btn-secondary { background: #475569; }
         .tab-btn { background: none; border: none; font-size: 1.1rem; font-weight: 700; color: #0a6ed1; padding: 14px 32px 10px 32px; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.2s; }
         .tab-btn.active { color: #fff; background: #0a6ed1; border-bottom: 3px solid #ff9800; }
         .tab-content { display: none; max-width: 1200px; margin: 0 auto; }
@@ -860,9 +901,9 @@
         .calculadora-content {
             background: #fff;
             border-radius: 15px;
-            width: 95%;
-            max-width: 900px;
-            max-height: 85vh;
+            width: 88%;
+            max-width: 680px;
+            max-height: 70vh;
             overflow: hidden;
             box-shadow: 0 20px 40px rgba(0,0,0,0.15);
             animation: modalSlideIn 0.3s ease-out;
@@ -909,9 +950,28 @@
         }
 
         .calculadora-body {
-            padding: 25px;
-            max-height: 60vh;
+            padding: 16px;
+            max-height: 50vh;
             overflow-y: auto;
+        }
+
+        /* Acessibilidade: adaptações para Forced Colors (modo alto contraste moderno) */
+        @media (forced-colors: active) {
+            * { forced-color-adjust: auto; }
+            .calculadora-content, .calculadora-header, .calculadora-actions {
+                background: Canvas !important;
+                color: CanvasText !important;
+                border-color: CanvasText !important;
+            }
+            .calc-btn-primary, .calc-btn-secondary {
+                background: ButtonFace !important;
+                color: ButtonText !important;
+                border: 1px solid CanvasText !important;
+            }
+            .calc-btn-primary:hover, .calc-btn-secondary:hover {
+                outline: 2px solid Highlight !important;
+                outline-offset: 2px;
+            }
         }
 
         .calc-total-volumes {
@@ -1127,11 +1187,13 @@
 
         .calculadora-actions {
             border-top: 1px solid #e5e7eb;
-            padding: 20px 25px;
+            padding: 12px 16px;
             display: flex;
-            gap: 15px;
+            gap: 10px;
             justify-content: flex-end;
             background: #f9fafb;
+            position: sticky;
+            bottom: 0;
         }
         
         .calc-btn-secondary {
@@ -1139,7 +1201,7 @@
             color: white;
             border: none;
             border-radius: 8px;
-            padding: 12px 24px;
+            padding: 10px 16px;
             cursor: pointer;
             font-weight: 600;
             transition: all 0.2s ease;
@@ -1155,7 +1217,7 @@
             color: white;
             border: none;
             border-radius: 8px;
-            padding: 12px 24px;
+            padding: 10px 16px;
             cursor: pointer;
             font-weight: 600;
             transition: all 0.2s ease;
@@ -1264,31 +1326,43 @@
         </div>
     </header>
 
-    <div class="tabs">
-                        <button class="tab-btn" onclick="openTab(event, 'all-in')" aria-controls="all-in">
-            <i class="fa-solid fa-globe"></i> All In
-        </button>
-        <button class="tab-btn active" onclick="openTab(event, 'fracionado')" aria-controls="fracionado">
-            <i class="fa-solid fa-box"></i> Frete Fracionado
-        </button>
-        <button class="tab-btn" onclick="openTab(event, 'dedicado')" aria-controls="dedicado">
-            <i class="fa-solid fa-truck"></i> Frete Dedicado
-        </button>
-        <button class="tab-btn" onclick="openTab(event, 'aereo')" aria-controls="aereo">
-            <i class="fa-solid fa-plane"></i> Frete Aéreo
-        </button>
-        <button class="tab-btn" onclick="openTab(event, 'melhor-envio')" aria-controls="melhor-envio">
-            <i class="fa-solid fa-truck-fast"></i> Melhor Envio
-        </button>
-        <button class="tab-btn" onclick="openTab(event, 'historico')" aria-controls="historico">
-            <i class="fa-solid fa-history"></i> Histórico
-        </button>
-        <button class="tab-btn" onclick="openTab(event, 'dashboard')" aria-controls="dashboard">
-            <i class="fa-solid fa-chart-line"></i> Dashboard
-        </button>
-        <button class="tab-btn" onclick="openTab(event, 'mapa')" aria-controls="mapa">
-            <i class="fa-solid fa-map-location-dot"></i> Mapa
-        </button>
+    <div class="tabs tabs-vertical">
+        <div class="tabs-toggle" title="Mostrar opções">
+            <i class="fa-solid fa-bars"></i>
+        </div>
+        <nav class="tabs-list" aria-label="Navegação de abas">
+            <button class="tab-btn" onclick="openTab(event, 'all-in')" aria-controls="all-in">
+                <i class="fa-solid fa-globe"></i> <span>All In</span>
+            </button>
+            <button class="tab-btn active" onclick="openTab(event, 'fracionado')" aria-controls="fracionado">
+                <i class="fa-solid fa-box"></i> <span>Frete Fracionado</span>
+            </button>
+            <button class="tab-btn" onclick="openTab(event, 'dedicado')" aria-controls="dedicado">
+                <i class="fa-solid fa-truck"></i> <span>Frete Dedicado</span>
+            </button>
+            <button class="tab-btn" onclick="openTab(event, 'aereo')" aria-controls="aereo">
+                <i class="fa-solid fa-plane"></i> <span>Frete Aéreo</span>
+            </button>
+            <button class="tab-btn" onclick="openTab(event, 'melhor-envio')" aria-controls="melhor-envio">
+                <i class="fa-solid fa-truck-fast"></i> <span>Melhor Envio</span>
+            </button>
+            <button class="tab-btn" onclick="openTab(event, 'historico')" aria-controls="historico">
+                <i class="fa-solid fa-history"></i> <span>Histórico</span>
+            </button>
+            <button class="tab-btn" onclick="openTab(event, 'dashboard')" aria-controls="dashboard">
+                <i class="fa-solid fa-chart-line"></i> <span>Dashboard</span>
+            </button>
+            <button class="tab-btn" onclick="openTab(event, 'mapa')" aria-controls="mapa">
+                <i class="fa-solid fa-map-location-dot"></i> <span>Mapa</span>
+            </button>
+            <div class="tabs-theme">
+                <label class="theme-switch" title="Alternar tema claro/escuro">
+                    <input type="checkbox" id="themeToggle" onchange="toggleTheme(this.checked)">
+                    <span class="slider"></span>
+                    <span class="label">Dark</span>
+                </label>
+            </div>
+        </nav>
     </div>
     <div id="all-in" class="tab-content active">
         <div class="card">
@@ -1752,29 +1826,7 @@
                         </small>
                     </div>
                 </div>
-                <div class="form-grid cubagem-calculator">
-                    <div class="form-group">
-                        <label for="largura_frac">
-                            <i class="fa-solid fa-arrows-left-right"></i> Largura (m):
-                        </label>
-                        <input type="number" id="largura_frac" name="largura_frac" step="0.01" min="0.01" 
-                               class="dimensao-input" placeholder="Ex: 1.20" onchange="calcularCubagem()" oninput="calcularCubagem()">
-                    </div>
-                    <div class="form-group">
-                        <label for="altura_frac">
-                            <i class="fa-solid fa-arrows-up-down"></i> Altura (m):
-                        </label>
-                        <input type="number" id="altura_frac" name="altura_frac" step="0.01" min="0.01" 
-                               class="dimensao-input" placeholder="Ex: 0.80" onchange="calcularCubagem()" oninput="calcularCubagem()">
-                    </div>
-                    <div class="form-group">
-                        <label for="comprimento_frac">
-                            <i class="fa-solid fa-ruler"></i> Comprimento (m):
-                        </label>
-                        <input type="number" id="comprimento_frac" name="comprimento_frac" step="0.01" min="0.01" 
-                               class="dimensao-input" placeholder="Ex: 2.40" onchange="calcularCubagem()" oninput="calcularCubagem()">
-                    </div>
-                </div>
+                
 
                 <!-- Calculadora Avançada Modal -->
                 <div id="calculadora-modal" class="calculadora-modal" style="display: none;">
@@ -3157,6 +3209,26 @@
                 fecharCalculadoraAvancada();
             }
         }
+
+        // Tema claro/escuro
+        function toggleTheme(isDark) {
+            const root = document.documentElement;
+            if (isDark) {
+                root.setAttribute('data-theme', 'dark');
+                localStorage.setItem('theme', 'dark');
+            } else {
+                root.setAttribute('data-theme', 'light');
+                localStorage.setItem('theme', 'light');
+            }
+        }
+        // Inicializar tema salvo
+        (function initTheme() {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'dark') {
+                document.documentElement.setAttribute('data-theme','dark');
+                const t = document.getElementById('themeToggle'); if (t) t.checked = true;
+            }
+        })();
         
         // Função para adicionar um novo SKU
         function adicionarSku() {
@@ -3333,8 +3405,16 @@
             `;
         }
         
-        // Função para aplicar a cubagem calculada no campo principal
-        function aplicarCubagemCalculada() {
+        // Utilitário para localizar o campo de cubagem do fracionado de forma resiliente
+        function obterCampoCubagemFracionado() {
+            let el = document.getElementById('cubagem_frac');
+            if (!el) el = document.querySelector('input[name="cubagem_frac"]');
+            if (!el) el = document.querySelector('.cubagem-resultado');
+            return el;
+        }
+
+        // Função para aplicar a cubagem calculada no campo principal (exposta no escopo global)
+        window.aplicarCubagemCalculada = function aplicarCubagemCalculada() {
             const totalCubagem = skusData.reduce((sum, sku) => sum + sku.cubagem_total, 0);
             
             if (totalCubagem > 0) {
@@ -3342,7 +3422,48 @@
                 cubagemManual = true;
                 
                 // Aplicar valor
-            document.getElementById('cubagem_frac').value = totalCubagem.toFixed(3);
+            const cubField = obterCampoCubagemFracionado();
+            if (cubField) {
+                const valor = Number(totalCubagem.toFixed(3));
+                // Aplicar via propriedade e atributo, para evitar problemas de binding
+                cubField.value = valor;
+                cubField.setAttribute('value', String(valor));
+                // Validar e marcar manual
+                try { cubField.setCustomValidity(''); } catch (_) {}
+                try { if (typeof marcarCubagemManual === 'function') marcarCubagemManual(); } catch (_) {}
+                // Disparar eventos para atualizar binds/validações
+                try {
+                    cubField.dispatchEvent(new Event('input', { bubbles: true }));
+                    cubField.dispatchEvent(new Event('change', { bubbles: true }));
+                } catch (_) {}
+                // Reforço assíncrono
+                setTimeout(() => {
+                    try {
+                        cubField.dispatchEvent(new Event('input', { bubbles: true }));
+                        cubField.dispatchEvent(new Event('change', { bubbles: true }));
+                    } catch (_) {}
+                }, 80);
+                // Realçar e rolar até o campo
+                cubField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                // Fallback: tentar obter valor do resumo do cálculo
+                const resumo = document.getElementById('resumo-calculo');
+                if (resumo) {
+                    const match = (resumo.textContent || '').match(/([0-9]+\.[0-9]{3})\s*m³|([0-9]+,[0-9]{3})\s*m³/);
+                    const textoValor = match ? (match[1] || match[2]) : null;
+                    if (textoValor) {
+                        const parsed = Number(String(textoValor).replace(',', '.'));
+                        const altField = document.querySelector('#cubagem_frac, input[name="cubagem_frac"], .cubagem-resultado');
+                        if (altField) {
+                            altField.value = Number(parsed.toFixed(3));
+                            try {
+                                altField.dispatchEvent(new Event('input', { bubbles: true }));
+                                altField.dispatchEvent(new Event('change', { bubbles: true }));
+                            } catch (_) {}
+                        }
+                    }
+                }
+            }
             
                 // Atualizar fórmula texto
             const formulaTexto = document.getElementById('formula-texto');
@@ -3351,19 +3472,23 @@
             formulaTexto.style.fontWeight = '600';
             
             // Feedback visual
-            const cubagemField = document.getElementById('cubagem_frac');
-                cubagemField.style.backgroundColor = '#ecfdf5';
-                cubagemField.style.borderColor = '#059669';
+            const cubagemField = obterCampoCubagemFracionado();
+                if (cubagemField) {
+                    cubagemField.style.backgroundColor = '#ecfdf5';
+                    cubagemField.style.borderColor = '#059669';
+                }
             
             setTimeout(() => {
-                cubagemField.style.backgroundColor = '';
-                cubagemField.style.borderColor = '';
+                if (cubagemField) {
+                    cubagemField.style.backgroundColor = '';
+                    cubagemField.style.borderColor = '';
+                }
             }, 1000);
             
                 // Limpar campos de dimensão simples
-            document.getElementById('largura_frac').value = '';
-            document.getElementById('altura_frac').value = '';
-            document.getElementById('comprimento_frac').value = '';
+            const lf = document.getElementById('largura_frac'); if (lf) lf.value = '';
+            const af = document.getElementById('altura_frac'); if (af) af.value = '';
+            const cf = document.getElementById('comprimento_frac'); if (cf) cf.value = '';
                 
                 // Fechar modal
                 fecharCalculadoraAvancada();
