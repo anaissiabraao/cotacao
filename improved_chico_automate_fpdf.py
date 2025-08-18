@@ -1207,8 +1207,13 @@ def carregar_base_unificada_db_only():
             print(f"[BASE] ⚠️ Falha ao reconstruir recortes do cache: {_cache_rebuild_err}")
         return _BASE_UNIFICADA_CACHE
         
-    # Tentar PostgreSQL primeiro
+    # Tentar PostgreSQL primeiro (a menos que desabilitado nas configurações)
     try:
+        try:
+            if 'ADMIN_CONFIG' in globals() and not ADMIN_CONFIG.get('use_db', True):
+                raise RuntimeError('PostgreSQL desabilitado via configurações do Admin')
+        except Exception:
+            pass
         import psycopg2
         db_url = (
             os.getenv("DATABASE_URL")
@@ -1701,6 +1706,93 @@ def log_acesso(usuario, acao, ip, detalhes=""):
         LOGS_SISTEMA.pop(0)
     
     print(f"[LOG] {log_entry['data_hora']} - {usuario} - {acao} - IP: {ip}")
+
+# Configurações administrativas editáveis em tempo de execução
+if 'ADMIN_CONFIG' not in globals():
+    try:
+        ADMIN_CONFIG = {
+            'use_db': True,  # Tentar PostgreSQL antes do CSV
+            'cache_rotas_ttl': _CACHE_ROTAS_TTL,
+            'cache_base_ttl': _CACHE_VALIDADE_BASE,
+            'verbose_logs': False,
+        }
+    except NameError:
+        ADMIN_CONFIG = {
+            'use_db': True,
+            'cache_rotas_ttl': 900,
+            'cache_base_ttl': 300,
+            'verbose_logs': False,
+        }
+
+# Último diagnóstico de conexão com o banco
+if '_ULTIMO_TESTE_DB' not in globals():
+    _ULTIMO_TESTE_DB = None
+
+def diagnosticar_conexao_db():
+    """Tenta conectar no PostgreSQL diretamente e retorna diagnóstico sem fallback para CSV."""
+    resultado = {
+        'ok': False,
+        'rows': 0,
+        'error': '',
+        'params': {},
+    }
+    try:
+        import psycopg2
+        db_url = (
+            os.getenv("DATABASE_URL")
+            or os.getenv("POSTGRES_URL")
+            or os.getenv("DATABASE_URL_INTERNAL")
+            or os.getenv("DATABASE_URI")
+            or None
+        )
+        conn = None
+        conn_params = {}
+        if db_url:
+            if "sslmode=" not in db_url:
+                sep = "&" if "?" in db_url else "?"
+                db_url = f"{db_url}{sep}sslmode=require"
+            conn = psycopg2.connect(db_url)
+            conn_params = {'via_url': True}
+        else:
+            db_name = os.getenv("DB_NAME", "base_unificada")
+            db_user = os.getenv("DB_USER", "postgres")
+            db_password = os.getenv("DB_PASSWORD", "")
+            db_host = os.getenv("DB_HOST", "localhost")
+            db_port = os.getenv("DB_PORT", "5432")
+            db_sslmode = os.getenv("DB_SSLMODE") or ("require" if "render.com" in str(db_host) else "prefer")
+            conn_params = {
+                'dbname': db_name,
+                'user': db_user,
+                'host': db_host,
+                'port': db_port,
+                'sslmode': db_sslmode,
+            }
+            conn = psycopg2.connect(
+                dbname=db_name,
+                user=db_user,
+                password=db_password,
+                host=db_host,
+                port=db_port,
+                sslmode=db_sslmode,
+            )
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM public.base_unificada")
+        count = cur.fetchone()[0] or 0
+        resultado['ok'] = True
+        resultado['rows'] = int(count)
+        resultado['params'] = conn_params
+        cur.close()
+        conn.close()
+    except Exception as e:
+        resultado['error'] = str(e)
+    finally:
+        try:
+            import datetime as _dt
+            resultado['timestamp'] = _dt.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        except Exception:
+            pass
+        globals()['_ULTIMO_TESTE_DB'] = resultado
+    return resultado
 
 def obter_ip_cliente():
     """Obtém o IP real do cliente considerando proxies"""
@@ -5628,10 +5720,94 @@ def admin_setup():
         ip_cliente = obter_ip_cliente()
         log_acesso(session.get('usuario_logado', 'DESCONHECIDO'), 'ADMIN_ACESSO_SETUP', ip_cliente, 'Acesso às configurações')
 
-        return render_template("admin_setup.html", info_sistema=info_sistema)
+        try:
+            return render_template("admin_setup.html", info_sistema=info_sistema, admin_config=ADMIN_CONFIG)
+        except UnicodeDecodeError as e:
+            # Fallback em caso de problema de encoding do template
+            print(f"[ADMIN] Template admin_setup.html com encoding inválido: {e}")
+            html = f"""
+            <html><head><meta charset='utf-8'><title>Configurações - Fallback</title></head>
+            <body style='font-family:Segoe UI, Arial, sans-serif; padding:20px;'>
+            <h2>Configurações do Sistema (Fallback)</h2>
+            <p>O template admin_setup.html apresentou problema de codificação. Exibindo visão simplificada.</p>
+            <h3>Status</h3>
+            <ul>
+                <li>Python: {info_sistema.get('versao_python','')}</li>
+                <li>Usuários: {info_sistema.get('usuarios_sistema',0)}</li>
+                <li>Logs: {info_sistema.get('logs_em_memoria',0)}</li>
+                <li>Histórico: {info_sistema.get('historico_pesquisas',0)}</li>
+                <li>Registros base: {info_sistema.get('total_registros',0)}</li>
+            </ul>
+            <h3>Preferências</h3>
+            <ul>
+                <li>Usar DB: {ADMIN_CONFIG.get('use_db', True)}</li>
+                <li>TTL rotas: {ADMIN_CONFIG.get('cache_rotas_ttl', 900)}s</li>
+                <li>TTL base: {ADMIN_CONFIG.get('cache_base_ttl', 300)}s</li>
+                <li>Logs verbosos: {ADMIN_CONFIG.get('verbose_logs', False)}</li>
+            </ul>
+            <p><a href='/admin'>Voltar</a></p>
+            </body></html>
+            """
+            return html
     except Exception as e:
         print(f"[ADMIN] Erro em /admin/setup: {e}")
         return redirect(url_for('admin_dashboard'))
+
+@app.route("/admin/setup/salvar", methods=["POST"])
+@middleware_admin
+def admin_setup_salvar():
+    try:
+        global _CACHE_ROTAS_TTL, _CACHE_VALIDADE_BASE
+        use_db = request.form.get('use_db') == 'on'
+        cache_rotas_ttl = int(request.form.get('cache_rotas_ttl') or _CACHE_ROTAS_TTL)
+        cache_base_ttl = int(request.form.get('cache_base_ttl') or _CACHE_VALIDADE_BASE)
+        verbose_logs = request.form.get('verbose_logs') == 'on'
+
+        ADMIN_CONFIG['use_db'] = use_db
+        ADMIN_CONFIG['cache_rotas_ttl'] = cache_rotas_ttl
+        ADMIN_CONFIG['cache_base_ttl'] = cache_base_ttl
+        ADMIN_CONFIG['verbose_logs'] = verbose_logs
+
+        _CACHE_ROTAS_TTL = cache_rotas_ttl
+        _CACHE_VALIDADE_BASE = cache_base_ttl
+
+        flash('Configurações salvas com sucesso.', 'success')
+    except Exception as e:
+        print(f"[ADMIN] Erro ao salvar configurações: {e}")
+        flash('Erro ao salvar configurações.', 'error')
+    return redirect(url_for('admin_setup'))
+
+@app.route("/admin/setup/testar-db", methods=["POST"])
+@middleware_admin
+def admin_setup_testar_db():
+    try:
+        diag = diagnosticar_conexao_db()
+        if diag.get('ok'):
+            flash(f"Conexão OK. Registros na tabela: {diag.get('rows',0):,}", 'success')
+        else:
+            flash(f"Falha na conexão com o DB: {diag.get('error','desconhecido')}", 'error')
+    except Exception as e:
+        print(f"[ADMIN] Erro ao testar DB: {e}")
+        flash('Erro inesperado ao testar DB.', 'error')
+    return redirect(url_for('admin_setup'))
+
+@app.route("/admin/setup/recarregar-base", methods=["POST"])
+@middleware_admin
+def admin_setup_recarregar_base():
+    try:
+        global _BASE_UNIFICADA_CACHE, _ULTIMO_CARREGAMENTO_BASE, _BASE_INDICES_PRONTOS
+        _BASE_UNIFICADA_CACHE = None
+        _ULTIMO_CARREGAMENTO_BASE = 0
+        _BASE_INDICES_PRONTOS = False
+        df = carregar_base_unificada()
+        if df is not None:
+            flash(f"Base recarregada: {len(df):,} registros.", 'success')
+        else:
+            flash("Falha ao recarregar a base.", 'error')
+    except Exception as e:
+        print(f"[ADMIN] Erro ao recarregar base: {e}")
+        flash('Erro inesperado ao recarregar base.', 'error')
+    return redirect(url_for('admin_setup'))
 
 @app.route("/admin/limpar-logs", methods=["POST"])
 @middleware_admin
