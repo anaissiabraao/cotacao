@@ -1152,7 +1152,60 @@ def carregar_base_unificada_db_only():
         _BASE_UNIFICADA_CACHE is not None
         and (tempo_atual - _ULTIMO_CARREGAMENTO_BASE) < _CACHE_VALIDADE_BASE
     ):
-                    return _BASE_UNIFICADA_CACHE
+        # Garantir que recortes estejam prontos mesmo no retorno por cache
+        try:
+            df_cached = _BASE_UNIFICADA_CACHE
+            needs_rebuild = (
+                not _BASE_INDICES_PRONTOS or
+                _DF_DIRETOS is None or len(_DF_DIRETOS) == 0 or
+                _DF_AGENTES is None or len(_DF_AGENTES) == 0 or
+                _DF_TRANSFERENCIAS is None or len(_DF_TRANSFERENCIAS) == 0
+            )
+            if needs_rebuild and df_cached is not None:
+                # Padronizar nomes de colunas do cache
+                try:
+                    df_cached.columns = df_cached.columns.astype(str).str.strip()
+                except Exception:
+                    pass
+                # Criar colunas auxiliares se ausentes
+                if 'origem_norm' not in df_cached.columns and 'Origem' in df_cached.columns:
+                    df_cached['origem_norm'] = (
+                        df_cached['Origem'].astype(str)
+                        .str.upper().str.normalize('NFKD').str.encode('ascii', 'ignore').str.decode('ascii').str.strip()
+                    )
+                if 'destino_norm' not in df_cached.columns and 'Destino' in df_cached.columns:
+                    df_cached['destino_norm'] = (
+                        df_cached['Destino'].astype(str)
+                        .str.upper().str.normalize('NFKD').str.encode('ascii', 'ignore').str.decode('ascii').str.strip()
+                    )
+                if 'fornecedor_upper' not in df_cached.columns and 'Fornecedor' in df_cached.columns:
+                    df_cached['fornecedor_upper'] = df_cached['Fornecedor'].astype(str).str.upper()
+                if 'tipo_norm' not in df_cached.columns and 'Tipo' in df_cached.columns:
+                    df_cached['tipo_norm'] = (
+                        df_cached['Tipo'].astype(str)
+                        .str.upper().str.normalize('NFKD').str.encode('ascii', 'ignore').str.decode('ascii').str.strip()
+                    )
+                if 'uf_upper' not in df_cached.columns and 'UF' in df_cached.columns:
+                    df_cached['uf_upper'] = df_cached['UF'].astype(str).str.upper()
+
+                # Recalcular recortes
+                if 'tipo_norm' in df_cached.columns:
+                    _DF_DIRETOS = df_cached[df_cached['tipo_norm'] == 'DIRETO'].copy()
+                    _DF_AGENTES = df_cached[df_cached['tipo_norm'] == 'AGENTE'].copy()
+                    _DF_TRANSFERENCIAS = df_cached[df_cached['tipo_norm'] == 'TRANSFERENCIA'].copy()
+                elif 'Tipo' in df_cached.columns:
+                    _DF_DIRETOS = df_cached[df_cached['Tipo'] == 'Direto'].copy()
+                    _DF_AGENTES = df_cached[df_cached['Tipo'] == 'Agente'].copy()
+                    _DF_TRANSFERENCIAS = df_cached[df_cached['Tipo'] == 'Transferência'].copy()
+                else:
+                    _DF_DIRETOS = df_cached.iloc[0:0]
+                    _DF_AGENTES = df_cached.iloc[0:0]
+                    _DF_TRANSFERENCIAS = df_cached.iloc[0:0]
+                _BASE_INDICES_PRONTOS = True
+                print(f"[BASE] 🔁 Rebuild recortes via cache | diretos={len(_DF_DIRETOS)} agentes={len(_DF_AGENTES)} transf={len(_DF_TRANSFERENCIAS)}")
+        except Exception as _cache_rebuild_err:
+            print(f"[BASE] ⚠️ Falha ao reconstruir recortes do cache: {_cache_rebuild_err}")
+        return _BASE_UNIFICADA_CACHE
         
     # Tentar PostgreSQL primeiro
     try:
@@ -1194,6 +1247,15 @@ def carregar_base_unificada_db_only():
         conn.close()
 
         df_base = pd.DataFrame(rows, columns=colnames)
+        # Garantir nomes de colunas sem espaços/BOM/artefatos
+        try:
+            df_base.columns = (
+                df_base.columns.astype(str)
+                .str.replace('\ufeff', '', regex=False)
+                .str.strip()
+            )
+        except Exception:
+            pass
         # Se o banco retornou vazio, forçar fallback CSV
         if df_base is None or len(df_base) == 0:
             raise RuntimeError("DB retornou 0 linhas para base_unificada")
@@ -1238,15 +1300,41 @@ def carregar_base_unificada_db_only():
                     .str.strip()
                 )
             except Exception:
-                df_base['tipo_norm'] = df_base['tipo_upper']
+                import unicodedata as _ud
+                df_base['tipo_norm'] = df_base['Tipo'].astype(str).apply(
+                    lambda x: _ud.normalize('NFKD', x).encode('ascii', 'ignore').decode('ascii')
+                ).str.upper().str.strip()
         if 'UF' in df_base.columns:
             df_base['uf_upper'] = df_base['UF'].astype(str).str.upper()
 
+        # Conversão de colunas numéricas que podem vir como string com vírgula decimal
+        try:
+            numeric_cols = [
+                'VALOR MÍNIMO ATÉ 10', '20', '30', '50', '70', '100', '150', '200', '300', '500',
+                'Acima 500', 'Acima 1000', 'Acima 2000', 'Pedagio (100 Kg)', 'EXCEDENTE', 'Seguro',
+                'Gris Min', 'Gris Exc', 'TDA', 'TAS', 'DESPACHO'
+            ]
+            for col in [c for c in numeric_cols if c in df_base.columns]:
+                with pd.option_context('mode.chained_assignment', None):
+                    df_base[col] = pd.to_numeric(
+                        df_base[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False),
+                        errors='coerce'
+                    ).fillna(0)
+        except Exception:
+            pass
+
         # Recortes
         if 'tipo_norm' in df_base.columns:
+            # Tentar match exato e, se vazio, usar contains
             _DF_DIRETOS = df_base[df_base['tipo_norm'] == 'DIRETO'].copy()
+            if len(_DF_DIRETOS) == 0:
+                _DF_DIRETOS = df_base[df_base['tipo_norm'].str.contains('DIRETO', na=False)].copy()
             _DF_AGENTES = df_base[df_base['tipo_norm'] == 'AGENTE'].copy()
+            if len(_DF_AGENTES) == 0:
+                _DF_AGENTES = df_base[df_base['tipo_norm'].str.contains('AGENTE', na=False)].copy()
             _DF_TRANSFERENCIAS = df_base[df_base['tipo_norm'] == 'TRANSFERENCIA'].copy()
+            if len(_DF_TRANSFERENCIAS) == 0:
+                _DF_TRANSFERENCIAS = df_base[df_base['tipo_norm'].str.contains('TRANSFER', na=False)].copy()
         elif 'Tipo' in df_base.columns:
             _DF_DIRETOS = df_base[df_base['Tipo'] == 'Direto'].copy()
             _DF_AGENTES = df_base[df_base['Tipo'] == 'Agente'].copy()
@@ -1256,6 +1344,14 @@ def carregar_base_unificada_db_only():
             _DF_AGENTES = df_base.iloc[0:0]
             _DF_TRANSFERENCIAS = df_base.iloc[0:0]
         _BASE_INDICES_PRONTOS = True
+        try:
+            tipos_info = (
+                df_base['tipo_norm'].value_counts(dropna=False).to_dict() if 'tipo_norm' in df_base.columns
+                else (df_base['Tipo'].astype(str).value_counts(dropna=False).to_dict() if 'Tipo' in df_base.columns else {})
+            )
+            print(f"[BASE] 📊 Tipos (DB): {tipos_info} | diretos={len(_DF_DIRETOS)} agentes={len(_DF_AGENTES)} transf={len(_DF_TRANSFERENCIAS)}")
+        except Exception:
+            pass
 
         _BASE_UNIFICADA_CACHE = df_base
         _ULTIMO_CARREGAMENTO_BASE = tempo_atual
@@ -1293,6 +1389,15 @@ def carregar_base_unificada_db_only():
                         cols = set(df_try.columns.str.strip())
                         if {'Fornecedor', 'Tipo', 'Origem', 'Destino'}.issubset(cols) or len(cols) > 6:
                             df_base = df_try
+                            # Padronizar nomes de colunas imediatamente após a leitura
+                            try:
+                                df_base.columns = (
+                                    df_base.columns.astype(str)
+                                    .str.replace('\ufeff', '', regex=False)
+                                    .str.strip()
+                                )
+                            except Exception:
+                                pass
                             print(f"[BASE] ✅ CSV lido com sep='{_sep}' encoding='{_enc}' colunas={len(cols)}")
                             break
                     except Exception:
@@ -1302,6 +1407,15 @@ def carregar_base_unificada_db_only():
             if df_base is None:
                 # Última tentativa simples
                 df_base = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+            # Garantir nomes de colunas sem espaços/BOM/artefatos
+            try:
+                df_base.columns = (
+                    df_base.columns.astype(str)
+                    .str.replace('\ufeff', '', regex=False)
+                    .str.strip()
+                )
+            except Exception:
+                pass
             # Ajustar tipos numéricos comuns após leitura como texto quando aplicável
             for col in ['Prazo']:
                 if col in df_base.columns:
@@ -1351,6 +1465,22 @@ def carregar_base_unificada_db_only():
             if 'UF' in df_base.columns:
                 df_base['uf_upper'] = df_base['UF'].astype(str).str.upper()
 
+            # Conversão de colunas numéricas que podem vir como string com vírgula decimal (CSV)
+            try:
+                numeric_cols = [
+                    'VALOR MÍNIMO ATÉ 10', '20', '30', '50', '70', '100', '150', '200', '300', '500',
+                    'Acima 500', 'Acima 1000', 'Acima 2000', 'Pedagio (100 Kg)', 'EXCEDENTE', 'Seguro',
+                    'Gris Min', 'Gris Exc', 'TDA', 'TAS', 'DESPACHO'
+                ]
+                for col in [c for c in numeric_cols if c in df_base.columns]:
+                    with pd.option_context('mode.chained_assignment', None):
+                        df_base[col] = pd.to_numeric(
+                            df_base[col].astype(str).str.replace('.', '', regex=False).str.replace(',', '.', regex=False),
+                            errors='coerce'
+                        ).fillna(0)
+            except Exception:
+                pass
+
             # Recortes
             if 'tipo_norm' in df_base.columns:
                 _DF_DIRETOS = df_base[df_base['tipo_norm'] == 'DIRETO'].copy()
@@ -1365,6 +1495,14 @@ def carregar_base_unificada_db_only():
                 _DF_AGENTES = df_base.iloc[0:0]
                 _DF_TRANSFERENCIAS = df_base.iloc[0:0]
             _BASE_INDICES_PRONTOS = True
+            try:
+                tipos_info = (
+                    df_base['tipo_norm'].value_counts(dropna=False).to_dict() if 'tipo_norm' in df_base.columns
+                    else (df_base['Tipo'].astype(str).value_counts(dropna=False).to_dict() if 'Tipo' in df_base.columns else {})
+                )
+                print(f"[BASE] 📊 Tipos (CSV): {tipos_info} | diretos={len(_DF_DIRETOS)} agentes={len(_DF_AGENTES)} transf={len(_DF_TRANSFERENCIAS)}")
+            except Exception:
+                pass
 
             _BASE_UNIFICADA_CACHE = df_base
             _ULTIMO_CARREGAMENTO_BASE = time.time()
@@ -2711,9 +2849,14 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         ].copy()
 
         base_transf = _DF_TRANSFERENCIAS if _BASE_INDICES_PRONTOS else df_base[df_base['Tipo'] == 'Transferência']
-        df_transferencias = base_transf[
-            ~base_transf['Fornecedor'].str.contains(r'EXPRESSO S\. MIGUEL', case=False, na=False)
-        ].copy()
+        # Não excluir EXPRESSO S. MIGUEL das transferências; necessário para rotas por bases
+        df_transferencias = base_transf.copy()
+
+        # Logs de diagnóstico (contagens)
+        try:
+            print(f"[AGENTES] 🔎 Totais: agentes={len(df_agentes)}, transferencias={len(df_transferencias)}")
+        except Exception:
+            pass
 
         # Mapeamentos cidade <-> código de base a partir das transferências (para conectar agentes)
         try:
@@ -2783,6 +2926,18 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         agentes_destino = df_agentes_destino_uf[
             df_agentes_destino_uf[col_on_norm] == destino_norm_str
         ]
+
+        # Fallback: se não houver agentes de entrega exatos no mesmo UF,
+        # relaxar o filtro de UF e procurar por cidade exata em toda a base de agentes
+        if agentes_destino.empty:
+            try:
+                agentes_destino = df_agentes[
+                    df_agentes[col_on_norm] == destino_norm_str
+                ]
+                if not agentes_destino.empty:
+                    print(f"[AGENTES] 🔎 Fallback: encontrados {len(agentes_destino)} agentes de entrega por cidade (ignorando UF)")
+            except Exception:
+                pass
         
         # 🔧 CORREÇÃO: Se origem e destino são do mesmo estado, filtrar agentes apenas do estado correto
         if uf_origem == uf_destino:
@@ -2840,6 +2995,10 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         
         print(f"[AGENTES] 📊 Agentes de coleta encontrados: {len(agentes_coleta)}")
         print(f"[AGENTES] 📊 Agentes de entrega encontrados: {len(agentes_entrega)}")
+        try:
+            print(f"[AGENTES] 📊 Transferências totais: {len(df_transferencias)} | diretas O→D: {len(transferencias_origem_destino)}")
+        except Exception:
+            pass
         
         # Buscar transferências entre bases (usar conjunto completo; filtros ocorrerão por conexão de base)
         transferencias_bases = df_transferencias.copy()
@@ -3061,6 +3220,14 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
             
             for _, agente_ent in agentes_entrega.iterrows():
                 for _, transferencia in transferencias_bases.iterrows():
+                    # Validar que a transferência aproxima a UF de destino (quando possível)
+                    try:
+                        transf_dest = transferencia.get('destino_norm') if 'destino_norm' in transferencia else normalizar_cidade_nome(str(transferencia.get('Destino', '')))
+                        if uf_destino_upper and isinstance(uf_destino_upper, str):
+                            # Se transferência leva para cidade do mesmo UF do destino final, priorizar
+                            pass
+                    except Exception:
+                        pass
                     
                     chave_rota = gerar_chave_rota(
                         "SEM_COLETA",
@@ -3143,6 +3310,68 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                 except Exception as e:
                     print(f"[AGENTES] ❌ Erro ao processar transferência: {e}")
                     continue
+
+        # 🆕 CENÁRIO 5: Rota parcial por bases do estado (sem coleta e sem agente de entrega)
+        # Cliente retira em uma base do estado de destino
+        elif agentes_entrega.empty and not transferencias_bases.empty:
+            try:
+                # Selecionar transferências que aproximem do destino: mesma UF do destino
+                transf_destino_uf = df_transferencias.copy()
+                if 'uf_upper' in df_transferencias.columns:
+                    transf_destino_uf = transf_destino_uf[transf_destino_uf['uf_upper'] == uf_destino_upper]
+                # E/ou cidade de destino igual (destino_norm)
+                dest_cols = [c for c in ['destino_norm', 'Destino'] if c in df_transferencias.columns]
+                if dest_cols:
+                    mask_dest = False
+                    for c in dest_cols:
+                        if c == 'destino_norm':
+                            mask_dest = mask_dest | (transf_destino_uf[c] == destino_norm)
+                        else:
+                            mask_dest = mask_dest | (transf_destino_uf[c].apply(lambda x: normalizar_cidade_nome(str(x)) == destino_norm))
+                    transf_destino_uf = transf_destino_uf[mask_dest | (transf_destino_uf['uf_upper'] == uf_destino_upper) if 'uf_upper' in transf_destino_uf.columns else mask_dest]
+                print(f"[AGENTES] 🔄 Criando rotas parciais por bases do estado: {len(transf_destino_uf)} transferências no UF de destino")
+                LIMITE_ROTAS_PARCIAIS = 20
+                count_adicionadas = 0
+                for _, transferencia in transf_destino_uf.iterrows():
+                    try:
+                        peso_cubado_transf = calcular_peso_cubado_por_tipo(
+                            peso_real, cubagem,
+                            transferencia.get('Tipo', 'Transferência'),
+                            transferencia.get('Fornecedor')
+                        )
+                        custo_transferencia = calcular_custo_agente(transferencia, peso_cubado_transf, valor_nf)
+                        if not custo_transferencia:
+                            continue
+                        rota = {
+                            'tipo_rota': 'transferencia_sem_entrega',
+                            'resumo': f"{formatar_nome_agente(transferencia.get('Fornecedor'))} (Transferência) + Retirada pelo cliente em {transferencia.get('Destino')}",
+                            'total': custo_transferencia['total'],
+                            'prazo_total': custo_transferencia.get('prazo', 1),
+                            'maior_peso': peso_cubado,
+                            'peso_usado': 'Real' if peso_real >= peso_cubado else 'Cubado',
+                            'detalhamento_custos': {
+                                'coleta': 0,
+                                'transferencia': custo_transferencia['total'],
+                                'entrega': 0,
+                                'pedagio': custo_transferencia.get('pedagio', 0),
+                                'gris_total': custo_transferencia.get('gris', 0)
+                            },
+                            'observacoes': f"Rota parcial por bases: cliente retira em {transferencia.get('Destino')} ({uf_destino})",
+                            'status_rota': 'PARCIAL_SEM_ENTREGA',
+                            'agente_coleta': None,
+                            'transferencia': custo_transferencia,
+                            'agente_entrega': None,
+                            'chave_unica': gerar_chave_rota('SEM_COLETA', transferencia.get('Fornecedor', 'N/A'), 'SEM_ENTREGA')
+                        }
+                        rotas_encontradas.append(rota)
+                        count_adicionadas += 1
+                        if count_adicionadas >= LIMITE_ROTAS_PARCIAIS:
+                            break
+                    except Exception as e:
+                        print(f"[AGENTES] ❌ Erro ao processar rota parcial por bases: {e}")
+                        continue
+            except Exception as e:
+                print(f"[AGENTES] ❌ Erro no cenário de bases do estado: {e}")
 
         # Retornar resultados encontrados
         rotas_encontradas.sort(key=lambda x: x['total'])
@@ -3621,6 +3850,27 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
     - Aplica valor mínimo para pesos até 10kg
     """
     try:
+        def _get(d, key, default=0):
+            try:
+                if key in d:
+                    return d.get(key)
+                return d.get(str(key), default)
+            except Exception:
+                try:
+                    return d.get(str(key), default)
+                except Exception:
+                    return default
+        def _parse_decimal(v):
+            try:
+                if v is None:
+                    return 0.0
+                if isinstance(v, (int, float)):
+                    return float(v)
+                s = str(v).strip().replace('%', '')
+                s = s.replace('.', '').replace(',', '.')
+                return float(s)
+            except Exception:
+                return 0.0
         # Validar peso_cubado
         if peso_cubado is None:
             print(f"[CUSTO] ❌ Erro: peso_cubado é None")
@@ -3740,7 +3990,10 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                     # Para pesos acima de 10kg, buscar faixa apropriada
                     if peso_calculo > 200:
                         # REUNIDAS: Acima de 200kg usa lógica de EXCEDENTE
-                        valor_200 = float(linha.get(200, 0))  # Valor base até 200kg
+                        try:
+                            valor_200 = float(linha.get('200', linha.get(200, 0)))  # Valor base até 200kg
+                        except Exception:
+                            valor_200 = 0.0
                         excedente_por_kg = float(linha.get('EXCEDENTE', 0))  # Valor por kg excedente
                         
                         if excedente_por_kg > 0:
@@ -3751,13 +4004,22 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                         else:
                             # Se não tiver excedente definido, usar faixa mais próxima
                             if peso_calculo > 500:
-                                valor_base = float(linha.get('Acima 500', linha.get(500, 0)))
+                                try:
+                                    valor_base = float(linha.get('Acima 500', linha.get('500', linha.get(500, 0))))
+                                except Exception:
+                                    valor_base = 0.0
                                 print(f"[CUSTO-REUNIDAS] ⚠️ Sem excedente definido, usando faixa >500kg: R$ {valor_base:.2f}")
                             elif peso_calculo > 300:
-                                valor_base = float(linha.get(500, 0))
+                                try:
+                                    valor_base = float(linha.get('500', linha.get(500, 0)))
+                                except Exception:
+                                    valor_base = 0.0
                                 print(f"[CUSTO-REUNIDAS] ⚠️ Sem excedente definido, usando faixa 500kg: R$ {valor_base:.2f}")
                             else:
-                                valor_base = float(linha.get(300, 0))
+                                try:
+                                    valor_base = float(linha.get('300', linha.get(300, 0)))
+                                except Exception:
+                                    valor_base = 0.0
                                 print(f"[CUSTO-REUNIDAS] ⚠️ Sem excedente definido, usando faixa 300kg: R$ {valor_base:.2f}")
                     else:
                         # Para pesos entre 10kg e 200kg, usar valor fixo da faixa
@@ -3768,7 +4030,13 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                         faixa_usada = None
                         for faixa in faixas_peso:
                             if peso_calculo <= faixa:
-                                valor_faixa = float(linha.get(faixa, 0))
+                                try:
+                                    valor_faixa = float(linha.get(str(faixa), 0))
+                                except Exception:
+                                    try:
+                                        valor_faixa = float(linha.get(faixa, 0))
+                                    except Exception:
+                                        valor_faixa = 0.0
                                 if valor_faixa > 0:  # Só usar se tiver valor
                                     valor_base = valor_faixa  # REUNIDAS usa valor fixo da faixa
                                     faixa_usada = faixa
@@ -3777,7 +4045,10 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
                         
                         if not faixa_usada:
                             # Se não encontrou faixa válida, usar a última disponível
-                            valor_base = float(linha.get(200, 0))
+                            try:
+                                valor_base = float(linha.get('200', linha.get(200, 0)))
+                            except Exception:
+                                valor_base = 0.0
                             print(f"[CUSTO-REUNIDAS] ⚠️ Usando faixa 200kg (padrão): Valor fixo R$ {valor_base:.2f}")
                     
                     custo_base = valor_base
@@ -3797,7 +4068,10 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
             print(f"[CUSTO-PTX] 🔧 Aplicando lógica específica para PTX: {fornecedor}")
             
             # PTX usa valores da tabela da base de dados multiplicados pelo peso
-            valor_por_kg = float(linha.get(20, 0))  # Usar coluna 20kg como base
+            try:
+                valor_por_kg = float(linha.get('20', linha.get(20, 0)))  # Usar coluna 20kg como base
+            except Exception:
+                valor_por_kg = 0.0
             if valor_por_kg == 0:
                 # Se não tiver valor na coluna 20, tentar outras colunas
                 for coluna in [10, 30, 50, 70, 100]:
