@@ -74,7 +74,7 @@ pip install -r requirements.txt
 python app.py
 
 # 5. Acessar no navegador
-http://localhost:5000
+http://localhost:8000
 ```
 
 ## 🏗️ Estrutura do Projeto
