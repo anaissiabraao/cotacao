@@ -163,14 +163,91 @@ _ULTIMO_CARREGAMENTO = 0
 _CACHE_VALIDADE = 300  # 5 minutos
 
 # Configuração do token do Melhor Envio
-MELHOR_ENVIO_TOKEN = os.environ.get('eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI5NTYiLCJqdGkiOiJlZTgxMWRiNmNhNjExOWVmOWVmZjEyMGFmMTljMDRlZjAwNzhlZGRmOWM4MTAyYzA1ZTI4ODg1NTA4NjYxOGIyYTIwMDc2YTA1MmRiYTAwMCIsImlhdCI6MTc1NTExMTg5MS45Nzc2NjEsIm5iZiI6MTc1NTExMTg5MS45Nzc2NjMsImV4cCI6MTc4NjY0Nzg5MS45Njk0MjksInN1YiI6IjlmYTA2MGVhLWVhODktNGRkNy05M2M3LTFhMjZkNWI3ZGM1MSIsInNjb3BlcyI6WyJjYXJ0LXJlYWQiLCJjYXJ0LXdyaXRlIiwiY29tcGFuaWVzLXJlYWQiLCJjb21wYW5pZXMtd3JpdGUiLCJjb3Vwb25zLXJlYWQiLCJjb3Vwb25zLXdyaXRlIiwibm90aWZpY2F0aW9ucy1yZWFkIiwib3JkZXJzLXJlYWQiLCJwcm9kdWN0cy1yZWFkIiwicHJvZHVjdHMtZGVzdHJveSIsInByb2R1Y3RzLXdyaXRlIiwicHVyY2hhc2VzLXJlYWQiLCJzaGlwcGluZy1jYWxjdWxhdGUiLCJzaGlwcGluZy1jYW5jZWwiLCJzaGlwcGluZy1jaGVja291dCIsInNoaXBwaW5nLWNvbXBhbmllcyIsInNoaXBwaW5nLWdlbmVyYXRlIiwic2hpcHBpbmctcHJldmlldyIsInNoaXBwaW5nLXByaW50Iiwic2hpcHBpbmctc2hhcmUiLCJzaGlwcGluZy10cmFja2luZyIsImVjb21tZXJjZS1zaGlwcGluZyIsInRyYW5zYWN0aW9ucy1yZWFkIiwidXNlcnMtcmVhZCIsInVzZXJzLXdyaXRlIiwid2ViaG9va3MtcmVhZCIsIndlYmhvb2tzLXdyaXRlIiwid2ViaG9va3MtZGVsZXRlIiwidGRlYWxlci13ZWJob29rIl19.AY552XtpFknBG-czXgZgPlgWhVkbn_SuJuWqttzfcdL02Na9-d1CGOu-J-j8JlDb_cEhN28lMehw4JgPYRgIbhe_-9VyoaP-4uwCWGhCvJWl5rHk2wAuWPXdKsnV4_e8kD0QJNXW7Zzv--oe-nMfJnUvt6onU0JUMpLUmd1PMc4l4BwceUMJUx-3-Nn1Xz2btrw71lM2uOZPAHKyaKL_z31ge8Gl0FL_PcXEtOzzMpoQhuXapUmjL1o-vGXOxrsdiA-gdoiW3Sb8VYL5-VDjzzNOod7tfvzj9E1Tp19447CWSuJm5rF-zKa447Sk71f_xw09I4O6iWqM9k9N2sB8sseTBF7NgOdR24V1equcYCGUqJCmqxcc5wjTNdwvG8bhwFL2WruXAAYVB2D_fAE0ehYg9jau8Ho-9BfhAU2KV-lB3bqZ0uApV-7atTVpfMKHJYXPanSzGvgDwS-kADYXXvjsSORxe_NfFyYQOCCt3nI9z1iQqJ4WVuFUUAmLu_mhfBJgEdlJg70oxYta6JFu3t4ecwFyoVte59NAXsuosah_J9jFmDsS-RXs5N8nHcUFMXGnSmeXGNPLUl3SU2P3vHEt7IVDoB6fVkr_meqoya85vhi1oJ7oi0IQdwIUNLKto_DsTWRYmJXf6dC5zdRb6k87MsOuMWsM8HF_ppyP5rE')
+MELHOR_ENVIO_TOKEN = os.getenv('MELHOR_ENVIO_TOKEN')
+MELHOR_ENVIO_API_BASE = os.getenv('MELHOR_ENVIO_API_BASE', 'https://api.melhorenvio.com.br')
+MELHOR_ENVIO_AUTH_BASE = os.getenv('MELHOR_ENVIO_AUTH_BASE', 'https://melhorenvio.com.br')
+MELHOR_ENVIO_CLIENT_ID = os.getenv('MELHOR_ENVIO_CLIENT_ID')
+MELHOR_ENVIO_CLIENT_SECRET = os.getenv('MELHOR_ENVIO_CLIENT_SECRET')
+MELHOR_ENVIO_SCOPE = os.getenv('MELHOR_ENVIO_SCOPE', '')
+
+# Cache de token Melhor Envio obtido via OAuth
+if '_MELHOR_ENVIO_TOKEN_CACHE' not in globals():
+    _MELHOR_ENVIO_TOKEN_CACHE = {'token': None, 'exp_ts': 0}
+
+def obter_token_melhor_envio() -> str:
+    """Obtém um token válido para a API Melhor Envio.
+    1) Usa MELHOR_ENVIO_TOKEN se definido (token manual).
+    2) Se não houver, tenta fluxo client_credentials com CLIENT_ID/SECRET.
+    3) Mantém cache em memória até expirar.
+    """
+    global _MELHOR_ENVIO_TOKEN_CACHE, MELHOR_ENVIO_TOKEN
+    try:
+        agora = time.time()
+        # Preferir token manual por variável de ambiente
+        if MELHOR_ENVIO_TOKEN:
+            return MELHOR_ENVIO_TOKEN
+        # Usar token em cache se válido
+        if _MELHOR_ENVIO_TOKEN_CACHE.get('token') and _MELHOR_ENVIO_TOKEN_CACHE.get('exp_ts', 0) - 60 > agora:
+            return _MELHOR_ENVIO_TOKEN_CACHE['token']
+        # Tentar client credentials
+        if not (MELHOR_ENVIO_CLIENT_ID and MELHOR_ENVIO_CLIENT_SECRET):
+            return None
+        token_url = f"{MELHOR_ENVIO_AUTH_BASE.rstrip('/')}/oauth/token"
+        # 1) Tentar client_secret_basic (Authorization: Basic base64(id:secret))
+        import base64 as _b64
+        basic = _b64.b64encode(f"{MELHOR_ENVIO_CLIENT_ID}:{MELHOR_ENVIO_CLIENT_SECRET}".encode('utf-8')).decode('utf-8')
+        form_headers = {'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'Authorization': f'Basic {basic}'}
+        form_payload = {'grant_type': 'client_credentials'}
+        if MELHOR_ENVIO_SCOPE:
+            form_payload['scope'] = MELHOR_ENVIO_SCOPE
+        resp = requests.post(token_url, data=form_payload, headers=form_headers, timeout=20)
+        # 2) Fallback: client_secret_post (id/secret no body, sem Basic)
+        if resp.status_code >= 400:
+            headers2 = {'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded'}
+            payload2 = {
+                'grant_type': 'client_credentials',
+                'client_id': MELHOR_ENVIO_CLIENT_ID,
+                'client_secret': MELHOR_ENVIO_CLIENT_SECRET,
+            }
+            if MELHOR_ENVIO_SCOPE:
+                payload2['scope'] = MELHOR_ENVIO_SCOPE
+            resp = requests.post(token_url, data=payload2, headers=headers2, timeout=20)
+        # 3) Último fallback em JSON
+        if resp.status_code >= 400:
+            headers3 = {'Accept':'application/json','Content-Type':'application/json'}
+            payload3 = {
+                'grant_type': 'client_credentials',
+                'client_id': MELHOR_ENVIO_CLIENT_ID,
+                'client_secret': MELHOR_ENVIO_CLIENT_SECRET,
+            }
+            if MELHOR_ENVIO_SCOPE:
+                payload3['scope'] = MELHOR_ENVIO_SCOPE
+            resp = requests.post(token_url, json=payload3, headers=headers3, timeout=20)
+        resp.raise_for_status()
+        data = resp.json() or {}
+        access_token = data.get('access_token') or data.get('token')
+        expires_in = int(data.get('expires_in', 3600))
+        if not access_token:
+            return None
+        _MELHOR_ENVIO_TOKEN_CACHE['token'] = access_token
+        _MELHOR_ENVIO_TOKEN_CACHE['exp_ts'] = agora + max(60, expires_in)
+        return access_token
+    except Exception as e:
+        try:
+            err_txt = resp.text if 'resp' in locals() else str(e)
+            status = resp.status_code if 'resp' in locals() else 'N/A'
+            print(f"[MelhorEnvio] Falha ao obter token ({status}): {err_txt}")
+        except Exception:
+            print(f"[MelhorEnvio] Falha ao obter token: {e}")
+        return None
 
 def _melhor_envio_headers():
-    """Monta os headers para chamadas à API do Melhor Envio."""
-    if not MELHOR_ENVIO_TOKEN:
+    """Monta headers com Bearer token válido da Melhor Envio (manual ou OAuth)."""
+    token = obter_token_melhor_envio()
+    if not token:
         return None
     return {
-        'Authorization': f'Bearer {MELHOR_ENVIO_TOKEN}',
+        'Authorization': f'Bearer {token}',
         'Accept': 'application/json',
         'Content-Type': 'application/json',
         'User-Agent': 'PortoExCotacao/1.0'
@@ -5720,8 +5797,11 @@ def admin_setup():
         ip_cliente = obter_ip_cliente()
         log_acesso(session.get('usuario_logado', 'DESCONHECIDO'), 'ADMIN_ACESSO_SETUP', ip_cliente, 'Acesso às configurações')
 
+        # Enriquecer admin_config com status de token do Melhor Envio
+        ADMIN_CONFIG['melhor_envio_token_ok'] = bool(os.getenv('MELHOR_ENVIO_TOKEN'))
+
         try:
-            return render_template("admin_setup.html", info_sistema=info_sistema, admin_config=ADMIN_CONFIG)
+            return render_template("admin_setup.html", info_sistema=info_sistema, admin_config=ADMIN_CONFIG, _ULTIMO_TESTE_DB=_ULTIMO_TESTE_DB)
         except UnicodeDecodeError as e:
             # Fallback em caso de problema de encoding do template
             print(f"[ADMIN] Template admin_setup.html com encoding inválido: {e}")
@@ -5762,11 +5842,21 @@ def admin_setup_salvar():
         cache_rotas_ttl = int(request.form.get('cache_rotas_ttl') or _CACHE_ROTAS_TTL)
         cache_base_ttl = int(request.form.get('cache_base_ttl') or _CACHE_VALIDADE_BASE)
         verbose_logs = request.form.get('verbose_logs') == 'on'
+        # Permitir salvar credenciais da Melhor Envio (opcional durante a sessão)
+        client_id = request.form.get('melhor_envio_client_id')
+        client_secret = request.form.get('melhor_envio_client_secret')
 
         ADMIN_CONFIG['use_db'] = use_db
         ADMIN_CONFIG['cache_rotas_ttl'] = cache_rotas_ttl
         ADMIN_CONFIG['cache_base_ttl'] = cache_base_ttl
         ADMIN_CONFIG['verbose_logs'] = verbose_logs
+        if client_id:
+            globals()['MELHOR_ENVIO_CLIENT_ID'] = client_id
+        if client_secret:
+            globals()['MELHOR_ENVIO_CLIENT_SECRET'] = client_secret
+        # Limpar cache de token para forçar novo
+        if '_MELHOR_ENVIO_TOKEN_CACHE' in globals():
+            globals()['_MELHOR_ENVIO_TOKEN_CACHE'] = {'token': None, 'exp_ts': 0}
 
         _CACHE_ROTAS_TTL = cache_rotas_ttl
         _CACHE_VALIDADE_BASE = cache_base_ttl
@@ -5789,6 +5879,32 @@ def admin_setup_testar_db():
     except Exception as e:
         print(f"[ADMIN] Erro ao testar DB: {e}")
         flash('Erro inesperado ao testar DB.', 'error')
+    return redirect(url_for('admin_setup'))
+
+@app.route("/admin/setup/testar-melhor-envio", methods=["POST"])
+@middleware_admin
+def admin_setup_testar_melhor_envio():
+    try:
+        token = obter_token_melhor_envio()
+        if not token:
+            flash('Não foi possível obter token da Melhor Envio. Configure MELHOR_ENVIO_TOKEN ou CLIENT_ID/SECRET.', 'error')
+            return redirect(url_for('admin_setup'))
+        headers = _melhor_envio_headers()
+        url = f"{MELHOR_ENVIO_API_BASE.rstrip('/')}/v2/companies"
+        resp = requests.get(url, headers=headers, timeout=20)
+        try:
+            data = resp.json()
+        except Exception:
+            data = []
+        if resp.status_code >= 400:
+            detalhe = data if isinstance(data, dict) else {'status': resp.status_code}
+            flash(f"Falha ao consultar transportadoras: {detalhe}", 'error')
+        else:
+            total = len(data or [])
+            flash(f"Autenticação OK. Transportadoras retornadas: {total}", 'success')
+    except Exception as e:
+        print(f"[ADMIN] Erro ao testar Melhor Envio: {e}")
+        flash('Erro inesperado ao testar Melhor Envio.', 'error')
     return redirect(url_for('admin_setup'))
 
 @app.route("/admin/setup/recarregar-base", methods=["POST"])
@@ -6045,7 +6161,7 @@ def melhor_envio_transportadoras():
 
         # Endpoint público de empresas (transportadoras)
         # Documentação: app.melhorenvio.com.br (requere token com escopos de leitura)
-        url = "https://api.melhorenvio.com.br/v2/companies"
+        url = f"{MELHOR_ENVIO_API_BASE.rstrip('/')}/v2/companies"
         resp = requests.get(url, headers=headers, timeout=20)
         resp.raise_for_status()
         data = resp.json()
@@ -6067,6 +6183,28 @@ def melhor_envio_transportadoras():
             "transportadoras": transportadoras
         })
     except requests.exceptions.HTTPError as e:
+        # Se for 401/403, limpar cache de token e tentar uma vez
+        status = resp.status_code if 'resp' in locals() else 0
+        if status in (401, 403):
+            if '_MELHOR_ENVIO_TOKEN_CACHE' in globals():
+                globals()['_MELHOR_ENVIO_TOKEN_CACHE'] = {'token': None, 'exp_ts': 0}
+            headers = _melhor_envio_headers()
+            if headers is not None:
+                try:
+                    resp2 = requests.get(url, headers=headers, timeout=20)
+                    resp2.raise_for_status()
+                    data2 = resp2.json()
+                    transportadoras = [{
+                        "id": item.get("id"),
+                        "nome": item.get("name"),
+                        "document": item.get("document"),
+                        "status": item.get("status"),
+                        "picture": item.get("picture"),
+                        "alias": item.get("alias"),
+                    } for item in (data2 or [])]
+                    return jsonify({"total": len(transportadoras), "transportadoras": transportadoras})
+                except Exception:
+                    pass
         try:
             payload = resp.json()
         except Exception:

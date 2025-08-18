@@ -69,6 +69,14 @@
                 <label class="label"><i class="fas fa-bug"></i> Logs Verbosos</label>
                 <input type="checkbox" name="verbose_logs" {% if admin_config.verbose_logs %}checked{% endif %} />
               </div>
+              <div class="field">
+                <label class="label">Melhor Envio - Client ID</label>
+                <input type="text" name="melhor_envio_client_id" value="" placeholder="Opcional (usa env se vazio)" />
+              </div>
+              <div class="field">
+                <label class="label">Melhor Envio - Client Secret</label>
+                <input type="text" name="melhor_envio_client_secret" value="" placeholder="Opcional (usa env se vazio)" />
+              </div>
               <div class="actions">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button>
                 <a href="/admin" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Voltar</a>
@@ -91,6 +99,9 @@
               </form>
               <form method="POST" action="/admin/setup/testar-db" style="display:inline-block">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-database"></i> Testar DB</button>
+              </form>
+              <form method="POST" action="/admin/setup/testar-melhor-envio" style="display:inline-block">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-key"></i> Testar Melhor Envio</button>
               </form>
             </div>
           </div>
