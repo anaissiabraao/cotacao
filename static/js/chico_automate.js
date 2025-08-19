@@ -3508,6 +3508,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // Disponibilizar no escopo global para uso pelos botões com onclick
+    window.exportarPDF = exportarPDF;
+    window.exportarExcel = exportarExcel;
+
     // 🔧 FUNÇÃO PARA EXIBIR MENSAGEM FLUTUANTE - Não há opções
     function showNoOptionsMessage(message) {
         // Remover mensagens existentes

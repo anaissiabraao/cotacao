@@ -50,7 +50,7 @@ except ImportError as import_error:
 
 try:
     # Importar a aplicação principal
-    from improved_chico_automate_fpdf import app as imported_app
+    from app2 import app as imported_app
     main_app = imported_app
     
     # Configurar cache

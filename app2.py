@@ -4,6 +4,7 @@ import math
 import requests
 import polyline
 import time
+import fpdf
 from fpdf import FPDF
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, session, flash
 import io
@@ -2559,6 +2560,9 @@ def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_des
             origem_trecho = rota_completa[i]
             destino_trecho = rota_completa[i + 1]
             indice = i + 1
+            # Evitar usar Transferência nas pontas (coleta inicial e entrega final)
+            is_primeiro_trecho = (i == 0)
+            is_ultimo_trecho = (i == len(rota_completa) - 2)
             
             print(f"[MULTIPLAS_BASES] 🔍 Calculando trecho {indice}: {origem_trecho} -> {destino_trecho}")
             
@@ -2631,6 +2635,12 @@ def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_des
             
             for _, servico in servicos_trecho.iterrows():
                 try:
+                    # Pular serviços de Transferência nas pontas (coleta e entrega)
+                    tipo_atual = str(servico.get('Tipo', '')).upper()
+                    if (is_primeiro_trecho or is_ultimo_trecho) and (tipo_atual == 'TRANSFERÊNCIA' or 'TRANSFERENCIA' in tipo_atual):
+                        # Ex.: evita selecionar Concept para entrega final em áreas sem cobertura direta
+                        continue
+
                     # Calcular custo para este serviço baseado no tipo
                     peso_cubado = max(float(peso), float(cubagem) * 300) if cubagem else float(peso)
                     tipo_servico = servico.get('Tipo', 'FRACIONADO')
@@ -2639,13 +2649,26 @@ def calcular_frete_fracionado_multiplas_bases(origem, uf_origem, destino, uf_des
                     # Lógica específica para PTX
                     if str(fornecedor).strip().upper() == 'PTX':
                         # Usar valores da tabela da base de dados multiplicados pelo peso
-                        valor_por_kg = float(servico.get(20, 0))  # Usar coluna 20kg como base
+                        # Preferir chaves string para evitar acesso posicional do pandas
+                        valor_por_kg = 0.0
+                        for key in ['20', 20]:
+                            try:
+                                v = servico.get(key, 0)
+                                if v:
+                                    valor_por_kg = float(v)
+                                    break
+                            except Exception:
+                                continue
                         if valor_por_kg == 0:
                             # Se não tiver valor na coluna 20, tentar outras colunas
-                            for coluna in [10, 30, 50, 70, 100]:
-                                valor_por_kg = float(servico.get(coluna, 0))
-                                if valor_por_kg > 0:
-                                    break
+                            for coluna in ['10', 10, '30', 30, '50', 50, '70', 70, '100', 100]:
+                                try:
+                                    v = servico.get(coluna, 0)
+                                    if v:
+                                        valor_por_kg = float(v)
+                                        break
+                                except Exception:
+                                    continue
                         
                         custo_base = float(peso_cubado) * valor_por_kg
                         print(f"[CUSTO-PTX] {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {custo_base:.2f}")
@@ -3185,8 +3208,13 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # 🆕 CENÁRIO 1: Agente de coleta + Transferência + Agente de entrega (rota completa com conexão flexível)
         if not agentes_coleta.empty and not agentes_entrega.empty and not transferencias_bases.empty:
             print(f"[AGENTES] 🔄 Conectando agentes com transferências (rota completa)...")
-            orig_cols = [c for c in ['base_origem_norm', 'origem_norm', 'Origem'] if c in transferencias_bases.columns]
-            dest_cols = [c for c in ['base_destino_norm', 'destino_norm', 'Destino'] if c in transferencias_bases.columns]
+            # Usar apenas colunas de BASE para conectar transferências entre bases
+            orig_cols = [c for c in ['base_origem_norm'] if c in transferencias_bases.columns]
+            if not orig_cols and 'Base Origem' in transferencias_bases.columns:
+                orig_cols = ['Base Origem']
+            dest_cols = [c for c in ['base_destino_norm'] if c in transferencias_bases.columns]
+            if not dest_cols and 'Base Destino' in transferencias_bases.columns:
+                dest_cols = ['Base Destino']
             for _, agente_col in agentes_coleta.iterrows():
                 start_candidates = set()
                 for key in ['base_destino_norm', 'base_origem_norm']:
@@ -3269,13 +3297,13 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         # 🆕 CENÁRIO 2: Coleta + Transferência + Entrega (rota completa conectando bases)
         elif not agentes_coleta.empty and not agentes_entrega.empty and not transferencias_bases.empty:
             print(f"[AGENTES] 🔄 Conectando agentes com transferências (rota completa)...")
-            # Colunas normalizadas disponíveis nas transferências
-            orig_cols = [c for c in ['base_origem_norm', 'origem_norm'] if c in transferencias_bases.columns]
-            dest_cols = [c for c in ['base_destino_norm', 'destino_norm'] if c in transferencias_bases.columns]
-            if not orig_cols:
-                orig_cols = ['Origem'] if 'Origem' in transferencias_bases.columns else []
-            if not dest_cols:
-                dest_cols = ['Destino'] if 'Destino' in transferencias_bases.columns else []
+            # Colunas de BASE disponíveis nas transferências (evitar casar por cidade)
+            orig_cols = [c for c in ['base_origem_norm'] if c in transferencias_bases.columns]
+            if not orig_cols and 'Base Origem' in transferencias_bases.columns:
+                orig_cols = ['Base Origem']
+            dest_cols = [c for c in ['base_destino_norm'] if c in transferencias_bases.columns]
+            if not dest_cols and 'Base Destino' in transferencias_bases.columns:
+                dest_cols = ['Base Destino']
 
             for _, agente_col in agentes_coleta.iterrows():
                 # Conjunto de bases possíveis de saída após coleta
@@ -3315,18 +3343,13 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
                     if not end_bases:
                         continue
 
-                    # Máscaras de correspondência nas transferências considerando múltiplas colunas
+                    # Máscaras de correspondência nas transferências considerando apenas colunas de BASE
                     mask_orig = False
                     for col in orig_cols:
                         mask_orig = mask_orig | transferencias_bases[col].isin(start_bases)
                     mask_dest = False
                     for col in dest_cols:
                         mask_dest = mask_dest | transferencias_bases[col].isin(end_bases)
-                    # Fallback: também permitir correspondência direta por cidade (origem_norm/destino_norm)
-                    if 'origem_norm' in transferencias_bases.columns:
-                        mask_orig = mask_orig | transferencias_bases['origem_norm'].isin(start_bases)
-                    if 'destino_norm' in transferencias_bases.columns:
-                        mask_dest = mask_dest | transferencias_bases['destino_norm'].isin(end_bases)
                     transf_candidatas = transferencias_bases[mask_orig & mask_dest]
                     print(f"[AGENTES] 🔎 Candidatas entre {len(transferencias_bases)} transferências: {len(transf_candidatas)} (start={list(start_bases)[:2]}..., end={list(end_bases)[:2]}...)")
                     if transf_candidatas.empty:
@@ -3387,8 +3410,62 @@ def calcular_frete_com_agentes(origem, uf_origem, destino, uf_destino, peso, val
         elif not agentes_entrega.empty and not transferencias_bases.empty:
             print(f"[AGENTES] 🔄 Criando rotas parciais (apenas transferência + entrega)...")
             
+            # Preparar conjuntos de bases de origem possíveis vinculadas à cidade de origem
+            possiveis_start_bases = set()
+            try:
+                origem_key = normalizar_cidade_nome(origem_norm) if origem_norm else None
+                if origem_key:
+                    cod_origem = cidade_to_cod_origem.get(origem_key.upper()) if 'cidade_to_cod_origem' in locals() else None
+                    if cod_origem:
+                        possiveis_start_bases.add(cod_origem)
+            except Exception:
+                pass
+            
             for _, agente_ent in agentes_entrega.iterrows():
-                for _, transferencia in transferencias_bases.iterrows():
+                # Determinar bases de entrada válidas para o agente de entrega (base de origem do agente de entrega)
+                end_bases = set()
+                try:
+                    if 'base_origem_norm' in agente_ent and agente_ent.get('base_origem_norm'):
+                        end_bases.add(agente_ent.get('base_origem_norm'))
+                    if 'base_destino_norm' in agente_ent and agente_ent.get('base_destino_norm'):
+                        end_bases.add(agente_ent.get('base_destino_norm'))
+                    # Fallbacks por nomes crus das colunas
+                    end_bases.update([
+                        normalizar_cidade_nome(str(agente_ent.get('Base Origem', ''))),
+                        normalizar_cidade_nome(str(agente_ent.get('Base Destino', '')))
+                    ])
+                    # Considerar cidade do agente de entrega para mapear possíveis códigos
+                    agente_entrega_cidade = agente_ent.get('origem_norm') if 'origem_norm' in agente_ent else normalizar_cidade_nome(str(agente_ent.get('Origem', '')))
+                    if agente_entrega_cidade and 'cidade_to_cod_destino' in locals():
+                        cod1 = cidade_to_cod_destino.get(agente_entrega_cidade.upper())
+                        if cod1:
+                            end_bases.add(cod1)
+                    end_bases = {e for e in end_bases if e}
+                except Exception:
+                    end_bases = set()
+                
+                # Filtrar transferências que cheguem a uma das end_bases
+                if end_bases:
+                    mask_dest = False
+                    if 'base_destino_norm' in transferencias_bases.columns:
+                        mask_dest = transferencias_bases['base_destino_norm'].isin(end_bases)
+                    elif 'Base Destino' in transferencias_bases.columns:
+                        mask_dest = transferencias_bases['Base Destino'].apply(lambda x: normalizar_cidade_nome(str(x)) in end_bases)
+                    else:
+                        # Sem colunas de base destino, pular
+                        continue
+                    transf_filtradas = transferencias_bases[mask_dest]
+                else:
+                    transf_filtradas = transferencias_bases
+                
+                # Opcional: filtrar por base de origem próxima à cidade de origem
+                if possiveis_start_bases:
+                    if 'base_origem_norm' in transf_filtradas.columns:
+                        transf_filtradas = transf_filtradas[transf_filtradas['base_origem_norm'].isin(possiveis_start_bases)]
+                    elif 'Base Origem' in transf_filtradas.columns:
+                        transf_filtradas = transf_filtradas[transf_filtradas['Base Origem'].apply(lambda x: normalizar_cidade_nome(str(x)) in possiveis_start_bases)]
+                
+                for _, transferencia in transf_filtradas.iterrows():
                     # Validar que a transferência aproxima a UF de destino (quando possível)
                     try:
                         transf_dest = transferencia.get('destino_norm') if 'destino_norm' in transferencia else normalizar_cidade_nome(str(transferencia.get('Destino', '')))
@@ -4237,16 +4314,26 @@ def calcular_custo_agente(linha, peso_cubado, valor_nf):
             print(f"[CUSTO-PTX] 🔧 Aplicando lógica específica para PTX: {fornecedor}")
             
             # PTX usa valores da tabela da base de dados multiplicados pelo peso
-            try:
-                valor_por_kg = float(linha.get('20', linha.get(20, 0)))  # Usar coluna 20kg como base
-            except Exception:
-                valor_por_kg = 0.0
+            # Preferir chaves string para evitar acesso posicional do pandas
+            valor_por_kg = 0.0
+            for key in ['20', 20]:
+                try:
+                    v = linha.get(key, 0)
+                    if v:
+                        valor_por_kg = float(v)
+                        break
+                except Exception:
+                    continue
             if valor_por_kg == 0:
                 # Se não tiver valor na coluna 20, tentar outras colunas
-                for coluna in [10, 30, 50, 70, 100]:
-                    valor_por_kg = float(linha.get(coluna, 0))
-                    if valor_por_kg > 0:
-                        break
+                for coluna in ['10', 10, '30', 30, '50', 50, '70', 70, '100', 100]:
+                    try:
+                        v = linha.get(coluna, 0)
+                        if v:
+                            valor_por_kg = float(v)
+                            break
+                    except Exception:
+                        continue
             
             custo_base = float(peso_cubado) * valor_por_kg
             print(f"[CUSTO-PTX] {peso_cubado}kg × R$ {valor_por_kg:.4f} = R$ {custo_base:.2f}")
@@ -4741,6 +4828,26 @@ def extrair_informacoes_agentes(opcao, tipo_rota):
             
             info['base_origem'] = base_origem
             info['base_destino'] = base_destino
+        elif tipo_rota == 'transferencia_agente_parcial':
+            # Rota parcial: SEM agente de coleta
+            transferencia = opcao.get('transferencia', detalhes.get('transferencia', {}))
+            agente_entrega = opcao.get('agente_entrega', detalhes.get('agente_entrega', {}))
+            info['agente_coleta'] = 'SEM AGENTE DE COLETA'
+            info['transferencia'] = transferencia.get('fornecedor', transferencia.get('Fornecedor', 'N/A'))
+            info['agente_entrega'] = agente_entrega.get('fornecedor', agente_entrega.get('Fornecedor', 'N/A'))
+            info['fornecedor_principal'] = info['transferencia']
+            # Bases coerentes com a rota parcial
+            info['base_origem'] = transferencia.get('origem', transferencia.get('base_origem', 'ORIGEM'))
+            info['base_destino'] = agente_entrega.get('base_origem', agente_entrega.get('origem', transferencia.get('destino', transferencia.get('base_destino', 'DESTINO'))))
+        elif tipo_rota == 'transferencia_sem_entrega':
+            # Rota parcial onde cliente retira na base: SEM coleta e SEM agente de entrega
+            transferencia = opcao.get('transferencia', detalhes.get('transferencia', {}))
+            info['agente_coleta'] = 'SEM AGENTE DE COLETA'
+            info['agente_entrega'] = 'SEM AGENTE DE ENTREGA'
+            info['transferencia'] = transferencia.get('fornecedor', transferencia.get('Fornecedor', 'N/A'))
+            info['fornecedor_principal'] = info['transferencia']
+            info['base_origem'] = transferencia.get('origem', transferencia.get('base_origem', 'ORIGEM'))
+            info['base_destino'] = transferencia.get('destino', transferencia.get('base_destino', 'DESTINO'))
             
         elif tipo_rota == 'cliente_entrega_transferencia_agente_entrega':
             # ✅ NOVO TIPO DE ROTA: Cliente entrega na base + Transferência + Agente entrega
@@ -6755,18 +6862,23 @@ def gerar_pdf():
         cotacoes = rotas_agentes.get('cotacoes_ranking', [])
         
         if cotacoes:
-                pdf.set_font("Arial", "B", 12)
-                pdf.set_fill_color(240, 248, 255)
-                pdf.cell(0, 8, "RESULTADOS DAS COTACOES", 0, 1, "L", True)
-                pdf.ln(2)
-                
-                pdf.set_font("Arial", "", 10)
-            
-                for i, cotacao in enumerate(cotacoes[:10], 1):  # Máximo 10 cotações
-                    resumo = cotacao.get('resumo', 'N/A')
-                total = cotacao.get('total', 0)
-                prazo = cotacao.get('prazo_total', 'N/A')
-                
+            pdf.set_font("Arial", "B", 12)
+            pdf.set_fill_color(240, 248, 255)
+            pdf.cell(0, 8, "RESULTADOS DAS COTACOES", 0, 1, "L", True)
+            pdf.ln(2)
+
+            pdf.set_font("Arial", "", 10)
+
+            for i, cotacao in enumerate(cotacoes[:10], 1):  # Máximo 10 cotações
+                resumo = (
+                    cotacao.get('resumo')
+                    or cotacao.get('tipo_servico')
+                    or cotacao.get('descricao')
+                    or 'N/A'
+                )
+                total = cotacao.get('total', cotacao.get('custo_total', 0))
+                prazo = cotacao.get('prazo_total', cotacao.get('prazo', 'N/A'))
+
                 pdf.cell(0, 5, limpar_texto_pdf(f"{i}. {resumo}"), 0, 1)
                 pdf.cell(0, 5, limpar_texto_pdf(f"   Valor: R$ {total:,.2f} - Prazo: {prazo} dias"), 0, 1)
                 pdf.ln(1)
@@ -6845,49 +6957,65 @@ def exportar_excel():
             if cotacoes_ranking:
                 lista_rotas = []
                 for i, rota in enumerate(cotacoes_ranking, 1):
-                    agente_coleta = rota.get('agente_coleta', {})
-                    transferencia = rota.get('transferencia', {})
-                    agente_entrega = rota.get('agente_entrega', {})
-                    
+                    detalhes_expandidos = rota.get('detalhes_expandidos', {}) or {}
+                    dados_agentes = detalhes_expandidos.get('dados_agentes', {}) or {}
+                    custos_detalhados = detalhes_expandidos.get('custos_detalhados', {}) or {}
+
+                    agente_coleta = (
+                        rota.get('agente_coleta')
+                        or dados_agentes.get('agente_coleta', {})
+                        or {}
+                    )
+                    transferencia = (
+                        rota.get('transferencia')
+                        or dados_agentes.get('transferencia', {})
+                        or {}
+                    )
+                    agente_entrega = (
+                        rota.get('agente_entrega')
+                        or dados_agentes.get('agente_entrega', {})
+                        or {}
+                    )
+
                     dados_rota = dados_basicos.copy()
                     dados_rota.update({
                         "Posição Ranking": i,
-                        "Rota Resumo": rota.get('resumo', 'N/A'),
-                        "Custo Total (R$)": rota.get('total', 0),
-                        "Prazo Total (dias)": rota.get('prazo_total', 'N/A'),
-                        
+                        "Rota Resumo": rota.get('resumo') or rota.get('tipo_servico') or rota.get('descricao', 'N/A'),
+                        "Custo Total (R$)": rota.get('total', rota.get('custo_total', 0)),
+                        "Prazo Total (dias)": rota.get('prazo_total', rota.get('prazo', 'N/A')),
+
                         # Agente de Coleta
                         "Agente Coleta": agente_coleta.get('fornecedor', 'N/A'),
-                        "Coleta Origem": agente_coleta.get('origem', 'N/A'),
-                        "Coleta Base Destino": agente_coleta.get('base_destino', 'N/A'),
+                        "Coleta Origem": agente_coleta.get('origem', agente_coleta.get('base_origem', 'N/A')),
+                        "Coleta Base Destino": agente_coleta.get('base_destino', agente_coleta.get('destino', 'N/A')),
                         "Coleta Custo (R$)": agente_coleta.get('custo', 0),
                         "Coleta Prazo (dias)": agente_coleta.get('prazo', 'N/A'),
                         "Coleta Peso Máximo (kg)": agente_coleta.get('peso_maximo', 'N/A'),
-                        
+
                         # Transferência
                         "Transferência Fornecedor": transferencia.get('fornecedor', 'N/A'),
-                        "Transferência Origem": transferencia.get('origem', 'N/A'),
-                        "Transferência Destino": transferencia.get('destino', 'N/A'),
-                        "Transferência Custo (R$)": transferencia.get('custo', 0),
-                        "Transferência Pedágio (R$)": transferencia.get('pedagio', 0),
-                        "Transferência GRIS (R$)": transferencia.get('gris', 0),
+                        "Transferência Origem": transferencia.get('origem', transferencia.get('base_origem', 'N/A')),
+                        "Transferência Destino": transferencia.get('destino', transferencia.get('base_destino', 'N/A')),
+                        "Transferência Custo (R$)": transferencia.get('custo', custos_detalhados.get('custo_base_frete', 0)),
+                        "Transferência Pedágio (R$)": transferencia.get('pedagio', custos_detalhados.get('pedagio', 0)),
+                        "Transferência GRIS (R$)": transferencia.get('gris', custos_detalhados.get('gris', 0)),
                         "Transferência Prazo (dias)": transferencia.get('prazo', 'N/A'),
-                        
+
                         # Agente de Entrega
                         "Agente Entrega": agente_entrega.get('fornecedor', 'N/A'),
-                        "Entrega Base Origem": agente_entrega.get('base_origem', 'N/A'),
-                        "Entrega Destino": agente_entrega.get('destino', 'N/A'),
+                        "Entrega Base Origem": agente_entrega.get('base_origem', agente_entrega.get('origem', 'N/A')),
+                        "Entrega Destino": agente_entrega.get('destino', agente_entrega.get('base_destino', 'N/A')),
                         "Entrega Custo (R$)": agente_entrega.get('custo', 0),
                         "Entrega Prazo (dias)": agente_entrega.get('prazo', 'N/A'),
                         "Entrega Peso Máximo (kg)": agente_entrega.get('peso_maximo', 'N/A'),
-                        
+
                         # Observações
                         "Observações": rota.get('observacoes', ''),
                         "Estratégia": dados_exportacao.get('estrategia_busca', 'N/A'),
                         "Fonte Dados": dados_exportacao.get('dados_fonte', 'N/A')
                     })
                     lista_rotas.append(dados_rota)
-                
+
                 df_export = pd.DataFrame(lista_rotas)
             else:
                 # Se não há rotas, criar DataFrame básico
