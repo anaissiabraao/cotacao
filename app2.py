@@ -18,6 +18,120 @@ from dotenv import load_dotenv
 import tempfile
 from functools import lru_cache, wraps
 
+# ===== Resiliência para chamadas ao IBGE e cache local =====
+# Diretório base do projeto (onde este arquivo está localizado)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Cache em memória para municípios por UF
+MUNICIPIOS_CACHE_MEM = {}
+MUNICIPIOS_CACHE_PATH = os.path.join(BASE_DIR, "data", "municipios_cache.json")
+
+def _carregar_cache_municipios_arquivo():
+    try:
+        if os.path.exists(MUNICIPIOS_CACHE_PATH):
+            with open(MUNICIPIOS_CACHE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+    except Exception as e:
+        print(f"[CACHE] Falha ao carregar cache de municípios: {e}")
+    return {}
+
+def _salvar_cache_municipios_arquivo(cache_dict):
+    try:
+        os.makedirs(os.path.dirname(MUNICIPIOS_CACHE_PATH), exist_ok=True)
+        with open(MUNICIPIOS_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(cache_dict, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[CACHE] Falha ao salvar cache de municípios: {e}")
+
+def _http_get_com_retentativas(url, timeout=20, tentativas=3, backoff=0.5):
+    for tentativa in range(1, tentativas + 1):
+        try:
+            resp = requests.get(url, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+            if tentativa == tentativas:
+                raise
+            espera = backoff * (2 ** (tentativa - 1))
+            print(f"[RETRY] Falha ao acessar {url} ({e}). Nova tentativa em {espera:.1f}s [{tentativa}/{tentativas}]")
+            time.sleep(espera)
+        except requests.exceptions.RequestException:
+            raise
+
+def _buscar_municipios_ibge(uf):
+    # 1) Tentar endpoint direto por UF (IBGE aceita sigla em /estados/{UF}/municipios)
+    url_por_uf = f"https://servicodados.ibge.gov.br/api/v1/localidades/estados/{uf}/municipios"
+    try:
+        resp = _http_get_com_retentativas(url_por_uf, timeout=20, tentativas=3, backoff=0.7)
+        return resp.json()
+    except Exception as e:
+        print(f"[IBGE] Falha no endpoint por UF {uf}: {e}")
+
+    # 2) Fallback: descobrir ID do estado e consultar por ID
+    try:
+        estados_resp = _http_get_com_retentativas("https://servicodados.ibge.gov.br/api/v1/localidades/estados", timeout=20, tentativas=3, backoff=0.7)
+        estados = estados_resp.json()
+        estado_id = None
+        for estado in estados:
+            if estado.get("sigla") == uf:
+                estado_id = estado.get("id")
+                break
+        if not estado_id:
+            print(f"[IBGE] Estado não encontrado para UF: {uf}")
+            return []
+        url_por_id = f"https://servicodados.ibge.gov.br/api/v1/localidades/estados/{estado_id}/municipios"
+        resp2 = _http_get_com_retentativas(url_por_id, timeout=20, tentativas=3, backoff=0.7)
+        return resp2.json()
+    except Exception as e:
+        print(f"[IBGE] Falha no fallback por ID para UF {uf}: {e}")
+        return []
+
+# Pré-carregar cache de arquivo (não obrigatório, mas ajuda em casos de indisponibilidade)
+try:
+    MUNICIPIOS_CACHE_MEM.update(_carregar_cache_municipios_arquivo())
+except Exception:
+    pass
+try:
+    _mapa_csv = _gerar_municipios_de_base_unificada()
+    for _uf_key, _nomes in _mapa_csv.items():
+        if _uf_key not in MUNICIPIOS_CACHE_MEM:
+            MUNICIPIOS_CACHE_MEM[_uf_key] = _nomes
+except Exception as e:
+    print(f"[CACHE] Falha ao semear cache com Base_Unificada.csv: {e}")
+
+def _gerar_municipios_de_base_unificada():
+    """Constrói um dicionário {UF: [municipios]} a partir de data/Base_Unificada.csv."""
+    caminho_csv = os.path.join(BASE_DIR, "data", "Base_Unificada.csv")
+    if not os.path.exists(caminho_csv):
+        print(f"[FALLBACK] Base_Unificada.csv não encontrada em {caminho_csv}")
+        return {}
+    try:
+        df = pd.read_csv(caminho_csv, sep=';', dtype=str, encoding='utf-8', engine='python')
+        df['UF'] = df['UF'].astype(str).str.strip().str.upper()
+        # Considerar 'Origem' e também 'Destino' como possíveis colunas com nomes de municípios
+        colunas_cidades = []
+        if 'Origem' in df.columns:
+            df['Origem'] = df['Origem'].astype(str).str.strip()
+            colunas_cidades.append('Origem')
+        if 'Destino' in df.columns:
+            df['Destino'] = df['Destino'].astype(str).str.strip()
+            colunas_cidades.append('Destino')
+        if not colunas_cidades:
+            return {}
+        mapa = {}
+        for uf_val, grupo in df.groupby('UF'):
+            nomes_set = set()
+            for col in colunas_cidades:
+                nomes_set.update({nome for nome in grupo[col].dropna().tolist() if nome and nome.lower() != 'nan'})
+            nomes = sorted(nomes_set)
+            if nomes:
+                mapa[uf_val] = nomes
+        return mapa
+    except Exception as e:
+        print(f"[FALLBACK] Erro ao ler Base_Unificada.csv: {e}")
+    return {}
+
 # Funções auxiliares para formatação e cálculos
 def formatar_nome_agente(nome_completo):
     """
@@ -5649,10 +5763,9 @@ def index():
 @app.route("/estados")
 def estados():
     try:
-        response = requests.get("https://servicodados.ibge.gov.br/api/v1/localidades/estados")
-        response.raise_for_status()
-        data = response.json()
-        estados = [{"id": estado["sigla"], "text": estado["nome"]} for estado in data]
+        resp = _http_get_com_retentativas("https://servicodados.ibge.gov.br/api/v1/localidades/estados", timeout=20, tentativas=3, backoff=0.7)
+        data = resp.json()
+        estados = [{"id": estado.get("sigla"), "text": estado.get("nome")} for estado in data if estado.get("sigla") and estado.get("nome")]
         return jsonify(sorted(estados, key=lambda x: x["text"]))
     except Exception as e:
         print(f"Erro ao obter estados: {e}")
@@ -5687,33 +5800,86 @@ def municipios(uf):
         if len(uf) != 2:
             print(f"[ERROR] UF inválido: {uf}")
             return jsonify([])
-        
-        # Buscar o ID do estado primeiro
-        estados_response = requests.get("https://servicodados.ibge.gov.br/api/v1/localidades/estados", timeout=10)
-        estados_response.raise_for_status()
-        estados_data = estados_response.json()
-        estado_id = None
-        
-        for estado in estados_data:
-            if estado['sigla'] == uf:
-                estado_id = estado['id']
-                break
-        
-        if not estado_id:
-            print(f"[ERROR] Estado não encontrado para UF: {uf}")
-            return jsonify([])
-        
-        # Buscar municípios usando o ID do estado
-        print(f"[DEBUG] Buscando municípios para estado ID: {estado_id}")
-        response = requests.get(f"https://servicodados.ibge.gov.br/api/v1/localidades/estados/{estado_id}/municipios", timeout=10)
-        response.raise_for_status()
-        data = response.json()
+
+        # 1) Tentar atender via cache em memória
+        cache_mem = MUNICIPIOS_CACHE_MEM.get(uf)
+        if cache_mem and isinstance(cache_mem, list) and len(cache_mem) > 0:
+            municipios_list = [{"id": nome, "text": nome} for nome in cache_mem]
+            print(f"[DEBUG] Municípios servidos do cache em memória para UF: {uf} ({len(municipios_list)})")
+            return jsonify(sorted(municipios_list, key=lambda x: x["text"]))
+
+        # 2) Cache em arquivo
+        cache_arquivo = _carregar_cache_municipios_arquivo()
+        lista_cache = cache_arquivo.get(uf)
+        if lista_cache:
+            MUNICIPIOS_CACHE_MEM[uf] = lista_cache
+            municipios_list = [{"id": nome, "text": nome} for nome in lista_cache]
+            print(f"[DEBUG] Municípios servidos do cache em arquivo para UF: {uf} ({len(municipios_list)})")
+            return jsonify(sorted(municipios_list, key=lambda x: x["text"]))
+
+        # 3) Fallback imediato: derivar da Base_Unificada.csv (sem depender do IBGE)
+        mapa_base = _gerar_municipios_de_base_unificada()
+        lista_csv = mapa_base.get(uf)
+        if lista_csv:
+            MUNICIPIOS_CACHE_MEM[uf] = lista_csv
+            try:
+                cache_arquivo.update({uf: lista_csv})
+                _salvar_cache_municipios_arquivo(cache_arquivo)
+            except Exception as e:
+                print(f"[CACHE] Não foi possível atualizar cache em arquivo: {e}")
+            municipios_list = [{"id": nome, "text": nome} for nome in lista_csv]
+            print(f"[DEBUG] Municípios servidos do CSV para UF: {uf} ({len(municipios_list)})")
+            return jsonify(sorted(municipios_list, key=lambda x: x["text"]))
+
+        # 4) Por fim, tentar buscar no IBGE com resiliência (por UF, fallback por ID)
+        data = _buscar_municipios_ibge(uf)
         
         if not data:
             print(f"[ERROR] Nenhum município encontrado para UF: {uf}")
+            # 3) Fallback: tentar cache em arquivo
+            cache_arquivo = _carregar_cache_municipios_arquivo()
+            lista_cache = cache_arquivo.get(uf)
+            if not lista_cache:
+                # 4) Fallback final: derivar da Base_Unificada.csv
+                mapa_base = _gerar_municipios_de_base_unificada()
+                lista_cache = mapa_base.get(uf)
+                if lista_cache:
+                    # Persistir para próximos usos
+                    cache_arquivo.update({uf: lista_cache})
+                    _salvar_cache_municipios_arquivo(cache_arquivo)
+            if lista_cache:
+                municipios_list = [{"id": nome, "text": nome} for nome in lista_cache]
+                print(f"[DEBUG] Municípios servidos do cache para UF: {uf} ({len(municipios_list)})")
+                return jsonify(sorted(municipios_list, key=lambda x: x["text"]))
             return jsonify([])
         
-        municipios = [{"id": m["nome"], "text": m["nome"]} for m in data]
+        # Transformar resposta do IBGE para o formato esperado e atualizar caches
+        nomes = []
+        try:
+            for m in data:
+                nome = (m.get("nome") if isinstance(m, dict) else None)
+                if nome:
+                    nomes.append(nome)
+        except Exception:
+            pass
+        if not nomes and isinstance(data, list):
+            # Caso extremo: já seja lista de strings
+            nomes = [str(x) for x in data]
+
+        if not nomes:
+            print(f"[ERROR] Resposta do IBGE sem nomes de municípios para UF: {uf}")
+            return jsonify([])
+
+        # Atualizar caches
+        MUNICIPIOS_CACHE_MEM[uf] = nomes
+        try:
+            cache_atual = _carregar_cache_municipios_arquivo()
+            cache_atual[uf] = nomes
+            _salvar_cache_municipios_arquivo(cache_atual)
+        except Exception as e:
+            print(f"[CACHE] Não foi possível atualizar cache em arquivo: {e}")
+
+        municipios = [{"id": nome, "text": nome} for nome in nomes]
         print(f"[DEBUG] Encontrados {len(municipios)} municípios para UF: {uf}")
         return jsonify(sorted(municipios, key=lambda x: x["text"]))
     except requests.exceptions.Timeout:
