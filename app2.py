@@ -5762,14 +5762,8 @@ def index():
 
 @app.route("/estados")
 def estados():
-    try:
-        resp = _http_get_com_retentativas("https://servicodados.ibge.gov.br/api/v1/localidades/estados", timeout=20, tentativas=3, backoff=0.7)
-        data = resp.json()
-        estados = [{"id": estado.get("sigla"), "text": estado.get("nome")} for estado in data if estado.get("sigla") and estado.get("nome")]
-        return jsonify(sorted(estados, key=lambda x: x["text"]))
-    except Exception as e:
-        print(f"Erro ao obter estados: {e}")
-        return jsonify(ESTADOS_FALLBACK)
+    # Resposta imediata, sem chamadas externas
+    return jsonify(ESTADOS_FALLBACK)
 
 @app.route("/municipios/<uf>")
 def municipios(uf):
