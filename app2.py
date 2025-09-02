@@ -14,6 +14,7 @@ import json
 import uuid
 from dotenv import load_dotenv
 from functools import lru_cache
+from sqlalchemy import text
 
 # Carregar variáveis de ambiente
 load_dotenv()
