@@ -384,7 +384,11 @@ def calcular_rotas_automaticas_banco(origem, uf_origem, destino, uf_destino, pes
                         
                         rota = criar_rota_combinada_original(agente_col, transferencia, agente_ent, origem, destino, peso_cubado, valor_nf)
                         if rota:
+                            # Adicionar prefixo para identificar como rota combinada
+                            rota['tipo_servico'] = f"COMBINADA: {rota['tipo_servico']}"
+                            rota['descricao'] = f"Rota completa com 3 agentes especializados"
                             rotas_combinadas.append(rota)
+                            print(f"[ROTAS_AUTO] ✅ Rota combinada criada: {agente_col.get('Fornecedor')} + {transferencia.get('Fornecedor')} + {agente_ent.get('Fornecedor')}")
         
         # Ordenar por custo total (como no original)
         rotas_combinadas.sort(key=lambda x: x.get('custo_total', float('inf')))
@@ -887,10 +891,17 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         
         print(f"[FRACIONADO] 🔗 Processando rotas com {len(agentes_dict)} agentes do banco")
         
-        # Processar cada linha para rotas diretas
+        # Processar cada linha para rotas diretas - EVITAR DUPLICATAS
+        fornecedores_processados = set()  # Para evitar duplicatas
+        
         for idx, linha in df_filtrado.iterrows():
             try:
                 fornecedor = linha.get('Fornecedor', 'N/A')
+                
+                # Evitar duplicatas
+                if fornecedor in fornecedores_processados:
+                    continue
+                fornecedores_processados.add(fornecedor)
                 
                 # Verificar se o fornecedor é um agente no banco de dados
                 if fornecedor in agentes_dict:
