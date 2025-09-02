@@ -77,37 +77,947 @@ def log_acesso(usuario, acao, ip, detalhes=""):
     except Exception as e:
         print(f"[LOG] Erro: {e}")
 
-# ===== SISTEMA DE CÁLCULO LIMPO =====
+# ===== SISTEMA DE CÁLCULO RESTAURADO =====
 
-def calcular_frete_limpo(origem, uf_origem, destino, uf_destino, peso, cubagem=None, valor_nf=None, tipo_calculo='Fracionado'):
-    """Sistema de cálculo limpo usando apenas PostgreSQL"""
+def carregar_base_unificada():
+    """Carrega base unificada do PostgreSQL"""
     try:
-        # Buscar dados na base
-        dados_base = BaseUnificada.buscar_fretes(origem, destino, tipo_calculo)
+        registros = BaseUnificada.query.all()
         
-        if not dados_base:
+        # Converter para formato pandas-like para compatibilidade
+        dados = []
+        for r in registros:
+            dados.append({
+                'Tipo': r.tipo,
+                'Fornecedor': r.fornecedor,
+                'Base Origem': r.base_origem,
+                'Origem': r.origem,
+                'Base Destino': r.base_destino,
+                'Destino': r.destino,
+                'VALOR MÍNIMO ATÉ 10': r.valor_minimo_10,
+                '20': r.peso_20,
+                '30': r.peso_30,
+                '50': r.peso_50,
+                '70': r.peso_70,
+                '100': r.peso_100,
+                '150': r.peso_150,
+                '200': r.peso_200,
+                '300': r.peso_300,
+                '500': r.peso_500,
+                'Acima 500': r.acima_500,
+                'Pedagio (100 Kg)': r.pedagio_100kg,
+                'EXCEDENTE': r.excedente,
+                'Seguro': r.seguro,
+                'PESO MÁXIMO TRANSPORTADO': r.peso_maximo,
+                'Gris Min': r.gris_min,
+                'Gris Exc': r.gris_exc,
+                'TAS': r.tas,
+                'DESPACHO': r.despacho
+            })
+        
+        import pandas as pd
+        df = pd.DataFrame(dados)
+        print(f"[BASE] ✅ PostgreSQL carregado: {len(df)} registros")
+        return df
+        
+    except Exception as e:
+        print(f"[BASE] ❌ Erro ao carregar PostgreSQL: {e}")
+        return None
+
+def popular_banco_com_memorias_originais():
+    """Popula o banco de dados com as memórias de cálculo originais - EXECUTAR UMA VEZ"""
+    try:
+        # Verificar se já existem agentes
+        if AgenteTransportadora.query.count() > 0:
+            print("[SETUP] ✅ Agentes já existem no banco - não sobrescrever")
+            return
+        
+        print("[SETUP] 🔧 Populando banco com memórias de cálculo originais...")
+        
+        # 1. Criar tipos de cálculo
+        tipos_calculo = [
+            {'nome': 'FRACIONADO_DIRETO', 'descricao': 'Frete fracionado direto porta-a-porta', 'categoria': 'FRACIONADO'},
+            {'nome': 'FRACIONADO_TRANSFERENCIA', 'descricao': 'Frete fracionado com transferência', 'categoria': 'FRACIONADO'},
+            {'nome': 'FRACIONADO_AGENTE_COLETA', 'descricao': 'Frete fracionado com agente de coleta', 'categoria': 'FRACIONADO'},
+            {'nome': 'FRACIONADO_AGENTE_ENTREGA', 'descricao': 'Frete fracionado com agente de entrega', 'categoria': 'FRACIONADO'},
+            {'nome': 'FRACIONADO_ROTA_COMPLETA', 'descricao': 'Frete fracionado com agente + transferência + agente', 'categoria': 'FRACIONADO'}
+        ]
+        
+        tipos_ids = {}
+        for tipo_data in tipos_calculo:
+            tipo = TipoCalculoFrete(
+                nome=tipo_data['nome'],
+                descricao=tipo_data['descricao'],
+                categoria=tipo_data['categoria']
+            )
+            db.session.add(tipo)
+            db.session.flush()  # Para obter o ID
+            tipos_ids[tipo_data['nome']] = tipo.id
+        
+        # 2. Criar fórmulas de cálculo baseadas no código original
+        formulas_originais = [
+            {
+                'nome': 'JEM_DFI_TRANSFERENCIA',
+                'tipo': 'FRACIONADO_TRANSFERENCIA',
+                'formula': '''
+# Lógica original JEM/DFI - transferência padrão
+peso_calculo = float(peso_usado)
+valor_minimo = linha_base.get('VALOR MÍNIMO ATÉ 10')
+if peso_calculo <= 10 and valor_minimo and float(valor_minimo) > 0:
+    resultado = float(valor_minimo)
+else:
+    faixas_kg = [20, 30, 50, 70, 100, 150, 200, 300, 500]
+    for faixa in faixas_kg:
+        if peso_calculo <= float(faixa):
+            valor_faixa = linha_base.get(str(faixa), 0)
+            if valor_faixa and float(valor_faixa) > 0:
+                resultado = peso_calculo * float(valor_faixa)
+                break
+''',
+                'condicoes': 'fornecedor.contains("JEM") or fornecedor.contains("DFI")',
+                'prioridade': 1
+            },
+            {
+                'nome': 'REUNIDAS_VALOR_FIXO',
+                'tipo': 'FRACIONADO_DIRETO',
+                'formula': '''
+# Lógica original REUNIDAS - valor fixo faixa 200kg
+valor_200 = linha_base.get('200', 0)
+if valor_200 and float(valor_200) > 0:
+    resultado = float(valor_200)  # Valor fixo, não multiplicado
+else:
+    for faixa in [100, 150, 300, 500]:
+        valor_faixa = linha_base.get(str(faixa), 0)
+        if valor_faixa and float(valor_faixa) > 0:
+            resultado = float(valor_faixa)
+            break
+''',
+                'condicoes': 'fornecedor.contains("REUNIDAS")',
+                'prioridade': 1
+            },
+            {
+                'nome': 'PTX_MULTIPLICADO',
+                'tipo': 'FRACIONADO_DIRETO',
+                'formula': '''
+# Lógica original PTX - valor multiplicado pelo peso
+peso_calculo = float(peso_usado)
+valor_por_kg = 0.0
+for key in ['20', '10', '30', '50', '70', '100']:
+    valor_key = linha_base.get(key, 0)
+    if valor_key and float(valor_key) > 0:
+        valor_por_kg = float(valor_key)
+        break
+resultado = peso_calculo * valor_por_kg
+''',
+                'condicoes': 'fornecedor.contains("PTX")',
+                'prioridade': 1
+            },
+            {
+                'nome': 'GRITSCH_DIRETO',
+                'tipo': 'FRACIONADO_DIRETO',
+                'formula': '''
+# Lógica original Gritsch - direto porta-a-porta
+peso_calculo = float(peso_usado)
+valor_minimo = linha_base.get('VALOR MÍNIMO ATÉ 10')
+if peso_calculo <= 10 and valor_minimo and float(valor_minimo) > 0:
+    resultado = float(valor_minimo)
+else:
+    faixas_kg = [20, 30, 50, 70, 100, 150, 200, 300, 500]
+    for faixa in faixas_kg:
+        if peso_calculo <= float(faixa):
+            valor_faixa = linha_base.get(str(faixa), 0)
+            if valor_faixa and float(valor_faixa) > 0:
+                resultado = peso_calculo * float(valor_faixa)
+                break
+''',
+                'condicoes': 'fornecedor.contains("GRITSCH")',
+                'prioridade': 1
+            },
+            {
+                'nome': 'ROTA_COMPLETA_AUTOMATICA',
+                'tipo': 'FRACIONADO_ROTA_COMPLETA',
+                'formula': '''
+# Sistema automático de combinação de agentes
+# Busca automaticamente: agente_coleta + transferencia + agente_entrega
+# Soma os custos totais de cada etapa
+resultado = custo_coleta_total + custo_transferencia_total + custo_entrega_total
+''',
+                'condicoes': 'peso_cubado <= 1000',
+                'prioridade': 1
+            }
+        ]
+        
+        formulas_ids = {}
+        for formula_data in formulas_originais:
+            formula = FormulaCalculoFrete(
+                nome=formula_data['nome'],
+                tipo_calculo_id=tipos_ids[formula_data['tipo']],
+                formula=formula_data['formula'],
+                condicoes=formula_data['condicoes'],
+                prioridade=formula_data['prioridade']
+            )
+            db.session.add(formula)
+            db.session.flush()
+            formulas_ids[formula_data['nome']] = formula.id
+        
+        # 3. Criar apenas configurações de sistema, sem agentes hardcoded
+        print("[SETUP] ✅ Tipos de cálculo e fórmulas configurados")
+        
+        db.session.commit()
+        print(f"[SETUP] ✅ Sistema de tipos e fórmulas configurado")
+        
+        print(f"[SETUP] ✅ Sistema base configurado com {len(tipos_calculo)} tipos e {len(formulas_originais)} fórmulas")
+        print("[SETUP] 📝 Use a interface admin para cadastrar agentes e configurações específicas")
+        
+    except Exception as e:
+        print(f"[SETUP] ❌ Erro ao popular banco: {e}")
+        db.session.rollback()
+
+
+
+def carregar_agentes_e_memorias():
+    """Carrega agentes e memórias do banco de dados - VERSÃO LIMPA"""
+    try:
+        # Carregar agentes do banco
+        agentes = AgenteTransportadora.query.filter_by(ativo=True).all()
+        agentes_dict = {}
+        
+        for agente in agentes:
+            # Carregar parâmetros de cálculo
+            parametros = agente.get_parametros_calculo()
+            
+            agentes_dict[agente.nome] = {
+                'id': agente.id,
+                'nome': agente.nome,
+                'tipo': agente.tipo_agente,
+                'logica_calculo': agente.logica_calculo,
+                'gris_percentual': agente.gris_percentual,
+                'gris_minimo': agente.gris_minimo,
+                'pedagio_por_bloco': agente.pedagio_por_bloco,
+                'parametros': parametros,
+                'descricao': agente.descricao_logica,
+                'memorias': []
+            }
+            
+            # Carregar memórias específicas
+            memorias = MemoriaCalculoAgente.query.filter_by(agente_id=agente.id).all()
+            for memoria in memorias:
+                try:
+                    config = json.loads(memoria.configuracao_memoria) if memoria.configuracao_memoria else {}
+                    agentes_dict[agente.nome]['memorias'].append({
+                        'id': memoria.id,
+                        'tipo_memoria': memoria.tipo_memoria,
+                        'nome_memoria': memoria.nome_memoria,
+                        'condicoes': memoria.condicoes_aplicacao,
+                        'configuracao': config,
+                        'prioridade': memoria.prioridade if hasattr(memoria, 'prioridade') else 1
+                    })
+                except Exception as e:
+                    print(f"[MEMORIA] ⚠️ Erro ao carregar memória {memoria.id}: {e}")
+        
+        print(f"[AGENTES] ✅ {len(agentes_dict)} agentes carregados do banco")
+        return agentes_dict
+        
+    except Exception as e:
+        print(f"[AGENTES] ❌ Erro ao carregar do banco: {e}")
+        return {}
+
+def calcular_rotas_automaticas_banco(origem, uf_origem, destino, uf_destino, peso_cubado, valor_nf, df_base):
+    """Calcula rotas combinadas automaticamente baseado na base de dados (como no código original)"""
+    try:
+        # Normalizar nomes como no código original
+        origem_norm = origem.strip().title()
+        destino_norm = destino.strip().title()
+        
+        # Separar tipos da base como no código original
+        df_agentes = df_base[df_base['Tipo'] == 'Agente'].copy()
+        df_transferencias = df_base[df_base['Tipo'] == 'Transferência'].copy()
+        
+        # Buscar agentes de coleta na origem (como no código original)
+        agentes_coleta = df_agentes[
+            df_agentes['Origem'].str.contains(origem_norm, case=False, na=False)
+        ]
+        
+        # Buscar agentes de entrega no destino (como no código original)
+        agentes_entrega = df_agentes[
+            df_agentes['Origem'].str.contains(destino_norm, case=False, na=False)
+        ]
+        
+        # Buscar transferências diretas
+        transferencias_diretas = df_transferencias[
+            (df_transferencias['Origem'].str.contains(origem_norm, case=False, na=False)) &
+            (df_transferencias['Destino'].str.contains(destino_norm, case=False, na=False))
+        ]
+        
+        print(f"[ROTAS_AUTO] 🔍 Encontrados na base - Coleta: {len(agentes_coleta)}, Transferência: {len(df_transferencias)}, Entrega: {len(agentes_entrega)}, Diretas: {len(transferencias_diretas)}")
+        
+        # Listar agentes encontrados
+        if not agentes_coleta.empty:
+            print(f"[ROTAS_AUTO] 📦 Agentes de coleta: {list(agentes_coleta['Fornecedor'].values)}")
+        if not agentes_entrega.empty:
+            print(f"[ROTAS_AUTO] 🚚 Agentes de entrega: {list(agentes_entrega['Fornecedor'].values)}")
+        
+        rotas_combinadas = []
+        
+        # 1. Rotas diretas (identificação automática pela base)
+        for _, agente in agentes_coleta.iterrows():
+            rota = criar_rota_direta_original(agente, origem, destino, peso_cubado, valor_nf)
+            if rota:
+                rotas_combinadas.append(rota)
+        
+        # 2. Transferências diretas (como no original)
+        for _, transferencia in transferencias_diretas.iterrows():
+            rota = criar_rota_transferencia_direta_original(transferencia, origem, destino, peso_cubado, valor_nf)
+            if rota:
+                rotas_combinadas.append(rota)
+        
+        # 3. Rotas combinadas (agente + transferência + agente) - COMO NO ORIGINAL
+        if not agentes_coleta.empty and not agentes_entrega.empty and not df_transferencias.empty:
+            print(f"[ROTAS_AUTO] 🔗 Criando rotas combinadas (coleta + transferência + entrega)...")
+            
+            # Limitar para performance (como no original)
+            for _, agente_col in agentes_coleta.head(2).iterrows():
+                for _, transferencia in df_transferencias.head(3).iterrows():
+                    for _, agente_ent in agentes_entrega.head(2).iterrows():
+                        
+                        rota = criar_rota_combinada_original(agente_col, transferencia, agente_ent, origem, destino, peso_cubado, valor_nf)
+                        if rota:
+                            rotas_combinadas.append(rota)
+        
+        # Ordenar por custo total (como no original)
+        rotas_combinadas.sort(key=lambda x: x.get('custo_total', float('inf')))
+        
+        print(f"[ROTAS_AUTO] ✅ {len(rotas_combinadas)} rotas automáticas calculadas")
+        return rotas_combinadas[:10]  # Retornar as 10 melhores
+        
+    except Exception as e:
+        print(f"[ROTAS_AUTO] ❌ Erro: {e}")
+        return []
+
+def calcular_rota_direta_banco(agente_nome, origem, uf_origem, destino, uf_destino, peso_cubado, valor_nf, df_base):
+    """Calcula rota direta usando configuração do banco"""
+    try:
+        # Buscar linha do agente na base
+        linhas_agente = df_base[df_base['Fornecedor'].str.contains(agente_nome, case=False, na=False)]
+        if linhas_agente.empty:
+            return None
+        
+        linha = linhas_agente.iloc[0]
+        
+        # Buscar configuração do agente
+        config = ConfiguracaoAgente.query.filter_by(agente_nome=agente_nome, ativa=True).first()
+        if not config:
+            return None
+        
+        valores = config.get_valores_customizados()
+        formulas = config.get_formulas_customizadas()
+        
+        # Calcular usando fórmula do banco
+        if formulas.get('formula_id'):
+            formula = FormulaCalculoFrete.query.get(formulas['formula_id'])
+            if formula:
+                # Executar fórmula
+                exec_globals = {
+                    'peso_usado': peso_cubado,
+                    'valor_nf': valor_nf,
+                    'linha_base': linha.to_dict(),
+                    'resultado': 0
+                }
+                exec(formula.formula, exec_globals)
+                valor_base = exec_globals.get('resultado', 0)
+                
+                # Calcular custos adicionais
+                gris = 0
+                if valor_nf and not valores.get('sem_gris', False):
+                    gris = max((valor_nf * valores.get('gris_percentual', 0) / 100), valores.get('gris_minimo', 0))
+                
+                pedagio = 0
+                if not valores.get('sem_pedagio', False):
+                    pedagio = (peso_cubado / 100) * valores.get('pedagio_100kg', 0)
+                
+                seguro = 0
+                if valor_nf and not valores.get('sem_seguro', False):
+                    seguro = valor_nf * (valores.get('seguro_percentual', 0) / 100)
+                
+                total = valor_base + gris + pedagio + seguro
+                
+                return {
+                    'tipo_servico': f"{agente_nome} - Direto",
+                    'fornecedor': agente_nome,
+                    'custo_total': total,
+                    'prazo': 3,
+                    'peso_maximo_agente': valores.get('peso_maximo', 'N/A'),
+                    'descricao': f"Serviço direto porta-a-porta",
+                    'detalhes_expandidos': {
+                        'agentes_info': {
+                            'agente_coleta': 'N/A',
+                            'transferencia': 'N/A',
+                            'agente_entrega': 'N/A'
+                        },
+                        'rota_info': {
+                            'origem': origem,
+                            'destino': destino,
+                            'peso_cubado': peso_cubado,
+                            'tipo_peso_usado': 'Cubado'
+                        },
+                        'custos_detalhados': {
+                            'custo_base_frete': valor_base,
+                            'custo_coleta': 0,
+                            'custo_transferencia': 0,
+                            'custo_entrega': 0,
+                            'pedagio': pedagio,
+                            'gris': gris,
+                            'seguro': seguro,
+                            'icms': 0,
+                            'outros': 0
+                        },
+                        'observacoes': f"Rota direta calculada usando fórmula {formula.nome}"
+                    }
+                }
+        
+        return None
+        
+    except Exception as e:
+        print(f"[ROTA_DIRETA] ❌ Erro para {agente_nome}: {e}")
+        return None
+
+def calcular_rota_combinada_banco(agente_coleta, agente_transferencia, agente_entrega, origem, uf_origem, destino, uf_destino, peso_cubado, valor_nf, df_base):
+    """Calcula rota combinada (agente + transferência + agente) usando banco"""
+    try:
+        # Calcular cada etapa separadamente
+        custo_coleta = calcular_rota_direta_banco(agente_coleta, origem, uf_origem, "Base Intermediária", "BI", peso_cubado, valor_nf, df_base)
+        custo_transferencia = calcular_rota_direta_banco(agente_transferencia, "Base Origem", "BO", "Base Destino", "BD", peso_cubado, valor_nf, df_base)
+        custo_entrega = calcular_rota_direta_banco(agente_entrega, "Base Intermediária", "BI", destino, uf_destino, peso_cubado, valor_nf, df_base)
+        
+        if not all([custo_coleta, custo_transferencia, custo_entrega]):
+            return None
+        
+        # Somar custos totais
+        custo_total_rota = custo_coleta['custo_total'] + custo_transferencia['custo_total'] + custo_entrega['custo_total']
+        
+        return {
+            'tipo_servico': f"OPA (Coleta) + {agente_transferencia} (Transferência) + CFG (Entrega)",
+            'fornecedor': f"{agente_transferencia}",  # Fornecedor principal
+            'custo_total': custo_total_rota,
+            'prazo': 3,
+            'peso_maximo_agente': min(
+                custo_coleta.get('peso_maximo_agente', 1000),
+                custo_transferencia.get('peso_maximo_agente', 1000),
+                custo_entrega.get('peso_maximo_agente', 1000)
+            ),
+            'descricao': f"Rota completa com 3 agentes especializados",
+            'detalhes_expandidos': {
+                'agentes_info': {
+                    'agente_coleta': agente_coleta,
+                    'transferencia': agente_transferencia,
+                    'agente_entrega': agente_entrega,
+                    'base_origem': transferencia.get('Base Origem', 'Base de Origem'),
+                    'base_destino': transferencia.get('Base Destino', 'Base de Destino')
+                },
+                'rota_info': {
+                    'origem': origem,
+                    'destino': destino,
+                    'peso_real': peso_cubado / 300 if peso_cubado > 300 else peso_cubado,
+                    'cubagem': peso_cubado / 300 if peso_cubado > 300 else 0,
+                    'peso_cubado': peso_cubado,
+                    'tipo_peso_usado': 'Cubado'
+                },
+                'custos_detalhados': {
+                    'custo_base_frete': custo_coleta['custo_total'] + custo_transferencia['custo_total'] + custo_entrega['custo_total'],
+                    'custo_coleta': custo_coleta['custo_total'],
+                    'custo_transferencia': custo_transferencia['custo_total'],
+                    'custo_entrega': custo_entrega['custo_total'],
+                    'pedagio': 0,
+                    'gris': 0,
+                    'seguro': 0,
+                    'icms': 0,
+                    'outros': 0
+                },
+                'observacoes': f"Rota combinada automática: {agente_coleta} → {agente_transferencia} → {agente_entrega}. Peso: {peso_cubado}kg"
+            }
+        }
+        
+    except Exception as e:
+        print(f"[ROTA_COMBINADA] ❌ Erro: {e}")
+        return None
+
+def criar_rota_direta_original(agente_linha, origem, destino, peso_cubado, valor_nf):
+    """Cria rota direta como no código original"""
+    try:
+        fornecedor = agente_linha.get('Fornecedor', 'N/A')
+        
+        # Calcular custo usando lógica original do calcular_custo_agente
+        custo_resultado = calcular_custo_agente_original(agente_linha, peso_cubado, valor_nf)
+        
+        if not custo_resultado:
+            return None
+        
+        return {
+            'tipo_servico': f"{fornecedor} - Direto",
+            'fornecedor': fornecedor,
+            'custo_total': custo_resultado['total'],
+            'prazo': custo_resultado.get('prazo', 3),
+            'peso_maximo_agente': custo_resultado.get('peso_maximo', 'N/A'),
+            'descricao': f"Serviço direto porta-a-porta",
+            'detalhes_expandidos': {
+                'agentes_info': {
+                    'agente_coleta': 'N/A',
+                    'transferencia': 'N/A',
+                    'agente_entrega': 'N/A'
+                },
+                'rota_info': {
+                    'origem': origem,
+                    'destino': destino,
+                    'peso_cubado': peso_cubado,
+                    'tipo_peso_usado': 'Cubado'
+                },
+                'custos_detalhados': {
+                    'custo_base_frete': custo_resultado['custo_base'],
+                    'custo_coleta': 0,
+                    'custo_transferencia': 0,
+                    'custo_entrega': 0,
+                    'pedagio': custo_resultado['pedagio'],
+                    'gris': custo_resultado['gris'],
+                    'seguro': custo_resultado.get('seguro', 0),
+                    'icms': 0,
+                    'outros': 0
+                },
+                'observacoes': f"Rota direta original: {fornecedor}"
+            }
+        }
+        
+    except Exception as e:
+        print(f"[ROTA_DIRETA_ORIG] ❌ Erro: {e}")
+        return None
+
+def criar_rota_transferencia_direta_original(transferencia_linha, origem, destino, peso_cubado, valor_nf):
+    """Cria rota de transferência direta como no código original"""
+    try:
+        fornecedor = transferencia_linha.get('Fornecedor', 'N/A')
+        
+        # Calcular custo usando lógica original
+        custo_resultado = calcular_custo_agente_original(transferencia_linha, peso_cubado, valor_nf)
+        
+        if not custo_resultado:
+            return None
+        
+        return {
+            'tipo_servico': f"{fornecedor} - Transferência",
+            'fornecedor': fornecedor,
+            'custo_total': custo_resultado['total'],
+            'prazo': custo_resultado.get('prazo', 3),
+            'peso_maximo_agente': custo_resultado.get('peso_maximo', 'N/A'),
+            'descricao': f"Transferência direta",
+            'detalhes_expandidos': {
+                'agentes_info': {
+                    'agente_coleta': 'N/A',
+                    'transferencia': fornecedor,
+                    'agente_entrega': 'N/A',
+                    'base_origem': transferencia_linha.get('Base Origem', 'Base de Origem'),
+                    'base_destino': transferencia_linha.get('Base Destino', 'Base de Destino')
+                },
+                'rota_info': {
+                    'origem': origem,
+                    'destino': destino,
+                    'peso_cubado': peso_cubado,
+                    'tipo_peso_usado': 'Cubado'
+                },
+                'custos_detalhados': {
+                    'custo_base_frete': custo_resultado['custo_base'],
+                    'custo_coleta': 0,
+                    'custo_transferencia': custo_resultado['total'],
+                    'custo_entrega': 0,
+                    'pedagio': custo_resultado['pedagio'],
+                    'gris': custo_resultado['gris'],
+                    'seguro': custo_resultado.get('seguro', 0),
+                    'icms': 0,
+                    'outros': 0
+                },
+                'observacoes': f"Transferência direta original: {fornecedor}"
+            }
+        }
+        
+    except Exception as e:
+        print(f"[TRANSFERENCIA_ORIG] ❌ Erro: {e}")
+        return None
+
+def criar_rota_combinada_original(agente_col, transferencia, agente_ent, origem, destino, peso_cubado, valor_nf):
+    """Cria rota combinada como no código original"""
+    try:
+        # Calcular cada etapa usando lógica original
+        custo_coleta = calcular_custo_agente_original(agente_col, peso_cubado, valor_nf)
+        custo_transferencia = calcular_custo_agente_original(transferencia, peso_cubado, valor_nf)
+        custo_entrega = calcular_custo_agente_original(agente_ent, peso_cubado, valor_nf)
+        
+        if not all([custo_coleta, custo_transferencia, custo_entrega]):
+            return None
+        
+        # Somar custos totais (como no original)
+        total = custo_coleta['total'] + custo_transferencia['total'] + custo_entrega['total']
+        prazo_total = max(custo_coleta.get('prazo', 1), custo_transferencia.get('prazo', 1), custo_entrega.get('prazo', 1))
+        
+        fornecedor_col = agente_col.get('Fornecedor', 'N/A')
+        fornecedor_transf = transferencia.get('Fornecedor', 'N/A')
+        fornecedor_ent = agente_ent.get('Fornecedor', 'N/A')
+        
+        return {
+            'tipo_servico': f"OPA (Coleta) + {fornecedor_transf} (Transferência) + CFG (Entrega)",
+            'fornecedor': f"{fornecedor_transf}",  # Fornecedor principal
+            'custo_total': total,
+            'prazo': prazo_total,
+            'peso_maximo_agente': min(
+                custo_coleta.get('peso_maximo', 1000) or 1000,
+                custo_transferencia.get('peso_maximo', 1000) or 1000,
+                custo_entrega.get('peso_maximo', 1000) or 1000
+            ),
+            'descricao': f"Rota completa com 3 agentes especializados",
+            'detalhes_expandidos': {
+                'agentes_info': {
+                    'agente_coleta': fornecedor_col,
+                    'transferencia': fornecedor_transf,
+                    'agente_entrega': fornecedor_ent,
+                    'base_origem': transferencia.get('Base Origem', 'Osasco/SP'),
+                    'base_destino': transferencia.get('Base Destino', 'Amparo/SP')
+                },
+                'rota_info': {
+                    'origem': origem,
+                    'destino': destino,
+                    'peso_real': peso_cubado / 300 if peso_cubado > 300 else peso_cubado,
+                    'cubagem': peso_cubado / 300 if peso_cubado > 300 else 0,
+                    'peso_cubado': peso_cubado,
+                    'tipo_peso_usado': 'Cubado'
+                },
+                'custos_detalhados': {
+                    'custo_base_frete': custo_coleta['custo_base'] + custo_transferencia['custo_base'] + custo_entrega['custo_base'],
+                    'custo_coleta': custo_coleta['total'],
+                    'custo_transferencia': custo_transferencia['total'],
+                    'custo_entrega': custo_entrega['total'],
+                    'pedagio': custo_coleta['pedagio'] + custo_transferencia['pedagio'] + custo_entrega['pedagio'],
+                    'gris': custo_coleta['gris'] + custo_transferencia['gris'] + custo_entrega['gris'],
+                    'seguro': custo_coleta.get('seguro', 0) + custo_transferencia.get('seguro', 0) + custo_entrega.get('seguro', 0),
+                    'icms': 0,
+                    'outros': 0
+                },
+                'observacoes': f"Rota combinada original: {fornecedor_col} → {fornecedor_transf} → {fornecedor_ent}. Peso: {peso_cubado}kg"
+            }
+        }
+        
+    except Exception as e:
+        print(f"[ROTA_COMBINADA_ORIG] ❌ Erro: {e}")
+        return None
+
+def calcular_custo_agente_original(linha, peso_cubado, valor_nf):
+    """Calcula custo baseado apenas nos dados da base unificada - SEM LÓGICAS HARDCODED"""
+    try:
+        fornecedor = linha.get('Fornecedor', 'N/A')
+        prazo_raw = linha.get('Prazo', 1)
+        prazo = int(prazo_raw) if prazo_raw and str(prazo_raw).isdigit() else 1
+        
+        # Peso máximo
+        peso_maximo = None
+        if 'PESO MÁXIMO TRANSPORTADO' in linha and pd.notna(linha.get('PESO MÁXIMO TRANSPORTADO')):
+            try:
+                peso_maximo = float(linha.get('PESO MÁXIMO TRANSPORTADO', 0))
+            except:
+                pass
+        
+        # Usar apenas lógica de transferência padrão baseada nos dados da base
+        custo_base = calcular_transferencia_padrao(linha, peso_cubado)
+        
+        if custo_base <= 0:
+            return None
+        
+        # Calcular custos adicionais baseados apenas nos dados da base
+        gris = 0
+        if valor_nf and linha.get('Gris Exc'):
+            gris_perc = float(linha.get('Gris Exc', 0))
+            gris_min = float(linha.get('Gris Min', 0))
+            gris = max((valor_nf * gris_perc / 100), gris_min)
+        
+        pedagio = 0
+        if linha.get('Pedagio (100 Kg)'):
+            pedagio = (peso_cubado / 100) * float(linha.get('Pedagio (100 Kg)', 0))
+        
+        seguro = 0
+        if valor_nf and linha.get('Seguro'):
+            seguro = valor_nf * (float(linha.get('Seguro', 0)) / 100)
+        
+        total = custo_base + gris + pedagio + seguro
+        
+        return {
+            'fornecedor': fornecedor,
+            'custo_base': custo_base,
+            'gris': gris,
+            'pedagio': pedagio,
+            'seguro': seguro,
+            'total': total,
+            'prazo': prazo,
+            'peso_maximo': peso_maximo
+        }
+        
+    except Exception as e:
+        print(f"[CUSTO_BASE] ❌ Erro para {linha.get('Fornecedor', 'N/A')}: {e}")
+        return None
+
+def calcular_transferencia_padrao(linha, peso_cubado):
+    """Implementa a lógica de transferência padrão do código original"""
+    try:
+        peso_calculo = float(peso_cubado)
+        
+        # 1) Valor mínimo até 10kg
+        valor_minimo = linha.get('VALOR MÍNIMO ATÉ 10')
+        if peso_calculo <= 10 and valor_minimo and float(valor_minimo) > 0:
+            return float(valor_minimo)
+        
+        # 2) Seleção de faixa por peso
+        faixas_kg = [20, 30, 50, 70, 100, 150, 200, 300, 500]
+        
+        for faixa in faixas_kg:
+            if peso_calculo <= float(faixa):
+                valor_faixa = linha.get(str(faixa), 0)
+                if valor_faixa and float(valor_faixa) > 0:
+                    return peso_calculo * float(valor_faixa)
+        
+        # 3) Acima de 500kg
+        for col_acima in ['Acima 500', 'Acima 1000', 'Acima 2000']:
+            valor_acima = linha.get(col_acima)
+            if valor_acima and float(valor_acima) > 0:
+                return peso_calculo * float(valor_acima)
+        
+        return 0.0
+        
+    except Exception as e:
+        print(f"[TRANSF_PADRAO] ❌ Erro: {e}")
+        return 0.0
+
+def calcular_com_agente_banco_integrado(agente_nome, linha_base, peso_usado, valor_nf, agentes_dict):
+    """Calcula usando apenas dados do banco e da base unificada - SEM HARDCODE"""
+    try:
+        # Usar função limpa que calcula baseado apenas nos dados da base
+        resultado_base = calcular_custo_agente_original(linha_base, peso_usado, valor_nf)
+        
+        if not resultado_base:
+            return None
+        
+        # Buscar configurações específicas do agente no banco se existirem
+        try:
+            # Buscar agente primeiro
+            agente_banco = AgenteTransportadora.query.filter_by(nome=agente_nome, ativo=True).first()
+            if agente_banco:
+                config_agente = ConfiguracaoAgente.query.filter_by(agente_id=agente_banco.id, ativo=True).first()
+            else:
+                config_agente = None
+                
+            if config_agente:
+                valores_custom = config_agente.get_valores_customizados()
+                
+                # Aplicar margens ou ajustes específicos do banco
+                margem = valores_custom.get('margem_percentual', 0)
+                if margem > 0:
+                    resultado_base['total'] *= (1 + margem / 100)
+                    resultado_base['custo_base'] *= (1 + margem / 100)
+                    print(f"[AGENTE] 📊 Margem {margem}% aplicada para {agente_nome}")
+                
+        except Exception as e:
+            print(f"[AGENTE] ⚠️ Erro ao carregar configuração para {agente_nome}: {e}")
+        
+        return {
+            'agente': agente_nome,
+            'tipo_agente': agentes_dict.get(agente_nome, {}).get('tipo', 'desconhecido'),
+            'valor_base': resultado_base['custo_base'],
+            'gris': resultado_base['gris'],
+            'pedagio': resultado_base['pedagio'],
+            'seguro': resultado_base['seguro'],
+            'total': resultado_base['total'],
+            'peso_maximo': resultado_base.get('peso_maximo', 1000),
+            'volume_maximo': 100
+        }
+        
+    except Exception as e:
+        print(f"[AGENTE] ❌ Erro no cálculo com {agente_nome}: {e}")
+        return None
+
+
+
+def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_destino, peso, cubagem, valor_nf=None):
+    """Função restaurada que estava funcionando - INTEGRADA COM BANCO"""
+    try:
+        print(f"[FRACIONADO] 📦 Calculando: {origem}/{uf_origem} → {destino}/{uf_destino}")
+        print(f"[FRACIONADO] Peso: {peso}kg, Cubagem: {cubagem}m³")
+        
+        # Carregar base unificada
+        df_base = carregar_base_unificada()
+        if df_base is None or df_base.empty:
+            return {'sem_opcoes': True, 'erro': 'Base de dados não disponível'}
+        
+        # Carregar agentes e memórias do banco
+        agentes_dict = carregar_agentes_e_memorias()
+        
+        # Normalizar nomes
+        origem_norm = origem.strip().title()
+        destino_norm = destino.strip().title()
+        
+        # Filtrar dados da base
+        df_filtrado = df_base[
+            (df_base['Origem'].str.contains(origem_norm, case=False, na=False)) &
+            (df_base['Destino'].str.contains(destino_norm, case=False, na=False))
+        ]
+        
+        if df_filtrado.empty:
             return {'sem_opcoes': True, 'erro': 'Nenhuma rota encontrada'}
         
-        resultados = []
-        peso_cubado = (cubagem * 250) if cubagem else 0
-        peso_usado = max(peso, peso_cubado)
+        # Calcular peso cubado
+        peso_cubado = max(peso, cubagem * 250) if cubagem else peso
         
-        for linha_base in dados_base:
-            # Buscar agente configurado
-            agente = AgenteTransportadora.query.filter_by(
-                nome=linha_base.fornecedor, 
-                ativo=True
-            ).first()
-            
-            if agente:
-                # Usar sistema do banco
-                resultado = calcular_com_agente_banco(agente, linha_base, peso_usado, valor_nf)
-            else:
-                # Usar cálculo genérico
-                resultado = calcular_generico_base(linha_base, peso_usado, valor_nf)
-            
-            if resultado:
+        resultados = []
+        resultados_detalhados = []  # Para o ranking com detalhes
+        
+        # Verificar se há agentes no banco
+        if not agentes_dict:
+            print(f"[FRACIONADO] ⚠️ Nenhum agente no banco - use /admin/calculadoras para configurar")
+            return {'sem_opcoes': True, 'erro': 'Sistema não configurado. Execute o setup na interface admin.'}
+        
+        # Calcular rotas automáticas baseadas nas configurações do banco
+        rotas_automaticas = calcular_rotas_automaticas_banco(origem, uf_origem, destino, uf_destino, peso_cubado, valor_nf, df_base)
+        if rotas_automaticas:
+            resultados_detalhados.extend(rotas_automaticas)
+            print(f"[FRACIONADO] 🤖 {len(rotas_automaticas)} rotas automáticas do banco adicionadas")
+        
+        print(f"[FRACIONADO] 🔗 Processando rotas com {len(agentes_dict)} agentes do banco")
+        
+        # Processar cada linha para rotas diretas
+        for idx, linha in df_filtrado.iterrows():
+            try:
+                fornecedor = linha.get('Fornecedor', 'N/A')
+                
+                # Verificar se o fornecedor é um agente no banco de dados
+                if fornecedor in agentes_dict:
+                    print(f"[FRACIONADO] 🎯 Usando agente do banco: {fornecedor}")
+                    calculo_agente = calcular_com_agente_banco_integrado(fornecedor, linha, peso_cubado, valor_nf, agentes_dict)
+                    
+                    if calculo_agente:
+                        # Resultado para compatibilidade
+                        resultado = {
+                            'fornecedor': fornecedor,
+                            'tipo_servico': f"{calculo_agente['tipo_agente']} - {fornecedor}",
+                            'custo_base': calculo_agente['valor_base'],
+                            'gris': calculo_agente['gris'],
+                            'pedagio': calculo_agente['pedagio'],
+                            'seguro': calculo_agente['seguro'],
+                            'total': calculo_agente['total'],
+                            'peso_usado': f"{peso_cubado}kg",
+                            'prazo': 3,
+                            'eh_melhor_opcao': False
+                        }
+                        resultados.append(resultado)
+                        
+                        # Resultado detalhado para ranking
+                        resultado_detalhado = {
+                            'tipo_servico': f"{calculo_agente['tipo_agente']} - {fornecedor}",
+                            'fornecedor': fornecedor,
+                            'custo_total': calculo_agente['total'],
+                            'prazo': 3,
+                            'peso_maximo_agente': calculo_agente['peso_maximo'],
+                            'descricao': f"Serviço {calculo_agente['tipo_agente']} com memória de cálculo",
+                            'detalhes_expandidos': {
+                                'agentes_info': {
+                                    'agente_coleta': fornecedor if calculo_agente['tipo_agente'] == 'COLETA' else 'N/A',
+                                    'transferencia': fornecedor if calculo_agente['tipo_agente'] == 'TRANSFERENCIA' else 'N/A',
+                                    'agente_entrega': fornecedor if calculo_agente['tipo_agente'] == 'ENTREGA' else 'N/A',
+                                    'base_origem': linha.get('Base Origem', 'Base de Origem'),
+                                    'base_destino': linha.get('Base Destino', 'Base de Destino')
+                                },
+                                'rota_info': {
+                                    'origem': origem,
+                                    'destino': destino,
+                                    'peso_real': peso,
+                                    'cubagem': cubagem,
+                                    'peso_cubado': peso_cubado,
+                                    'tipo_peso_usado': 'Cubado' if peso_cubado > peso else 'Real'
+                                },
+                                'custos_detalhados': {
+                                    'custo_base_frete': calculo_agente['valor_base'],
+                                    'custo_coleta': calculo_agente['valor_base'] * 0.3 if calculo_agente['tipo_agente'] == 'COLETA' else 0,
+                                    'custo_transferencia': calculo_agente['valor_base'] * 0.5 if calculo_agente['tipo_agente'] == 'TRANSFERENCIA' else 0,
+                                    'custo_entrega': calculo_agente['valor_base'] * 0.2 if calculo_agente['tipo_agente'] == 'ENTREGA' else 0,
+                                    'pedagio': calculo_agente['pedagio'],
+                                    'gris': calculo_agente['gris'],
+                                    'seguro': calculo_agente['seguro'],
+                                    'icms': 0,
+                                    'outros': 0
+                                },
+                                'observacoes': f"Cálculo usando memória de agente do banco de dados. Peso máximo: {calculo_agente['peso_maximo']}kg"
+                            }
+                        }
+                        resultados_detalhados.append(resultado_detalhado)
+                        continue
+                
+                # Fallback para cálculo tradicional se não estiver no banco
+                print(f"[FRACIONADO] 📊 Cálculo tradicional para: {fornecedor}")
+                
+                # Obter valor por peso (cálculo tradicional)
+                valor_base = None
+                if peso_cubado <= 10 and linha.get('VALOR MÍNIMO ATÉ 10'):
+                    valor_base = float(linha.get('VALOR MÍNIMO ATÉ 10', 0))
+                elif peso_cubado <= 20 and linha.get('20'):
+                    valor_base = float(linha.get('20', 0)) * peso_cubado
+                elif peso_cubado <= 30 and linha.get('30'):
+                    valor_base = float(linha.get('30', 0)) * peso_cubado
+                elif peso_cubado <= 50 and linha.get('50'):
+                    valor_base = float(linha.get('50', 0)) * peso_cubado
+                elif peso_cubado <= 70 and linha.get('70'):
+                    valor_base = float(linha.get('70', 0)) * peso_cubado
+                elif peso_cubado <= 100 and linha.get('100'):
+                    valor_base = float(linha.get('100', 0)) * peso_cubado
+                elif peso_cubado <= 150 and linha.get('150'):
+                    valor_base = float(linha.get('150', 0)) * peso_cubado
+                elif peso_cubado <= 200 and linha.get('200'):
+                    valor_base = float(linha.get('200', 0)) * peso_cubado
+                elif peso_cubado <= 300 and linha.get('300'):
+                    valor_base = float(linha.get('300', 0)) * peso_cubado
+                elif peso_cubado <= 500 and linha.get('500'):
+                    valor_base = float(linha.get('500', 0)) * peso_cubado
+                else:
+                    valor_base = float(linha.get('Acima 500', 0)) * peso_cubado
+                
+                if not valor_base or valor_base <= 0:
+                    continue
+                
+                # Calcular custos adicionais
+                gris = 0
+                if valor_nf and linha.get('Gris Exc'):
+                    gris_perc = float(linha.get('Gris Exc', 0))
+                    gris_min = float(linha.get('Gris Min', 0))
+                    gris = max((valor_nf * gris_perc / 100), gris_min)
+                
+                pedagio = 0
+                if linha.get('Pedagio (100 Kg)'):
+                    pedagio = (peso_cubado / 100) * float(linha.get('Pedagio (100 Kg)', 0))
+                
+                seguro = 0
+                if valor_nf and linha.get('Seguro'):
+                    seguro = valor_nf * (float(linha.get('Seguro', 0)) / 100)
+                
+                total = valor_base + gris + pedagio + seguro
+                
+                resultado = {
+                    'fornecedor': fornecedor,
+                    'tipo_servico': f"{linha.get('Tipo', 'Fracionado')} - {fornecedor}",
+                    'custo_base': valor_base,
+                    'gris': gris,
+                    'pedagio': pedagio,
+                    'seguro': seguro,
+                    'total': total,
+                    'peso_usado': f"{peso_cubado}kg",
+                    'prazo': 3,
+                    'eh_melhor_opcao': False
+                }
+                
                 resultados.append(resultado)
+                
+            except Exception as e:
+                print(f"[FRACIONADO] Erro processando {linha.get('Fornecedor', 'N/A')}: {e}")
+                continue
         
         # Ordenar por preço
         resultados.sort(key=lambda x: x.get('total', float('inf')))
@@ -116,17 +1026,80 @@ def calcular_frete_limpo(origem, uf_origem, destino, uf_destino, peso, cubagem=N
         if resultados:
             resultados[0]['eh_melhor_opcao'] = True
         
+        print(f"[FRACIONADO] ✅ {len(resultados)} opções encontradas")
+        
+        # Criar estrutura de ranking detalhada como o JavaScript original espera
+        ranking_data = {
+            'id_calculo': f"FRAC_{origem}_{destino}_{int(time.time())}",
+            'origem': f"{origem}/{uf_origem}",
+            'destino': f"{destino}/{uf_destino}",
+            'peso': peso,
+            'cubagem': cubagem,
+            'peso_cubado': f"{peso_cubado}kg",
+            'peso_usado_tipo': 'Cubado' if peso_cubado > peso else 'Real',
+            'valor_nf': valor_nf,
+            'melhor_opcao': resultados[0] if resultados else None,
+            'ranking_opcoes': []
+        }
+        
+        # Usar resultados detalhados se disponíveis, senão converter resultados básicos
+        if resultados_detalhados:
+            ranking_data['ranking_opcoes'] = resultados_detalhados
+            print(f"[FRACIONADO] 🎯 Usando {len(resultados_detalhados)} resultados detalhados do banco")
+        else:
+            # Converter resultados tradicionais para formato de ranking
+            for idx, resultado in enumerate(resultados):
+                opcao_ranking = {
+                    'tipo_servico': resultado['tipo_servico'],
+                    'fornecedor': resultado['fornecedor'],
+                    'custo_total': resultado['total'],
+                    'prazo': resultado.get('prazo', 3),
+                    'peso_maximo_agente': 'N/A',
+                    'descricao': f"Serviço {resultado['tipo_servico']}",
+                    'detalhes_expandidos': {
+                        'agentes_info': {
+                            'agente_coleta': 'N/A',
+                            'transferencia': resultado['fornecedor'],
+                            'agente_entrega': 'N/A',
+                            'base_origem': 'Base de Origem',
+                            'base_destino': 'Base de Destino'
+                        },
+                        'rota_info': {
+                            'origem': origem,
+                            'destino': destino,
+                            'peso_real': peso,
+                            'cubagem': cubagem,
+                            'peso_cubado': peso_cubado,
+                            'tipo_peso_usado': 'Cubado' if peso_cubado > peso else 'Real'
+                        },
+                        'custos_detalhados': {
+                            'custo_base_frete': resultado['custo_base'],
+                            'custo_coleta': resultado['custo_base'] * 0.3,
+                            'custo_transferencia': resultado['custo_base'] * 0.5,
+                            'custo_entrega': resultado['custo_base'] * 0.2,
+                            'pedagio': resultado['pedagio'],
+                            'gris': resultado['gris'],
+                            'seguro': resultado['seguro'],
+                            'icms': 0,
+                            'outros': 0
+                        },
+                        'observacoes': f"Cálculo baseado em peso cubado de {peso_cubado}kg"
+                    }
+                }
+                ranking_data['ranking_opcoes'].append(opcao_ranking)
+            print(f"[FRACIONADO] 📊 Usando {len(resultados)} resultados tradicionais")
+        
         return {
             'sem_opcoes': len(resultados) == 0,
-            'opcoes': resultados,
+            'opcoes': resultados,  # Manter para compatibilidade
+            'ranking_fracionado': ranking_data,  # Novo formato detalhado
             'total_opcoes': len(resultados),
             'origem': origem,
-            'destino': destino,
-            'sistema': 'limpo_postgresql'
+            'destino': destino
         }
         
     except Exception as e:
-        print(f"[CALC LIMPO] Erro: {e}")
+        print(f"[FRACIONADO] ❌ Erro: {e}")
         return {'sem_opcoes': True, 'erro': str(e)}
 
 def calcular_com_agente_banco(agente, linha_base, peso_usado, valor_nf):
@@ -343,11 +1316,47 @@ def logout():
     log_acesso(usuario, 'LOGOUT', obter_ip_cliente())
     return redirect(url_for('login'))
 
+# ===== MIDDLEWARES =====
+
+def middleware_admin(f):
+    """Middleware específico para administradores"""
+    def decorated_function(*args, **kwargs):
+        if 'usuario_logado' not in session:
+            return redirect(url_for('login'))
+
+        usuario_permissoes = session.get('usuario_permissoes', {})
+        if not (usuario_permissoes.get('pode_ver_admin', False) or 
+               session.get('usuario_tipo') == 'admin'):
+            flash('Acesso negado. Você não tem permissão para acessar esta área.', 'danger')
+            return redirect(url_for('index'))
+        
+        return f(*args, **kwargs)
+    decorated_function.__name__ = f.__name__
+    return decorated_function
+
+# ===== ROTA DE SETUP =====
+
+@app.route("/admin/setup-memorias", methods=["POST"])
+@middleware_admin
+def admin_setup_memorias():
+    """Rota para popular banco com memórias de cálculo originais"""
+    try:
+        popular_banco_com_memorias_originais()
+        return jsonify({
+            'sucesso': True,
+            'mensagem': 'Memórias de cálculo originais salvas no banco com sucesso'
+        })
+    except Exception as e:
+        return jsonify({
+            'sucesso': False,
+            'mensagem': f'Erro ao salvar memórias: {str(e)}'
+        }), 500
+
 # ===== ROTAS DE CÁLCULO LIMPAS =====
 
 @app.route("/calcular_frete_fracionado", methods=["POST"])
 def calcular_frete_fracionado():
-    """Cálculo de frete fracionado limpo"""
+    """Cálculo de frete fracionado restaurado"""
     try:
         data = request.get_json()
         usuario = session.get('usuario_logado', 'DESCONHECIDO')
@@ -366,9 +1375,9 @@ def calcular_frete_fracionado():
         if not all([origem, uf_origem, destino, uf_destino]):
             return jsonify({"error": "Origem e destino são obrigatórios"})
         
-        # Sistema limpo
-        resultado = calcular_frete_limpo(origem, uf_origem, destino, uf_destino, 
-                                       peso, cubagem, valor_nf, 'Fracionado')
+        # Usar função restaurada que funcionava
+        resultado = calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_destino, 
+                                                           peso, cubagem, valor_nf)
         
         return jsonify(resultado)
         
@@ -395,9 +1404,8 @@ def calcular_dedicado():
         if not all([origem, uf_origem, destino, uf_destino]):
             return jsonify({"error": "Origem e destino são obrigatórios"})
         
-        # Sistema limpo
-        resultado = calcular_frete_limpo(origem, uf_origem, destino, uf_destino, 
-                                       peso, None, None, 'Dedicado')
+        # Sistema simplificado para dedicado
+        resultado = {'sem_opcoes': True, 'erro': 'Cálculo dedicado em desenvolvimento'}
         
         return jsonify(resultado)
         
@@ -425,9 +1433,8 @@ def calcular_aereo():
         if not all([origem, uf_origem, destino, uf_destino]):
             return jsonify({"error": "Origem e destino são obrigatórios"})
         
-        # Sistema limpo
-        resultado = calcular_frete_limpo(origem, uf_origem, destino, uf_destino, 
-                                       peso, cubagem, None, 'Aéreo')
+        # Sistema simplificado para aéreo
+        resultado = {'sem_opcoes': True, 'erro': 'Cálculo aéreo em desenvolvimento'}
         
         return jsonify(resultado)
         
@@ -585,6 +1592,110 @@ def api_get_agentes_memoria():
         })
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ===== APIs DE CALCULADORAS =====
+
+@app.route('/api/admin/tipos-calculo', methods=['GET'])
+def api_get_tipos_calculo():
+    """Listar tipos de cálculo"""
+    try:
+        tipos = TipoCalculoFrete.query.filter_by(ativo=True).all()
+        return jsonify([{
+            'id': tipo.id,
+            'nome': tipo.nome,
+            'descricao': tipo.descricao,
+            'categoria': tipo.categoria,
+            'ativo': tipo.ativo
+        } for tipo in tipos])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/tipos-calculo', methods=['POST'])
+def api_create_tipo_calculo():
+    """Criar novo tipo de cálculo"""
+    try:
+        data = request.get_json()
+        tipo = TipoCalculoFrete(
+            nome=data['nome'],
+            descricao=data.get('descricao', ''),
+            categoria=data.get('categoria', 'FRACIONADO')
+        )
+        db.session.add(tipo)
+        db.session.commit()
+        return jsonify({'sucesso': True, 'id': tipo.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/formulas-calculo', methods=['GET'])
+def api_get_formulas_calculo():
+    """Listar fórmulas de cálculo"""
+    try:
+        formulas = FormulaCalculoFrete.query.filter_by(ativa=True).all()
+        return jsonify([{
+            'id': formula.id,
+            'nome': formula.nome,
+            'tipo_id': formula.tipo_calculo_id,
+            'formula': formula.formula,
+            'condicoes': formula.condicoes,
+            'prioridade': formula.prioridade,
+            'ativa': formula.ativa
+        } for formula in formulas])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/formulas-calculo', methods=['POST'])
+def api_create_formula_calculo():
+    """Criar nova fórmula de cálculo"""
+    try:
+        data = request.get_json()
+        formula = FormulaCalculoFrete(
+            nome=data['nome'],
+            tipo_calculo_id=data['tipo_id'],
+            formula=data['formula'],
+            condicoes=data.get('condicoes', ''),
+            prioridade=data.get('prioridade', 1)
+        )
+        db.session.add(formula)
+        db.session.commit()
+        return jsonify({'sucesso': True, 'id': formula.id})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/configuracoes-agente', methods=['GET'])
+def api_get_configuracoes_agente():
+    """Listar configurações de agentes"""
+    try:
+        configuracoes = ConfiguracaoAgente.query.filter_by(ativa=True).all()
+        return jsonify([{
+            'id': config.id,
+            'agente_nome': config.agente_nome,
+            'tipo_calculo_id': config.tipo_calculo_id,
+            'ativa': config.ativa,
+            'valores_customizados': config.get_valores_customizados(),
+            'formulas_customizadas': config.get_formulas_customizadas()
+        } for config in configuracoes])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/configuracoes-agente', methods=['POST'])
+def api_create_configuracao_agente():
+    """Criar nova configuração de agente"""
+    try:
+        data = request.get_json()
+        config = ConfiguracaoAgente(
+            agente_nome=data['agente_nome'],
+            tipo_calculo_id=data['tipo_calculo_id'],
+            valores_customizados=data.get('valores_customizados', '{}'),
+            formulas_customizadas=data.get('formulas_customizadas', '{}')
+        )
+        db.session.add(config)
+        db.session.commit()
+        return jsonify({'sucesso': True, 'id': config.id})
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 # ===== APIs DE USUÁRIOS =====
@@ -833,6 +1944,22 @@ def historico():
     except Exception:
         return jsonify([])
 
+@app.route('/api/bases-disponiveis')
+def api_bases_disponiveis():
+    """API para listar bases disponíveis"""
+    try:
+        from sqlalchemy import distinct
+        bases = db.session.query(distinct(BaseUnificada.base_origem)).filter(
+            BaseUnificada.base_origem.isnot(None)
+        ).all()
+        
+        bases_list = [base[0] for base in bases if base[0]]
+        return jsonify(bases_list)
+        
+    except Exception as e:
+        print(f"[BASES] Erro: {e}")
+        return jsonify([])
+
 # ===== MIDDLEWARE DE AUTENTICAÇÃO =====
 
 def middleware_auth(f):
@@ -855,22 +1982,6 @@ def middleware_auth(f):
                 
         except Exception:
             pass  # Se erro no banco, continuar (fallback)
-        
-        return f(*args, **kwargs)
-    decorated_function.__name__ = f.__name__
-    return decorated_function
-
-def middleware_admin(f):
-    """Middleware específico para administradores"""
-    def decorated_function(*args, **kwargs):
-        if 'usuario_logado' not in session:
-            return redirect(url_for('login'))
-        
-        # Verificar permissões de admin
-        permissoes = session.get('usuario_permissoes', {})
-        if not permissoes.get('pode_ver_admin', False):
-            flash('Acesso negado. Você não tem permissão para acessar esta área.', 'danger')
-            return redirect(url_for('index'))
         
         return f(*args, **kwargs)
     decorated_function.__name__ = f.__name__

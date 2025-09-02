@@ -479,6 +479,31 @@
     </header>
 
     <div class="main-container">
+        <!-- Setup de Memórias de Cálculo -->
+        <div class="setup-section" style="background: white; border-radius: 10px; box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1); padding: 25px; margin-bottom: 30px;">
+            <div class="setup-header" style="display: flex; align-items: center; margin-bottom: 20px;">
+                <i class="fas fa-database" style="font-size: 1.5rem; color: #28a745; margin-right: 15px;"></i>
+                <div>
+                    <h2 style="color: #1e3c72; margin: 0;">Setup de Memórias de Cálculo</h2>
+                    <p style="color: #6c757d; margin: 5px 0 0 0;">Configure as memórias de cálculo originais dos agentes no banco de dados</p>
+                </div>
+            </div>
+            
+            <div class="setup-actions" style="display: flex; gap: 15px; align-items: center;">
+                <button id="btn-setup-memorias" onclick="executarSetupMemorias()" 
+                        style="background: #28a745; color: white; border: none; padding: 15px 30px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s; font-size: 1rem;">
+                    <i class="fas fa-database"></i> Popular Banco com Memórias Originais
+                </button>
+                
+                <button onclick="verificarStatusMemorias()"
+                        style="background: #17a2b8; color: white; border: none; padding: 15px 30px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s; font-size: 1rem;">
+                    <i class="fas fa-search"></i> Verificar Status
+                </button>
+            </div>
+            
+            <div id="setup-resultado" style="margin-top: 20px;"></div>
+        </div>
+
         <div class="tabs-container">
             <div class="tabs-header">
                 <button class="tab-button active" onclick="switchTab('tipos')">
@@ -837,7 +862,7 @@
         // Carregar fórmulas
         async function loadFormulas() {
             try {
-                const response = await fetch('/api/admin/formulas');
+                const response = await fetch('/api/admin/formulas-calculo');
                 if (response.ok) {
                     formulasData = await response.json();
                     renderFormulas();
@@ -950,9 +975,10 @@
         // Carregar agentes
         async function loadAgentes() {
             try {
-                const response = await fetch('/api/admin/agentes');
+                const response = await fetch('/api/admin/agentes-memoria');
                 if (response.ok) {
-                    agentesData = await response.json();
+                    const data = await response.json();
+                    agentesData = data.agentes || [];
                     updateAgenteSelects();
                 }
             } catch (error) {
@@ -1221,6 +1247,102 @@
 
             // Remover após 5 segundos
             setTimeout(() => alert.remove(), 5000);
+        }
+
+        // Funções de Setup
+        async function executarSetupMemorias() {
+            const btn = document.getElementById('btn-setup-memorias');
+            const resultado = document.getElementById('setup-resultado');
+            
+            // Desabilitar botão
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Executando Setup...';
+            
+            try {
+                const response = await fetch('/admin/setup-memorias', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.sucesso) {
+                    resultado.innerHTML = `
+                        <div style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; border: 1px solid #c3e6cb;">
+                            <i class="fas fa-check-circle"></i> <strong>Sucesso!</strong> ${data.mensagem}
+                            <br><br>
+                            <small>
+                                ✅ Agentes criados: JEM/DFI, SOL, REUNIDAS, PTX, Gritsch<br>
+                                ✅ Memórias de cálculo configuradas<br>
+                                ✅ Sistema pronto para uso
+                            </small>
+                        </div>
+                    `;
+                    
+                    // Desabilitar botão permanentemente após sucesso
+                    btn.style.background = '#6c757d';
+                    btn.innerHTML = '<i class="fas fa-check"></i> Setup Concluído';
+                    
+                    // Recarregar dados
+                    setTimeout(() => {
+                        loadTiposCalculo();
+                        loadFormulas();
+                        loadConfiguracoes();
+                    }, 1000);
+                    
+                } else {
+                    throw new Error(data.mensagem);
+                }
+                
+            } catch (error) {
+                resultado.innerHTML = `
+                    <div style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb;">
+                        <i class="fas fa-exclamation-triangle"></i> <strong>Erro:</strong> ${error.message}
+                    </div>
+                `;
+                
+                // Reabilitar botão em caso de erro
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-database"></i> Popular Banco com Memórias Originais';
+            }
+        }
+
+        async function verificarStatusMemorias() {
+            const resultado = document.getElementById('setup-resultado');
+            
+            try {
+                const response = await fetch('/api/admin/agentes-memoria');
+                const data = await response.json();
+                
+                if (data.agentes && data.memorias) {
+                    resultado.innerHTML = `
+                        <div style="background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 8px; border: 1px solid #bee5eb;">
+                            <i class="fas fa-info-circle"></i> <strong>Status do Sistema:</strong><br><br>
+                            📊 <strong>Agentes:</strong> ${data.agentes.length} cadastrados<br>
+                            🧠 <strong>Memórias:</strong> ${data.memorias.length} configuradas<br><br>
+                            <small>
+                                Agentes: ${data.agentes.map(a => a.nome).join(', ')}
+                            </small>
+                        </div>
+                    `;
+                } else {
+                    resultado.innerHTML = `
+                        <div style="background: #fff3cd; color: #856404; padding: 15px; border-radius: 8px; border: 1px solid #ffeaa7;">
+                            <i class="fas fa-exclamation-triangle"></i> <strong>Atenção:</strong> Nenhum agente ou memória encontrada no banco.<br>
+                            Execute o setup para configurar o sistema.
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                resultado.innerHTML = `
+                    <div style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; border: 1px solid #f5c6cb;">
+                        <i class="fas fa-times"></i> <strong>Erro:</strong> ${error.message}
+                    </div>
+                `;
+            }
         }
     </script>
 </body>

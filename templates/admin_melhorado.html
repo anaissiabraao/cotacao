@@ -525,6 +525,24 @@
             {% endfor %}
         </div>
 
+        <div class="setup-section" style="margin-bottom: 30px;">
+            <div class="section-title">
+                <i class="fas fa-tools"></i>
+                Setup do Sistema
+            </div>
+            <div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                <h4 style="color: #1e3c72; margin-bottom: 15px;">Configuração Inicial</h4>
+                <p style="color: #6c757d; margin-bottom: 20px;">
+                    Execute uma vez para popular o banco de dados com as memórias de cálculo originais dos agentes.
+                </p>
+                <button id="btn-setup-memorias" onclick="executarSetupMemorias()" 
+                        style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.3s;">
+                    <i class="fas fa-database"></i> Popular Banco com Memórias Originais
+                </button>
+                <div id="setup-resultado" style="margin-top: 15px;"></div>
+            </div>
+        </div>
+
         <div class="top-actions-section">
             <div class="section-title">
                 <i class="fas fa-chart-pie"></i>
@@ -540,5 +558,53 @@
             </div>
         </div>
     </div>
+
+    <script>
+        async function executarSetupMemorias() {
+            const btn = document.getElementById('btn-setup-memorias');
+            const resultado = document.getElementById('setup-resultado');
+            
+            // Desabilitar botão
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Executando Setup...';
+            
+            try {
+                const response = await fetch('/admin/setup-memorias', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.sucesso) {
+                    resultado.innerHTML = `
+                        <div style="background: #d4edda; color: #155724; padding: 12px; border-radius: 6px; border: 1px solid #c3e6cb;">
+                            <i class="fas fa-check-circle"></i> ${data.mensagem}
+                        </div>
+                    `;
+                    
+                    // Desabilitar botão permanentemente após sucesso
+                    btn.style.background = '#6c757d';
+                    btn.innerHTML = '<i class="fas fa-check"></i> Setup Concluído';
+                    
+                } else {
+                    throw new Error(data.mensagem);
+                }
+                
+            } catch (error) {
+                resultado.innerHTML = `
+                    <div style="background: #f8d7da; color: #721c24; padding: 12px; border-radius: 6px; border: 1px solid #f5c6cb;">
+                        <i class="fas fa-exclamation-triangle"></i> Erro: ${error.message}
+                    </div>
+                `;
+                
+                // Reabilitar botão em caso de erro
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-database"></i> Popular Banco com Memórias Originais';
+            }
+        }
+    </script>
 </body>
 </html>
