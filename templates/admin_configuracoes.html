@@ -397,7 +397,7 @@
                 </button>
                 
                 <button class="btn btn-info" onclick="popularBaseUnificada()">
-                    <i class="fas fa-table"></i> Popular Base Unificada
+                    <i class="fas fa-sync-alt"></i> Sincronizar Base de Dados
                 </button>
                 
                 <button class="btn btn-primary" onclick="limparCache()">
@@ -585,9 +585,9 @@
             }
         }
 
-        // Função para popular base unificada
+        // Função para sincronizar base de dados
         async function popularBaseUnificada() {
-            if (!confirm('Tem certeza que deseja popular a base unificada com dados de exemplo? Isso pode sobrescrever dados existentes.')) {
+            if (!confirm('Tem certeza que deseja sincronizar a base de dados com dados reais? Isso pode atualizar registros existentes.')) {
                 return;
             }
             
@@ -602,15 +602,15 @@
                 const data = await response.json();
                 
                 if (data.sucesso) {
-                    showAlert('Base unificada populada com sucesso!', 'success');
+                    showAlert('Base de dados sincronizada com sucesso!', 'success');
                     // Recarregar estatísticas
                     testarConexao();
                 } else {
-                    showAlert('Erro ao popular base unificada: ' + data.mensagem, 'danger');
+                    showAlert('Erro ao sincronizar base de dados: ' + data.mensagem, 'danger');
                 }
                 
             } catch (error) {
-                showAlert('Erro ao popular base unificada: ' + error.message, 'danger');
+                showAlert('Erro ao sincronizar base de dados: ' + error.message, 'danger');
             }
         }
 

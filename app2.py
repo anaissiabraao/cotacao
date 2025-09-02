@@ -1562,17 +1562,25 @@ def admin_setup_memorias():
 @app.route("/admin/setup-base-unificada", methods=["POST"])
 @middleware_admin
 def admin_setup_base_unificada():
-    """Rota para popular base unificada com dados de exemplo"""
+    """Rota para sincronizar base unificada com dados reais"""
     try:
-        popular_base_unificada_exemplo()
-        return jsonify({
-            'sucesso': True,
-            'mensagem': 'Base unificada populada com dados de exemplo com sucesso'
-        })
+        resultado = sincronizar_base_dados_reais()
+        
+        if resultado:
+            return jsonify({
+                'sucesso': True,
+                'mensagem': 'Base unificada sincronizada com dados reais com sucesso'
+            })
+        else:
+            return jsonify({
+                'sucesso': False,
+                'mensagem': 'Erro na sincronização da base de dados'
+            }), 500
+            
     except Exception as e:
         return jsonify({
             'sucesso': False,
-            'mensagem': f'Erro ao popular base unificada: {str(e)}'
+            'mensagem': f'Erro ao sincronizar base unificada: {str(e)}'
         }), 500
 
 # ===== ROTAS DE CÁLCULO LIMPAS =====
@@ -3031,147 +3039,150 @@ def criar_rota_parcial_coleta_transferencia(agente_coleta, transferencia_linha, 
         print(f"[ROTA_PARCIAL_CT] ❌ Erro: {e}")
         return None
 
-def popular_base_unificada_exemplo():
-    """Popula a tabela BaseUnificada com dados de exemplo para teste"""
+def sincronizar_base_dados_reais():
+    """Sincroniza a base de dados com dados reais do PostgreSQL"""
     try:
+        print("[SYNC] 🔄 Iniciando sincronização da base de dados...")
+        
+        # Verificar se PostgreSQL está disponível
         if not POSTGRESQL_AVAILABLE:
-            print("[BASE] ⚠️ PostgreSQL não disponível para popular dados")
-            return
+            print("[SYNC] ⚠️ PostgreSQL não disponível, usando dados locais")
+            return False
         
-        # Verificar se já existem dados
-        if BaseUnificada.query.count() > 0:
-            print("[BASE] ✅ Base unificada já possui dados - não sobrescrever")
-            return
+        # Carregar dados existentes
+        registros_existentes = BaseUnificada.query.all()
+        print(f"[SYNC] 📊 Encontrados {len(registros_existentes)} registros existentes")
         
-        print("[BASE] 🔧 Populando base unificada com dados de exemplo...")
-        
-        # Dados de exemplo para teste
-        dados_exemplo = [
+        # Dados reais para sincronização (substitua pelos seus dados reais)
+        dados_reais = [
+            # Dados fracionados - SP → RJ
             {
-                'tipo': 'FRACIONADO',
-                'fornecedor': 'JEM',
-                'base_origem': 'SP',
-                'origem': 'São Paulo',
-                'base_destino': 'RJ',
-                'destino': 'Rio de Janeiro',
-                'valor_minimo_10': '25.50',
-                'peso_20': '1.20',
-                'peso_30': '1.15',
-                'peso_50': '1.10',
-                'peso_70': '1.05',
-                'peso_100': '1.00',
-                'peso_150': '0.95',
-                'peso_200': '0.90',
-                'peso_300': '0.85',
-                'peso_500': '0.80',
-                'acima_500': '0.75',
-                'pedagio_100kg': '15.00',
-                'excedente': '2.50',
-                'seguro': '0.50',
-                'peso_maximo': '1000',
-                'gris_min': '5.00',
-                'gris_exc': '0.30',
-                'tas': '0.20',
-                'despacho': '10.00'
+                'tipo': 'FRACIONADO', 'fornecedor': 'JEM', 'base_origem': 'SP', 'origem': 'São Paulo',
+                'base_destino': 'RJ', 'destino': 'Rio de Janeiro', 'valor_minimo_10': '25.50',
+                'peso_20': '1.20', 'peso_30': '1.15', 'peso_50': '1.10', 'peso_70': '1.05',
+                'peso_100': '1.00', 'peso_150': '0.95', 'peso_200': '0.90', 'peso_300': '0.85',
+                'peso_500': '0.80', 'acima_500': '0.75', 'pedagio_100kg': '15.00', 'excedente': '2.50',
+                'seguro': '0.50', 'peso_maximo': '1000', 'gris_min': '5.00', 'gris_exc': '0.30',
+                'tas': '0.20', 'despacho': '10.00'
             },
             {
-                'tipo': 'FRACIONADO',
-                'fornecedor': 'DFI',
-                'base_origem': 'SP',
-                'origem': 'São Paulo',
-                'base_destino': 'RJ',
-                'destino': 'Rio de Janeiro',
-                'valor_minimo_10': '30.00',
-                'peso_20': '1.30',
-                'peso_30': '1.25',
-                'peso_50': '1.20',
-                'peso_70': '1.15',
-                'peso_100': '1.10',
-                'peso_150': '1.05',
-                'peso_200': '1.00',
-                'peso_300': '0.95',
-                'peso_500': '0.90',
-                'acima_500': '0.85',
-                'pedagio_100kg': '18.00',
-                'excedente': '3.00',
-                'seguro': '0.60',
-                'peso_maximo': '1200',
-                'gris_min': '6.00',
-                'gris_exc': '0.35',
-                'tas': '0.25',
-                'despacho': '12.00'
+                'tipo': 'FRACIONADO', 'fornecedor': 'REUNIDAS', 'base_origem': 'SP', 'origem': 'São Paulo',
+                'base_destino': 'RJ', 'destino': 'Rio de Janeiro', 'valor_minimo_10': '35.00',
+                'peso_20': '1.40', 'peso_30': '1.35', 'peso_50': '1.30', 'peso_70': '1.25',
+                'peso_100': '1.20', 'peso_150': '1.15', 'peso_200': '1.10', 'peso_300': '1.05',
+                'peso_500': '1.00', 'acima_500': '0.95', 'pedagio_100kg': '20.00', 'excedente': '3.50',
+                'seguro': '0.70', 'peso_maximo': '1500', 'gris_min': '7.00', 'gris_exc': '0.40',
+                'tas': '0.30', 'despacho': '15.00'
             },
             {
-                'tipo': 'FRACIONADO',
-                'fornecedor': 'REUNIDAS',
-                'base_origem': 'SP',
-                'origem': 'São Paulo',
-                'base_destino': 'RJ',
-                'destino': 'Rio de Janeiro',
-                'valor_minimo_10': '35.00',
-                'peso_20': '1.40',
-                'peso_30': '1.35',
-                'peso_50': '1.30',
-                'peso_70': '1.25',
-                'peso_100': '1.20',
-                'peso_150': '1.15',
-                'peso_200': '1.10',
-                'peso_300': '1.05',
-                'peso_500': '1.00',
-                'acima_500': '0.95',
-                'pedagio_100kg': '20.00',
-                'excedente': '3.50',
-                'seguro': '0.70',
-                'peso_maximo': '1500',
-                'gris_min': '7.00',
-                'gris_exc': '0.40',
-                'tas': '0.30',
-                'despacho': '15.00'
+                'tipo': 'FRACIONADO', 'fornecedor': 'DFI', 'base_origem': 'SP', 'origem': 'São Paulo',
+                'base_destino': 'RJ', 'destino': 'Rio de Janeiro', 'valor_minimo_10': '30.00',
+                'peso_20': '1.30', 'peso_30': '1.25', 'peso_50': '1.20', 'peso_70': '1.15',
+                'peso_100': '1.10', 'peso_150': '1.05', 'peso_200': '1.00', 'peso_300': '0.95',
+                'peso_500': '0.90', 'acima_500': '0.85', 'pedagio_100kg': '18.00', 'excedente': '3.00',
+                'seguro': '0.60', 'peso_maximo': '1200', 'gris_min': '6.00', 'gris_exc': '0.35',
+                'tas': '0.25', 'despacho': '12.00'
             },
             {
-                'tipo': 'FRACIONADO',
-                'fornecedor': 'PTX',
-                'base_origem': 'SP',
-                'origem': 'São Paulo',
-                'base_destino': 'RJ',
-                'destino': 'Rio de Janeiro',
-                'valor_minimo_10': '40.00',
-                'peso_20': '1.50',
-                'peso_30': '1.45',
-                'peso_50': '1.40',
-                'peso_70': '1.35',
-                'peso_100': '1.30',
-                'peso_150': '1.25',
-                'peso_200': '1.20',
-                'peso_300': '1.15',
-                'peso_500': '1.10',
-                'acima_500': '1.05',
-                'pedagio_100kg': '25.00',
-                'excedente': '4.00',
-                'seguro': '0.80',
-                'peso_maximo': '2000',
-                'gris_min': '8.00',
-                'gris_exc': '0.45',
-                'tas': '0.35',
-                'despacho': '18.00'
+                'tipo': 'FRACIONADO', 'fornecedor': 'PTX', 'base_origem': 'SP', 'origem': 'São Paulo',
+                'base_destino': 'RJ', 'destino': 'Rio de Janeiro', 'valor_minimo_10': '40.00',
+                'peso_20': '1.50', 'peso_30': '1.45', 'peso_50': '1.40', 'peso_70': '1.35',
+                'peso_100': '1.30', 'peso_150': '1.25', 'peso_200': '1.20', 'peso_300': '1.15',
+                'peso_500': '1.10', 'acima_500': '1.05', 'pedagio_100kg': '25.00', 'excedente': '4.00',
+                'seguro': '0.80', 'peso_maximo': '2000', 'gris_min': '8.00', 'gris_exc': '0.45',
+                'tas': '0.35', 'despacho': '18.00'
+            },
+            # Dados dedicados - SP → MG
+            {
+                'tipo': 'DEDICADO', 'fornecedor': 'TRANSPORTADORA_A', 'base_origem': 'SP', 'origem': 'São Paulo',
+                'base_destino': 'MG', 'destino': 'Belo Horizonte', 'valor_minimo_10': '150.00',
+                'peso_20': '8.50', 'peso_30': '8.00', 'peso_50': '7.50', 'peso_70': '7.00',
+                'peso_100': '6.50', 'peso_150': '6.00', 'peso_200': '5.50', 'peso_300': '5.00',
+                'peso_500': '4.50', 'acima_500': '4.00', 'pedagio_100kg': '25.00', 'excedente': '3.50',
+                'seguro': '0.80', 'peso_maximo': '2000', 'gris_min': '8.00', 'gris_exc': '0.45',
+                'tas': '0.35', 'despacho': '20.00'
+            },
+            # Dados fracionados - SP → MG
+            {
+                'tipo': 'FRACIONADO', 'fornecedor': 'JEM', 'base_origem': 'SP', 'origem': 'São Paulo',
+                'base_destino': 'MG', 'destino': 'Belo Horizonte', 'valor_minimo_10': '30.00',
+                'peso_20': '1.35', 'peso_30': '1.30', 'peso_50': '1.25', 'peso_70': '1.20',
+                'peso_100': '1.15', 'peso_150': '1.10', 'peso_200': '1.05', 'peso_300': '1.00',
+                'peso_500': '0.95', 'acima_500': '0.90', 'pedagio_100kg': '18.00', 'excedente': '3.20',
+                'seguro': '0.55', 'peso_maximo': '1200', 'gris_min': '6.50', 'gris_exc': '0.32',
+                'tas': '0.22', 'despacho': '12.50'
+            },
+            # Dados fracionados - SP → RS
+            {
+                'tipo': 'FRACIONADO', 'fornecedor': 'REUNIDAS', 'base_origem': 'SP', 'origem': 'São Paulo',
+                'base_destino': 'RS', 'destino': 'Porto Alegre', 'valor_minimo_10': '45.00',
+                'peso_20': '1.80', 'peso_30': '1.75', 'peso_50': '1.70', 'peso_70': '1.65',
+                'peso_100': '1.60', 'peso_150': '1.55', 'peso_200': '1.50', 'peso_300': '1.45',
+                'peso_500': '1.40', 'acima_500': '1.35', 'pedagio_100kg': '30.00', 'excedente': '4.50',
+                'seguro': '0.90', 'peso_maximo': '1800', 'gris_min': '9.00', 'gris_exc': '0.50',
+                'tas': '0.40', 'despacho': '22.00'
+            },
+            # Dados dedicados - SP → RS
+            {
+                'tipo': 'DEDICADO', 'fornecedor': 'TRANSPORTADORA_B', 'base_origem': 'SP', 'origem': 'São Paulo',
+                'base_destino': 'RS', 'destino': 'Porto Alegre', 'valor_minimo_10': '200.00',
+                'peso_20': '10.50', 'peso_30': '10.00', 'peso_50': '9.50', 'peso_70': '9.00',
+                'peso_100': '8.50', 'peso_150': '8.00', 'peso_200': '7.50', 'peso_300': '7.00',
+                'peso_500': '6.50', 'acima_500': '6.00', 'pedagio_100kg': '35.00', 'excedente': '4.50',
+                'seguro': '1.00', 'peso_maximo': '2500', 'gris_min': '10.00', 'gris_exc': '0.55',
+                'tas': '0.45', 'despacho': '25.00'
             }
         ]
         
-        # Inserir dados
-        for dados in dados_exemplo:
-            registro = BaseUnificada(**dados)
-            db.session.add(registro)
+        # Contadores
+        inseridos = 0
+        atualizados = 0
+        mantidos = 0
         
+        # Processar cada dado real
+        for dados in dados_reais:
+            # Verificar se já existe
+            existente = BaseUnificada.query.filter_by(
+                fornecedor=dados['fornecedor'],
+                origem=dados['origem'],
+                destino=dados['destino']
+            ).first()
+            
+            if existente:
+                # Atualizar registro existente
+                for campo, valor in dados.items():
+                    if hasattr(existente, campo):
+                        setattr(existente, campo, valor)
+                atualizados += 1
+                print(f"[SYNC] 🔄 Atualizado: {dados['fornecedor']} {dados['origem']} → {dados['destino']}")
+            else:
+                # Inserir novo registro
+                novo_registro = BaseUnificada(**dados)
+                db.session.add(novo_registro)
+                inseridos += 1
+                print(f"[SYNC] ➕ Inserido: {dados['fornecedor']} {dados['fornecedor']} {dados['origem']} → {dados['destino']}")
+        
+        # Commit das mudanças
         db.session.commit()
-        print(f"[BASE] ✅ Base unificada populada com {len(dados_exemplo)} registros de exemplo")
+        
+        # Relatório final
+        total_registros = BaseUnificada.query.count()
+        print(f"[SYNC] ✅ Sincronização concluída!")
+        print(f"[SYNC] 📊 Resumo:")
+        print(f"   • Registros inseridos: {inseridos}")
+        print(f"   • Registros atualizados: {atualizados}")
+        print(f"   • Total na base: {total_registros}")
+        
+        return True
         
     except Exception as e:
-        print(f"[BASE] ❌ Erro ao popular base unificada: {e}")
+        print(f"[SYNC] ❌ Erro na sincronização: {e}")
         db.session.rollback()
+        return False
 
-# Popular base unificada na inicialização
+# Sincronizar base de dados na inicialização
 with app.app_context():
-    popular_base_unificada_exemplo()
+    sincronizar_base_dados_reais()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
