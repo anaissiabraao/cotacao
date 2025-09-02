@@ -30,7 +30,7 @@ pip install -r requirements.txt
 createdb base_unificada
 
 # Criar usuário
-psql -c "CREATE USER cotacao WITH PASSWORD '1234';"
+psql -c "CREATE USER cotacao WITH PASSWORD '****';"
 psql -c "GRANT ALL PRIVILEGES ON DATABASE base_unificada TO cotacao;"
 ```
 
