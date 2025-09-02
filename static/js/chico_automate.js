@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const fracionadoData = await fracionadoResponse.json();
                     console.log('[ALL IN] Dados frete fracionado recebidos:', fracionadoData);
                     exibirResultadoAllInFracionado(fracionadoData);
-                } else {
+        } else {
                     console.error('[ALL IN] Erro na resposta do frete fracionado:', fracionadoResponse.status);
                     exibirResultadoAllInFracionado({ erro: 'Erro ao calcular frete fracionado' });
                 }
@@ -256,7 +256,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             console.log('[ALL IN] Resposta dedicado status:', dedicadoResponse.status);
-            
+
             if (dedicadoResponse.ok) {
                 const dedicadoData = await dedicadoResponse.json();
                 console.log('[ALL IN] Dados frete dedicado recebidos:', dedicadoData);
@@ -282,7 +282,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 exibirResultadoAllInAereo(aereoData);
             }
                 
-        } catch (error) {
+            } catch (error) {
             console.error('[ALL IN] Erro:', error);
             showError(`Erro no calculo All In: ${error.message}`);
         } finally {
@@ -1089,7 +1089,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 
                 htmlVeiculos += '</div>';
-            } else {
+                    } else {
                 htmlVeiculos += '<p class="text-muted">Nenhum veículo disponível encontrado.</p>';
             }
             
@@ -1315,7 +1315,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
                     
                     html += '</div>';
-                } else {
+        } else {
                     html += '<p class="placeholder-text">Nenhum veículo disponível encontrado.</p>';
                 }
                 

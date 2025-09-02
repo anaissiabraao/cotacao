@@ -396,6 +396,10 @@
                     <i class="fas fa-database"></i> Popular Banco com Dados Iniciais
                 </button>
                 
+                <button class="btn btn-info" onclick="popularBaseUnificada()">
+                    <i class="fas fa-table"></i> Popular Base Unificada
+                </button>
+                
                 <button class="btn btn-primary" onclick="limparCache()">
                     <i class="fas fa-broom"></i> Limpar Cache do Sistema
                 </button>
@@ -578,6 +582,35 @@
                 
             } catch (error) {
                 showAlert('Erro ao popular banco: ' + error.message, 'danger');
+            }
+        }
+
+        // Função para popular base unificada
+        async function popularBaseUnificada() {
+            if (!confirm('Tem certeza que deseja popular a base unificada com dados de exemplo? Isso pode sobrescrever dados existentes.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/admin/setup-base-unificada', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.sucesso) {
+                    showAlert('Base unificada populada com sucesso!', 'success');
+                    // Recarregar estatísticas
+                    testarConexao();
+                } else {
+                    showAlert('Erro ao popular base unificada: ' + data.mensagem, 'danger');
+                }
+                
+            } catch (error) {
+                showAlert('Erro ao popular base unificada: ' + error.message, 'danger');
             }
         }
 

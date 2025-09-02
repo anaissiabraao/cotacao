@@ -1559,6 +1559,22 @@ def admin_setup_memorias():
             'mensagem': f'Erro ao salvar memórias: {str(e)}'
         }), 500
 
+@app.route("/admin/setup-base-unificada", methods=["POST"])
+@middleware_admin
+def admin_setup_base_unificada():
+    """Rota para popular base unificada com dados de exemplo"""
+    try:
+        popular_base_unificada_exemplo()
+        return jsonify({
+            'sucesso': True,
+            'mensagem': 'Base unificada populada com dados de exemplo com sucesso'
+        })
+    except Exception as e:
+        return jsonify({
+            'sucesso': False,
+            'mensagem': f'Erro ao popular base unificada: {str(e)}'
+        }), 500
+
 # ===== ROTAS DE CÁLCULO LIMPAS =====
 
 @app.route("/calcular_frete_fracionado", methods=["POST"])
@@ -3014,6 +3030,148 @@ def criar_rota_parcial_coleta_transferencia(agente_coleta, transferencia_linha, 
     except Exception as e:
         print(f"[ROTA_PARCIAL_CT] ❌ Erro: {e}")
         return None
+
+def popular_base_unificada_exemplo():
+    """Popula a tabela BaseUnificada com dados de exemplo para teste"""
+    try:
+        if not POSTGRESQL_AVAILABLE:
+            print("[BASE] ⚠️ PostgreSQL não disponível para popular dados")
+            return
+        
+        # Verificar se já existem dados
+        if BaseUnificada.query.count() > 0:
+            print("[BASE] ✅ Base unificada já possui dados - não sobrescrever")
+            return
+        
+        print("[BASE] 🔧 Populando base unificada com dados de exemplo...")
+        
+        # Dados de exemplo para teste
+        dados_exemplo = [
+            {
+                'tipo': 'FRACIONADO',
+                'fornecedor': 'JEM',
+                'base_origem': 'SP',
+                'origem': 'São Paulo',
+                'base_destino': 'RJ',
+                'destino': 'Rio de Janeiro',
+                'valor_minimo_10': '25.50',
+                'peso_20': '1.20',
+                'peso_30': '1.15',
+                'peso_50': '1.10',
+                'peso_70': '1.05',
+                'peso_100': '1.00',
+                'peso_150': '0.95',
+                'peso_200': '0.90',
+                'peso_300': '0.85',
+                'peso_500': '0.80',
+                'acima_500': '0.75',
+                'pedagio_100kg': '15.00',
+                'excedente': '2.50',
+                'seguro': '0.50',
+                'peso_maximo': '1000',
+                'gris_min': '5.00',
+                'gris_exc': '0.30',
+                'tas': '0.20',
+                'despacho': '10.00'
+            },
+            {
+                'tipo': 'FRACIONADO',
+                'fornecedor': 'DFI',
+                'base_origem': 'SP',
+                'origem': 'São Paulo',
+                'base_destino': 'RJ',
+                'destino': 'Rio de Janeiro',
+                'valor_minimo_10': '30.00',
+                'peso_20': '1.30',
+                'peso_30': '1.25',
+                'peso_50': '1.20',
+                'peso_70': '1.15',
+                'peso_100': '1.10',
+                'peso_150': '1.05',
+                'peso_200': '1.00',
+                'peso_300': '0.95',
+                'peso_500': '0.90',
+                'acima_500': '0.85',
+                'pedagio_100kg': '18.00',
+                'excedente': '3.00',
+                'seguro': '0.60',
+                'peso_maximo': '1200',
+                'gris_min': '6.00',
+                'gris_exc': '0.35',
+                'tas': '0.25',
+                'despacho': '12.00'
+            },
+            {
+                'tipo': 'FRACIONADO',
+                'fornecedor': 'REUNIDAS',
+                'base_origem': 'SP',
+                'origem': 'São Paulo',
+                'base_destino': 'RJ',
+                'destino': 'Rio de Janeiro',
+                'valor_minimo_10': '35.00',
+                'peso_20': '1.40',
+                'peso_30': '1.35',
+                'peso_50': '1.30',
+                'peso_70': '1.25',
+                'peso_100': '1.20',
+                'peso_150': '1.15',
+                'peso_200': '1.10',
+                'peso_300': '1.05',
+                'peso_500': '1.00',
+                'acima_500': '0.95',
+                'pedagio_100kg': '20.00',
+                'excedente': '3.50',
+                'seguro': '0.70',
+                'peso_maximo': '1500',
+                'gris_min': '7.00',
+                'gris_exc': '0.40',
+                'tas': '0.30',
+                'despacho': '15.00'
+            },
+            {
+                'tipo': 'FRACIONADO',
+                'fornecedor': 'PTX',
+                'base_origem': 'SP',
+                'origem': 'São Paulo',
+                'base_destino': 'RJ',
+                'destino': 'Rio de Janeiro',
+                'valor_minimo_10': '40.00',
+                'peso_20': '1.50',
+                'peso_30': '1.45',
+                'peso_50': '1.40',
+                'peso_70': '1.35',
+                'peso_100': '1.30',
+                'peso_150': '1.25',
+                'peso_200': '1.20',
+                'peso_300': '1.15',
+                'peso_500': '1.10',
+                'acima_500': '1.05',
+                'pedagio_100kg': '25.00',
+                'excedente': '4.00',
+                'seguro': '0.80',
+                'peso_maximo': '2000',
+                'gris_min': '8.00',
+                'gris_exc': '0.45',
+                'tas': '0.35',
+                'despacho': '18.00'
+            }
+        ]
+        
+        # Inserir dados
+        for dados in dados_exemplo:
+            registro = BaseUnificada(**dados)
+            db.session.add(registro)
+        
+        db.session.commit()
+        print(f"[BASE] ✅ Base unificada populada com {len(dados_exemplo)} registros de exemplo")
+        
+    except Exception as e:
+        print(f"[BASE] ❌ Erro ao popular base unificada: {e}")
+        db.session.rollback()
+
+# Popular base unificada na inicialização
+with app.app_context():
+    popular_base_unificada_exemplo()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
