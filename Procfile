@@ -1,1 +1,1 @@
-web: gunicorn app2:app --bind 0.0.0.0:5000 
+web: gunicorn --config gunicorn.conf.py app2:app 
