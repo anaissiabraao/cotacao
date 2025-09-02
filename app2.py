@@ -29,6 +29,11 @@ try:
     
     config_name = os.environ.get('FLASK_ENV', 'development')
     app.config.from_object(config[config_name])
+    
+    # Verificar se DATABASE_URL está disponível (para Render)
+    if os.environ.get('DATABASE_URL'):
+        print(f"[CONFIG] ✅ DATABASE_URL encontrado: {os.environ.get('DATABASE_URL')[:50]}...")
+    
     db.init_app(app)
     
     with app.app_context():
@@ -40,6 +45,7 @@ try:
     POSTGRESQL_AVAILABLE = True
 except Exception as e:
     print(f"[PostgreSQL] ❌ Erro: {e}")
+    print(f"[CONFIG] Tentando fallback para SQLite...")
     POSTGRESQL_AVAILABLE = False
 
 # Configurações de sessão
@@ -82,6 +88,10 @@ def log_acesso(usuario, acao, ip, detalhes=""):
 def carregar_base_unificada():
     """Carrega base unificada do PostgreSQL"""
     try:
+        if not POSTGRESQL_AVAILABLE:
+            print("[BASE] ⚠️ PostgreSQL não disponível")
+            return None
+            
         registros = BaseUnificada.query.all()
         
         # Converter para formato pandas-like para compatibilidade
@@ -278,6 +288,10 @@ resultado = custo_coleta_total + custo_transferencia_total + custo_entrega_total
 def carregar_agentes_e_memorias():
     """Carrega agentes e memórias do banco de dados - VERSÃO LIMPA"""
     try:
+        if not POSTGRESQL_AVAILABLE:
+            print("[AGENTES] ⚠️ PostgreSQL não disponível")
+            return {}
+            
         # Filtrar apenas os agentes que configuramos especificamente
         agentes_configurados = ['PTX', 'Jem/Dfl', 'SOL', 'FILIAL SP', 'GLI']
         
@@ -351,6 +365,18 @@ def calcular_rotas_automaticas_banco(origem, uf_origem, destino, uf_destino, pes
             (df_agentes['Base Destino'].str.contains(destino_norm, case=False, na=False))
         ]
         
+        # Buscar agentes por estado também (para melhor cobertura)
+        agentes_coleta_estado = df_agentes[
+            df_agentes['Base Origem'].str.contains(uf_origem, case=False, na=False)
+        ]
+        agentes_entrega_estado = df_agentes[
+            df_agentes['Base Destino'].str.contains(uf_destino, case=False, na=False)
+        ]
+        
+        # Combinar resultados e REMOVER DUPLICATAS por fornecedor
+        agentes_coleta = pd.concat([agentes_coleta, agentes_coleta_estado]).drop_duplicates(subset=['Fornecedor'])
+        agentes_entrega = pd.concat([agentes_entrega, agentes_entrega_estado]).drop_duplicates(subset=['Fornecedor'])
+        
         # Buscar transferências diretas
         transferencias_diretas = df_transferencias[
             (df_transferencias['Origem'].str.contains(origem_norm, case=False, na=False)) &
@@ -367,8 +393,13 @@ def calcular_rotas_automaticas_banco(origem, uf_origem, destino, uf_destino, pes
         
         rotas_combinadas = []
         
-        # 1. Rotas diretas (identificação automática pela base)
-        for _, agente in agentes_coleta.iterrows():
+        # 1. Rotas diretas (identificação automática pela base) - APENAS AGENTES QUE ATENDEM ORIGEM E DESTINO
+        agentes_diretos = df_agentes[
+            (df_agentes['Origem'].str.contains(origem_norm, case=False, na=False)) &
+            (df_agentes['Destino'].str.contains(destino_norm, case=False, na=False))
+        ]
+        
+        for _, agente in agentes_diretos.iterrows():
             rota = criar_rota_direta_original(agente, origem, destino, peso_cubado, valor_nf)
             if rota:
                 rotas_combinadas.append(rota)
@@ -397,6 +428,27 @@ def calcular_rotas_automaticas_banco(origem, uf_origem, destino, uf_destino, pes
                             print(f"[ROTAS_AUTO] ✅ Rota combinada criada: {agente_col.get('Fornecedor')} + {transferencia.get('Fornecedor')} + {agente_ent.get('Fornecedor')} = R$ {rota.get('custo_total', 0):.2f}")
                         else:
                             print(f"[ROTAS_AUTO] ❌ Falha ao criar rota combinada: {agente_col.get('Fornecedor')} + {transferencia.get('Fornecedor')} + {agente_ent.get('Fornecedor')}")
+        
+        # 4. ROTAS PARCIAIS - Quando falta agente de coleta ou entrega
+        print(f"[ROTAS_AUTO] 🔗 Criando rotas parciais...")
+        
+        # Rota parcial: Transferência + Entrega (sem coleta)
+        if agentes_coleta.empty and not agentes_entrega.empty and not df_transferencias.empty:
+            print(f"[ROTAS_AUTO] ⚠️ Criando rota parcial: Transferência + Entrega (sem agente de coleta)")
+            for _, transferencia in df_transferencias.head(2).iterrows():
+                for _, agente_ent in agentes_entrega.head(2).iterrows():
+                    rota = criar_rota_parcial_transferencia_entrega(transferencia, agente_ent, origem, destino, peso_cubado, valor_nf)
+                    if rota:
+                        rotas_combinadas.append(rota)
+        
+        # Rota parcial: Coleta + Transferência (sem entrega)
+        if not agentes_coleta.empty and agentes_entrega.empty and not df_transferencias.empty:
+            print(f"[ROTAS_AUTO] ⚠️ Criando rota parcial: Coleta + Transferência (sem agente de entrega)")
+            for _, agente_col in agentes_coleta.head(2).iterrows():
+                for _, transferencia in df_transferencias.head(2).iterrows():
+                    rota = criar_rota_parcial_coleta_transferencia(agente_col, transferencia, origem, destino, peso_cubado, valor_nf)
+                    if rota:
+                        rotas_combinadas.append(rota)
         
         # Ordenar por custo total (como no original)
         rotas_combinadas.sort(key=lambda x: x.get('custo_total', float('inf')))
@@ -510,7 +562,7 @@ def calcular_rota_combinada_banco(agente_coleta, agente_transferencia, agente_en
         custo_total_rota = custo_coleta['custo_total'] + custo_transferencia['custo_total'] + custo_entrega['custo_total']
         
         return {
-            'tipo_servico': f"OPA (Coleta) + {agente_transferencia} (Transferência) + CFG (Entrega)",
+            'tipo_servico': f"{agente_coleta} (Coleta) + {agente_transferencia} (Transferência) + {agente_entrega} (Entrega)",
             'fornecedor': f"{agente_transferencia}",  # Fornecedor principal
             'custo_total': custo_total_rota,
             'prazo': 3,
@@ -675,7 +727,7 @@ def criar_rota_combinada_original(agente_col, transferencia, agente_ent, origem,
         fornecedor_ent = agente_ent.get('Fornecedor', 'N/A')
         
         return {
-            'tipo_servico': f"OPA (Coleta) + {fornecedor_transf} (Transferência) + CFG (Entrega)",
+            'tipo_servico': f"{fornecedor_col} (Coleta) + {fornecedor_transf} (Transferência) + {fornecedor_ent} (Entrega)",
             'fornecedor': f"{fornecedor_transf}",  # Fornecedor principal
             'custo_total': total,
             'prazo': prazo_total,
@@ -1684,6 +1736,281 @@ def api_get_base_dados():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ===== ROTAS DE EDIÇÃO DA BASE DE DADOS =====
+
+@app.route('/api/admin/base-dados/editar', methods=['POST'])
+def api_editar_campo_base_dados():
+    """Editar campo específico da base de dados"""
+    # Verificar permissão
+    if not session.get('usuario_permissoes', {}).get('pode_editar_base', False):
+        return jsonify({'error': 'Acesso negado. Você não tem permissão para editar a base de dados.'}), 403
+    
+    try:
+        data = request.get_json()
+        registro_id = data.get('id')
+        campo = data.get('campo')
+        valor = data.get('valor')
+        
+        if not all([registro_id, campo]):
+            return jsonify({'error': 'ID e campo são obrigatórios'}), 400
+        
+        # Decodificar ID (formato: fornecedor_origem_destino)
+        partes = registro_id.split('_', 2)
+        if len(partes) < 3:
+            return jsonify({'error': 'ID inválido'}), 400
+        
+        fornecedor = partes[0]
+        origem = partes[1]
+        destino = partes[2]
+        
+        # Buscar registro
+        registro = BaseUnificada.query.filter_by(
+            fornecedor=fornecedor,
+            origem=origem,
+            destino=destino
+        ).first()
+        
+        if not registro:
+            return jsonify({'error': 'Registro não encontrado'}), 404
+        
+        # Mapear campos do frontend para o modelo
+        campo_mapping = {
+            'tipo': 'tipo',
+            'fornecedor': 'fornecedor',
+            'base_origem': 'base_origem',
+            'origem': 'origem',
+            'base_destino': 'base_destino',
+            'destino': 'destino',
+            'valor_minimo_10': 'valor_minimo_10',
+            'peso_20': 'peso_20',
+            'peso_30': 'peso_30',
+            'peso_50': 'peso_50',
+            'peso_70': 'peso_70',
+            'peso_100': 'peso_100',
+            'peso_150': 'peso_150',
+            'peso_200': 'peso_200',
+            'peso_300': 'peso_300',
+            'peso_500': 'peso_500',
+            'acima_500': 'acima_500',
+            'pedagio_100kg': 'pedagio_100kg',
+            'excedente': 'excedente',
+            'seguro': 'seguro',
+            'peso_maximo': 'peso_maximo',
+            'gris_min': 'gris_min',
+            'gris_exc': 'gris_exc',
+            'tas': 'tas',
+            'despacho': 'despacho'
+        }
+        
+        if campo not in campo_mapping:
+            return jsonify({'error': f'Campo inválido: {campo}'}), 400
+        
+        # Atualizar campo
+        setattr(registro, campo_mapping[campo], valor)
+        db.session.commit()
+        
+        return jsonify({'sucesso': True, 'message': 'Campo atualizado com sucesso'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/base-dados', methods=['POST'])
+def api_create_base_dados():
+    """Criar novo registro na base de dados"""
+    # Verificar permissão
+    if not session.get('usuario_permissoes', {}).get('pode_editar_base', False):
+        return jsonify({'error': 'Acesso negado. Você não tem permissão para editar a base de dados.'}), 403
+    
+    try:
+        data = request.get_json()
+        
+        # Validar campos obrigatórios
+        campos_obrigatorios = ['tipo', 'fornecedor', 'origem', 'destino']
+        for campo in campos_obrigatorios:
+            if not data.get(campo):
+                return jsonify({'error': f'Campo obrigatório: {campo}'}), 400
+        
+        # Verificar se já existe
+        existente = BaseUnificada.query.filter_by(
+            fornecedor=data['fornecedor'],
+            origem=data['origem'],
+            destino=data['destino']
+        ).first()
+        
+        if existente:
+            return jsonify({'error': 'Registro já existe'}), 400
+        
+        # Criar novo registro
+        novo_registro = BaseUnificada(
+            tipo=data['tipo'],
+            fornecedor=data['fornecedor'],
+            base_origem=data.get('base_origem'),
+            origem=data['origem'],
+            base_destino=data.get('base_destino'),
+            destino=data['destino'],
+            valor_minimo_10=data.get('valor_minimo_10'),
+            peso_20=data.get('peso_20'),
+            peso_30=data.get('peso_30'),
+            peso_50=data.get('peso_50'),
+            peso_70=data.get('peso_70'),
+            peso_100=data.get('peso_100'),
+            peso_150=data.get('peso_150'),
+            peso_200=data.get('peso_200'),
+            peso_300=data.get('peso_300'),
+            peso_500=data.get('peso_500'),
+            acima_500=data.get('acima_500'),
+            pedagio_100kg=data.get('pedagio_100kg'),
+            excedente=data.get('excedente'),
+            seguro=data.get('seguro'),
+            peso_maximo=data.get('peso_maximo'),
+            gris_min=data.get('gris_min'),
+            gris_exc=data.get('gris_exc'),
+            tas=data.get('tas'),
+            despacho=data.get('despacho')
+        )
+        
+        db.session.add(novo_registro)
+        db.session.commit()
+        
+        return jsonify({'sucesso': True, 'message': 'Registro criado com sucesso'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/base-dados/<registro_id>', methods=['DELETE'])
+def api_delete_base_dados(registro_id):
+    """Excluir registro da base de dados"""
+    # Verificar permissão
+    if not session.get('usuario_permissoes', {}).get('pode_editar_base', False):
+        return jsonify({'error': 'Acesso negado. Você não tem permissão para editar a base de dados.'}), 403
+    
+    try:
+        # Decodificar ID (formato: fornecedor_origem_destino)
+        partes = registro_id.split('_', 2)
+        if len(partes) < 3:
+            return jsonify({'error': 'ID inválido'}), 400
+        
+        fornecedor = partes[0]
+        origem = partes[1]
+        destino = partes[2]
+        
+        # Buscar e excluir registro
+        registro = BaseUnificada.query.filter_by(
+            fornecedor=fornecedor,
+            origem=origem,
+            destino=destino
+        ).first()
+        
+        if not registro:
+            return jsonify({'error': 'Registro não encontrado'}), 404
+        
+        db.session.delete(registro)
+        db.session.commit()
+        
+        return jsonify({'sucesso': True, 'message': 'Registro excluído com sucesso'})
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# ===== ROTA DE CONFIGURAÇÕES E TESTE DE CONEXÃO =====
+
+@app.route('/admin/configuracoes')
+def admin_configuracoes():
+    """Painel de configurações do sistema"""
+    return render_template('admin_configuracoes.html')
+
+@app.route('/api/admin/configuracoes/teste-conexao', methods=['POST'])
+def api_teste_conexao_banco():
+    """Testar conexão com o banco de dados"""
+    try:
+        # Testar conexão básica
+        from sqlalchemy import text
+        with app.app_context():
+            db.session.execute(text('SELECT 1'))
+            db.session.commit()
+            
+            # Testar consultas específicas
+            estatisticas = {
+                'total_registros': BaseUnificada.query.count(),
+                'total_usuarios': Usuario.query.count(),
+                'total_agentes': AgenteTransportadora.query.count(),
+                'total_memorias': MemoriaCalculoAgente.query.count(),
+                'total_tipos_calculo': TipoCalculoFrete.query.count(),
+                'total_formulas': FormulaCalculoFrete.query.count()
+            }
+            
+            # Verificar configurações do banco
+            config_info = {
+                'database_url': app.config.get('SQLALCHEMY_DATABASE_URI', 'Não configurado'),
+                'database_type': 'PostgreSQL' if 'postgresql' in app.config.get('SQLALCHEMY_DATABASE_URI', '').lower() else 'SQLite',
+                'flask_env': os.environ.get('FLASK_ENV', 'development'),
+                'debug_mode': app.config.get('DEBUG', False),
+                'postgresql_available': POSTGRESQL_AVAILABLE
+            }
+            
+            return jsonify({
+                'sucesso': True,
+                'conexao': 'OK',
+                'estatisticas': estatisticas,
+                'config_info': config_info,
+                'message': 'Conexão com banco de dados funcionando corretamente'
+            })
+        
+    except Exception as e:
+        return jsonify({
+            'sucesso': False,
+            'conexao': 'ERRO',
+            'error': str(e),
+            'message': 'Erro na conexão com banco de dados'
+        }), 500
+
+@app.route('/api/admin/configuracoes/teste-permissoes', methods=['GET'])
+def api_teste_permissoes():
+    """Testar permissões do usuário logado"""
+    try:
+        if 'usuario_logado' not in session:
+            return jsonify({
+                'sucesso': False,
+                'message': 'Usuário não está logado'
+            }), 401
+        
+        usuario = Usuario.query.filter_by(nome_usuario=session.get('usuario_logado')).first()
+        if not usuario:
+            return jsonify({
+                'sucesso': False,
+                'message': 'Usuário não encontrado no banco'
+            }), 404
+        
+        permissoes = {
+            'nome_usuario': usuario.nome_usuario,
+            'tipo_usuario': usuario.tipo_usuario,
+            'ativo': usuario.ativo,
+            'pode_calcular_fretes': usuario.pode_calcular_fretes,
+            'pode_ver_admin': usuario.pode_ver_admin,
+            'pode_editar_base': usuario.pode_editar_base,
+            'pode_gerenciar_usuarios': usuario.pode_gerenciar_usuarios,
+            'pode_importar_dados': usuario.pode_importar_dados
+        }
+        
+        permissoes_sessao = session.get('usuario_permissoes', {})
+        
+        return jsonify({
+            'sucesso': True,
+            'usuario': permissoes,
+            'permissoes_sessao': permissoes_sessao,
+            'message': 'Permissões verificadas com sucesso'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'sucesso': False,
+            'error': str(e),
+            'message': 'Erro ao verificar permissões'
+        }), 500
+
 @app.route('/api/admin/agentes-memoria', methods=['GET'])
 def api_get_agentes_memoria():
     """API para listar agentes e memórias"""
@@ -2060,6 +2387,31 @@ def historico():
     except Exception:
         return jsonify([])
 
+@app.route('/health')
+def health_check():
+    """Endpoint de health check para verificar se a aplicação está funcionando."""
+    try:
+        # Verificar se a aplicação está funcionando
+        base_df = carregar_base_unificada()
+        total_registros = len(base_df) if base_df is not None else 0
+        status = {
+            "status": "healthy",
+            "timestamp": datetime.datetime.now().isoformat(),
+            "version": "1.0.0",
+            "services": {
+                "database": "online" if total_registros > 0 else "offline",
+                "records": total_registros,
+                "postgresql_available": POSTGRESQL_AVAILABLE
+            }
+        }
+        return jsonify(status), 200
+    except Exception as e:
+        return jsonify({
+            "status": "unhealthy", 
+            "error": str(e),
+            "timestamp": datetime.datetime.now().isoformat()
+        }), 503
+
 @app.route('/api/bases-disponiveis')
 def api_bases_disponiveis():
     """API para listar bases disponíveis"""
@@ -2112,6 +2464,127 @@ admin_calculadoras = middleware_admin(admin_calculadoras)
 admin_base_dados = middleware_admin(admin_base_dados)
 admin_agentes_memoria = middleware_admin(admin_agentes_memoria)
 admin_usuarios = middleware_admin(admin_usuarios)
+admin_configuracoes = middleware_admin(admin_configuracoes)
+
+def criar_rota_parcial_transferencia_entrega(transferencia_linha, agente_entrega, origem, destino, peso_cubado, valor_nf):
+    """Cria rota parcial: Transferência + Entrega (sem agente de coleta)"""
+    try:
+        fornecedor_transf = transferencia_linha.get('Fornecedor', 'N/A')
+        fornecedor_ent = agente_entrega.get('Fornecedor', 'N/A')
+        
+        # Calcular custos usando lógica original
+        custo_transferencia = calcular_custo_agente_original(transferencia_linha, peso_cubado, valor_nf)
+        custo_entrega = calcular_custo_agente_original(agente_entrega, peso_cubado, valor_nf)
+        
+        if not custo_transferencia or not custo_entrega:
+            return None
+        
+        # Somar custos
+        custo_total = custo_transferencia['total'] + custo_entrega['total']
+        prazo_total = max(custo_transferencia.get('prazo', 1), custo_entrega.get('prazo', 1))
+        
+        return {
+            'tipo_servico': f"{fornecedor_transf} (Transferência) + {fornecedor_ent} (Entrega) - Rota Parcial",
+            'fornecedor': f"{fornecedor_transf}",
+            'custo_total': custo_total,
+            'prazo': prazo_total,
+            'peso_maximo_agente': min(
+                custo_transferencia.get('peso_maximo', 1000) or 1000,
+                custo_entrega.get('peso_maximo', 1000) or 1000
+            ),
+            'descricao': f"Rota parcial: Transferência + Entrega (sem agente de coleta)",
+            'detalhes_expandidos': {
+                'agentes_info': {
+                    'agente_coleta': 'N/A - Rota parcial',
+                    'transferencia': fornecedor_transf,
+                    'agente_entrega': fornecedor_ent,
+                    'base_origem': transferencia_linha.get('Base Origem', 'Base de Origem'),
+                    'base_destino': transferencia_linha.get('Base Destino', 'Base de Destino')
+                },
+                'rota_info': {
+                    'origem': origem,
+                    'destino': destino,
+                    'peso_cubado': peso_cubado,
+                    'tipo_peso_usado': 'Cubado'
+                },
+                'custos_detalhados': {
+                    'custo_base_frete': custo_transferencia['custo_base'] + custo_entrega['custo_base'],
+                    'custo_coleta': 0,
+                    'custo_transferencia': custo_transferencia['total'],
+                    'custo_entrega': custo_entrega['total'],
+                    'pedagio': custo_transferencia['pedagio'] + custo_entrega['pedagio'],
+                    'gris': custo_transferencia['gris'] + custo_entrega['gris'],
+                    'seguro': custo_transferencia.get('seguro', 0) + custo_entrega.get('seguro', 0),
+                    'icms': 0,
+                    'outros': 0
+                },
+                'observacoes': f"Rota parcial: Transferência + Entrega. Agente de coleta não encontrado para {origem}. {fornecedor_transf} → {fornecedor_ent}"
+            }
+        }
+        
+    except Exception as e:
+        print(f"[ROTA_PARCIAL_TE] ❌ Erro: {e}")
+        return None
+
+def criar_rota_parcial_coleta_transferencia(agente_coleta, transferencia_linha, origem, destino, peso_cubado, valor_nf):
+    """Cria rota parcial: Coleta + Transferência (sem agente de entrega)"""
+    try:
+        fornecedor_col = agente_coleta.get('Fornecedor', 'N/A')
+        fornecedor_transf = transferencia_linha.get('Fornecedor', 'N/A')
+        
+        # Calcular custos usando lógica original
+        custo_coleta = calcular_custo_agente_original(agente_coleta, peso_cubado, valor_nf)
+        custo_transferencia = calcular_custo_agente_original(transferencia_linha, peso_cubado, valor_nf)
+        
+        if not custo_coleta or not custo_transferencia:
+            return None
+        
+        # Somar custos
+        custo_total = custo_coleta['total'] + custo_transferencia['total']
+        prazo_total = max(custo_coleta.get('prazo', 1), custo_transferencia.get('prazo', 1))
+        
+        return {
+            'tipo_servico': f"{fornecedor_col} (Coleta) + {fornecedor_transf} (Transferência) - Rota Parcial",
+            'fornecedor': f"{fornecedor_transf}",
+            'custo_total': custo_total,
+            'prazo': prazo_total,
+            'peso_maximo_agente': min(
+                custo_coleta.get('peso_maximo', 1000) or 1000,
+                custo_transferencia.get('peso_maximo', 1000) or 1000
+            ),
+            'descricao': f"Rota parcial: Coleta + Transferência (sem agente de entrega)",
+            'detalhes_expandidos': {
+                'agentes_info': {
+                    'agente_coleta': fornecedor_col,
+                    'transferencia': fornecedor_transf,
+                    'agente_entrega': 'N/A - Rota parcial',
+                    'base_origem': transferencia_linha.get('Base Origem', 'Base de Origem'),
+                    'base_destino': transferencia_linha.get('Base Destino', 'Base de Destino')
+                },
+                'rota_info': {
+                    'origem': origem,
+                    'destino': destino,
+                    'peso_cubado': peso_cubado,
+                    'tipo_peso_usado': 'Cubado'
+                },
+                'custos_detalhados': {
+                    'custo_base_frete': custo_coleta['custo_base'] + custo_transferencia['custo_base'],
+                    'custo_coleta': custo_coleta['total'],
+                    'custo_transferencia': custo_transferencia['total'],
+                    'custo_entrega': 0,
+                    'pedagio': custo_coleta['pedagio'] + custo_transferencia['pedagio'],
+                    'gris': custo_coleta['gris'] + custo_transferencia['gris'],
+                    'seguro': custo_coleta.get('seguro', 0) + custo_transferencia.get('seguro', 0),
+                    'icms': 0,
+                    'outros': 0
+                },
+                'observacoes': f"Rota parcial: Coleta + Transferência. Agente de entrega não encontrado para {destino}. {fornecedor_col} → {fornecedor_transf}"
+            }
+        }
+        
+    except Exception as e:
+        print(f"[ROTA_PARCIAL_CT] ❌ Erro: {e}")
+        return None
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))

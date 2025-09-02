@@ -28,6 +28,13 @@ class Config:
             print(f"[CONFIG] ⚠️ PostgreSQL não disponível ({e}), usando SQLite como fallback")
             DATABASE_URL = 'sqlite:///cotacao.db'
     
+    # Para Render, garantir que DATABASE_URL seja usado se disponível
+    if os.environ.get('DATABASE_URL'):
+        DATABASE_URL = os.environ.get('DATABASE_URL')
+        if DATABASE_URL.startswith("postgres://"):
+            DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+        print(f"[CONFIG] ✅ Usando DATABASE_URL do Render: {DATABASE_URL[:50]}...")
+    
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {
@@ -65,6 +72,13 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
+    
+    # Para produção no Render, garantir que DATABASE_URL seja usado
+    if os.environ.get('DATABASE_URL'):
+        SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL')
+        if SQLALCHEMY_DATABASE_URI.startswith("postgres://"):
+            SQLALCHEMY_DATABASE_URI = SQLALCHEMY_DATABASE_URI.replace("postgres://", "postgresql://", 1)
+        print(f"[CONFIG] ✅ Produção usando DATABASE_URL: {SQLALCHEMY_DATABASE_URI[:50]}...")
     
 class TestingConfig(Config):
     TESTING = True
