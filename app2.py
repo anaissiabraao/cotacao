@@ -278,8 +278,14 @@ resultado = custo_coleta_total + custo_transferencia_total + custo_entrega_total
 def carregar_agentes_e_memorias():
     """Carrega agentes e memórias do banco de dados - VERSÃO LIMPA"""
     try:
+        # Filtrar apenas os agentes que configuramos especificamente
+        agentes_configurados = ['PTX', 'Jem/Dfl', 'SOL', 'FILIAL SP', 'GLI']
+        
         # Carregar agentes do banco
-        agentes = AgenteTransportadora.query.filter_by(ativo=True).all()
+        agentes = AgenteTransportadora.query.filter(
+            AgenteTransportadora.nome.in_(agentes_configurados),
+            AgenteTransportadora.ativo == True
+        ).all()
         agentes_dict = {}
         
         for agente in agentes:
@@ -315,7 +321,7 @@ def carregar_agentes_e_memorias():
                 except Exception as e:
                     print(f"[MEMORIA] ⚠️ Erro ao carregar memória {memoria.id}: {e}")
         
-        print(f"[AGENTES] ✅ {len(agentes_dict)} agentes carregados do banco")
+        print(f"[AGENTES] ✅ {len(agentes_dict)} agentes configurados carregados do banco")
         return agentes_dict
         
     except Exception as e:
