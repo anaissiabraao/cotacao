@@ -388,7 +388,9 @@ def calcular_rotas_automaticas_banco(origem, uf_origem, destino, uf_destino, pes
                             rota['tipo_servico'] = f"COMBINADA: {rota['tipo_servico']}"
                             rota['descricao'] = f"Rota completa com 3 agentes especializados"
                             rotas_combinadas.append(rota)
-                            print(f"[ROTAS_AUTO] ✅ Rota combinada criada: {agente_col.get('Fornecedor')} + {transferencia.get('Fornecedor')} + {agente_ent.get('Fornecedor')}")
+                            print(f"[ROTAS_AUTO] ✅ Rota combinada criada: {agente_col.get('Fornecedor')} + {transferencia.get('Fornecedor')} + {agente_ent.get('Fornecedor')} = R$ {rota.get('custo_total', 0):.2f}")
+                        else:
+                            print(f"[ROTAS_AUTO] ❌ Falha ao criar rota combinada: {agente_col.get('Fornecedor')} + {transferencia.get('Fornecedor')} + {agente_ent.get('Fornecedor')}")
         
         # Ordenar por custo total (como no original)
         rotas_combinadas.sort(key=lambda x: x.get('custo_total', float('inf')))
@@ -790,58 +792,151 @@ def calcular_transferencia_padrao(linha, peso_cubado):
             if valor_acima and float(valor_acima) > 0:
                 return peso_calculo * float(valor_acima)
         
+        # 4) Fallback: usar valor mínimo se disponível
+        if valor_minimo and float(valor_minimo) > 0:
+            return float(valor_minimo)
+        
         return 0.0
         
     except Exception as e:
         print(f"[TRANSF_PADRAO] ❌ Erro: {e}")
         return 0.0
 
-def calcular_com_agente_banco_integrado(agente_nome, linha_base, peso_usado, valor_nf, agentes_dict):
-    """Calcula usando apenas dados do banco e da base unificada - SEM HARDCODE"""
+def calcular_com_configuracao_banco(agente_nome, linha_base, peso_cubado, valor_nf):
+    """Calcula usando configurações do banco de dados - SEM LÓGICA HARDCODED"""
     try:
-        # Usar função limpa que calcula baseado apenas nos dados da base
-        resultado_base = calcular_custo_agente_original(linha_base, peso_usado, valor_nf)
-        
-        if not resultado_base:
+        # Buscar agente no banco
+        agente = AgenteTransportadora.query.filter_by(nome=agente_nome, ativo=True).first()
+        if not agente:
+            print(f"[AGENTE] ❌ Agente {agente_nome} não encontrado no banco")
             return None
         
-        # Buscar configurações específicas do agente no banco se existirem
-        try:
-            # Buscar agente primeiro
-            agente_banco = AgenteTransportadora.query.filter_by(nome=agente_nome, ativo=True).first()
-            if agente_banco:
-                config_agente = ConfiguracaoAgente.query.filter_by(agente_id=agente_banco.id, ativo=True).first()
-            else:
-                config_agente = None
-                
-            if config_agente:
-                valores_custom = config_agente.get_valores_customizados()
-                
-                # Aplicar margens ou ajustes específicos do banco
-                margem = valores_custom.get('margem_percentual', 0)
-                if margem > 0:
-                    resultado_base['total'] *= (1 + margem / 100)
-                    resultado_base['custo_base'] *= (1 + margem / 100)
-                    print(f"[AGENTE] 📊 Margem {margem}% aplicada para {agente_nome}")
-                
-        except Exception as e:
-            print(f"[AGENTE] ⚠️ Erro ao carregar configuração para {agente_nome}: {e}")
+        # Buscar memória de cálculo ativa para este agente
+        memoria = MemoriaCalculoAgente.query.filter_by(
+            agente_id=agente.id, 
+            ativo=True
+        ).order_by(MemoriaCalculoAgente.prioridade.desc()).first()
+        
+        if not memoria:
+            print(f"[AGENTE] ⚠️ Nenhuma memória de cálculo encontrada para {agente_nome}")
+            return None
+        
+        # Aplicar lógica baseada no tipo de memória
+        config = memoria.get_configuracao_memoria()
+        tipo_memoria = memoria.tipo_memoria
+        
+        valor_base = 0.0
+        
+        if tipo_memoria == 'valor_fixo_faixa':
+            # Lógica: usar valor fixo de uma faixa específica
+            faixa_especifica = config.get('faixa_especifica', '50')  # Ex: '50' para 50kg
+            valor_base = float(linha_base.get(faixa_especifica, 0))
+            
+        elif tipo_memoria == 'valor_por_kg':
+            # Lógica: multiplicar peso por valor por kg
+            valor_por_kg = config.get('valor_por_kg', 0)
+            valor_base = peso_cubado * valor_por_kg
+            
+        elif tipo_memoria == 'tabela_especifica':
+            # Lógica: usar tabela de faixas como no código original
+            valor_base = calcular_com_tabela_faixas(linha_base, peso_cubado, config)
+            
+        elif tipo_memoria == 'formula_customizada':
+            # Lógica: usar fórmula customizada
+            formula = config.get('formula', '')
+            valor_base = executar_formula_customizada(formula, linha_base, peso_cubado, valor_nf)
+            
+        else:
+            # Fallback: usar valor mínimo se disponível
+            valor_minimo = linha_base.get('VALOR MÍNIMO ATÉ 10', 0)
+            if valor_minimo and float(valor_minimo) > 0:
+                valor_base = float(valor_minimo)
+        
+        if valor_base <= 0:
+            print(f"[AGENTE] ❌ Valor base zero para {agente_nome}")
+            return None
+        
+        # Calcular custos adicionais baseados na configuração do agente
+        gris = 0
+        if agente.gris_percentual > 0 and valor_nf:
+            gris = max((valor_nf * agente.gris_percentual / 100), agente.gris_minimo)
+        
+        pedagio = 0
+        if agente.calcula_pedagio and agente.pedagio_por_bloco > 0:
+            pedagio = agente.pedagio_por_bloco
+        
+        seguro = 0
+        if agente.calcula_seguro and valor_nf:
+            seguro = valor_nf * 0.002  # 0.2% padrão
+        
+        total = valor_base + gris + pedagio + seguro
         
         return {
             'agente': agente_nome,
-            'tipo_agente': agentes_dict.get(agente_nome, {}).get('tipo', 'desconhecido'),
-            'valor_base': resultado_base['custo_base'],
-            'gris': resultado_base['gris'],
-            'pedagio': resultado_base['pedagio'],
-            'seguro': resultado_base['seguro'],
-            'total': resultado_base['total'],
-            'peso_maximo': resultado_base.get('peso_maximo', 1000),
-            'volume_maximo': 100
+            'tipo_agente': agente.tipo_agente,
+            'valor_base': valor_base,
+            'gris': gris,
+            'pedagio': pedagio,
+            'seguro': seguro,
+            'total': total,
+            'peso_maximo': agente.get_parametros_calculo().get('peso_maximo', 1000),
+            'volume_maximo': agente.get_parametros_calculo().get('volume_maximo', 100),
+            'memoria_usada': memoria.nome_memoria
         }
         
     except Exception as e:
-        print(f"[AGENTE] ❌ Erro no cálculo com {agente_nome}: {e}")
+        print(f"[AGENTE] ❌ Erro no cálculo com configuração para {agente_nome}: {e}")
         return None
+
+def calcular_com_tabela_faixas(linha_base, peso_cubado, config):
+    """Calcula usando tabela de faixas baseada na configuração"""
+    try:
+        peso_calculo = float(peso_cubado)
+        
+        # Verificar se deve usar valor mínimo
+        usar_valor_minimo = config.get('usar_valor_minimo', True)
+        if usar_valor_minimo:
+            valor_minimo = linha_base.get('VALOR MÍNIMO ATÉ 10')
+            if peso_calculo <= 10 and valor_minimo and float(valor_minimo) > 0:
+                return float(valor_minimo)
+        
+        # Usar faixas configuradas ou padrão
+        faixas_config = config.get('faixas', [20, 30, 50, 70, 100, 150, 200, 300, 500])
+        
+        for faixa in faixas_config:
+            if peso_calculo <= float(faixa):
+                valor_faixa = linha_base.get(str(faixa), 0)
+                if valor_faixa and float(valor_faixa) > 0:
+                    return peso_calculo * float(valor_faixa)
+        
+        # Fallback: usar valor mínimo se disponível
+        valor_minimo = linha_base.get('VALOR MÍNIMO ATÉ 10')
+        if valor_minimo and float(valor_minimo) > 0:
+            return float(valor_minimo)
+        
+        return 0.0
+        
+    except Exception as e:
+        print(f"[TABELA_FAIXAS] ❌ Erro: {e}")
+        return 0.0
+
+def executar_formula_customizada(formula, linha_base, peso_cubado, valor_nf):
+    """Executa fórmula customizada"""
+    try:
+        # Variáveis disponíveis para a fórmula
+        exec_globals = {
+            'peso_cubado': peso_cubado,
+            'valor_nf': valor_nf or 0,
+            'linha_base': linha_base,
+            'resultado': 0
+        }
+        
+        exec(formula, exec_globals)
+        return exec_globals.get('resultado', 0)
+        
+    except Exception as e:
+        print(f"[FORMULA] ❌ Erro executando fórmula: {e}")
+        return 0.0
 
 
 
@@ -906,7 +1001,7 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                 # Verificar se o fornecedor é um agente no banco de dados
                 if fornecedor in agentes_dict:
                     print(f"[FRACIONADO] 🎯 Usando agente do banco: {fornecedor}")
-                    calculo_agente = calcular_com_agente_banco_integrado(fornecedor, linha, peso_cubado, valor_nf, agentes_dict)
+                    calculo_agente = calcular_com_configuracao_banco(fornecedor, linha, peso_cubado, valor_nf)
                     
                     if calculo_agente:
                         # Resultado para compatibilidade
@@ -931,12 +1026,12 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                             'custo_total': calculo_agente['total'],
                             'prazo': 3,
                             'peso_maximo_agente': calculo_agente['peso_maximo'],
-                            'descricao': f"Serviço {calculo_agente['tipo_agente']} com memória de cálculo",
+                            'descricao': f"Serviço {calculo_agente['tipo_agente']} com memória de cálculo: {calculo_agente['memoria_usada']}",
                             'detalhes_expandidos': {
                                 'agentes_info': {
-                                    'agente_coleta': fornecedor if calculo_agente['tipo_agente'] == 'COLETA' else 'N/A',
-                                    'transferencia': fornecedor if calculo_agente['tipo_agente'] == 'TRANSFERENCIA' else 'N/A',
-                                    'agente_entrega': fornecedor if calculo_agente['tipo_agente'] == 'ENTREGA' else 'N/A',
+                                    'agente_coleta': fornecedor if calculo_agente['tipo_agente'] == 'agente_coleta' else 'N/A',
+                                    'transferencia': fornecedor if calculo_agente['tipo_agente'] == 'transferencia' else 'N/A',
+                                    'agente_entrega': fornecedor if calculo_agente['tipo_agente'] == 'agente_entrega' else 'N/A',
                                     'base_origem': linha.get('Base Origem', 'Base de Origem'),
                                     'base_destino': linha.get('Base Destino', 'Base de Destino')
                                 },
@@ -950,16 +1045,16 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
                                 },
                                 'custos_detalhados': {
                                     'custo_base_frete': calculo_agente['valor_base'],
-                                    'custo_coleta': calculo_agente['valor_base'] * 0.3 if calculo_agente['tipo_agente'] == 'COLETA' else 0,
-                                    'custo_transferencia': calculo_agente['valor_base'] * 0.5 if calculo_agente['tipo_agente'] == 'TRANSFERENCIA' else 0,
-                                    'custo_entrega': calculo_agente['valor_base'] * 0.2 if calculo_agente['tipo_agente'] == 'ENTREGA' else 0,
+                                    'custo_coleta': calculo_agente['valor_base'] * 0.3 if calculo_agente['tipo_agente'] == 'agente_coleta' else 0,
+                                    'custo_transferencia': calculo_agente['valor_base'] * 0.5 if calculo_agente['tipo_agente'] == 'transferencia' else 0,
+                                    'custo_entrega': calculo_agente['valor_base'] * 0.2 if calculo_agente['tipo_agente'] == 'agente_entrega' else 0,
                                     'pedagio': calculo_agente['pedagio'],
                                     'gris': calculo_agente['gris'],
                                     'seguro': calculo_agente['seguro'],
                                     'icms': 0,
                                     'outros': 0
                                 },
-                                'observacoes': f"Cálculo usando memória de agente do banco de dados. Peso máximo: {calculo_agente['peso_maximo']}kg"
+                                'observacoes': f"Cálculo usando memória de agente do banco de dados: {calculo_agente['memoria_usada']}. Peso máximo: {calculo_agente['peso_maximo']}kg"
                             }
                         }
                         resultados_detalhados.append(resultado_detalhado)
@@ -1057,8 +1152,10 @@ def calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_dest
         
         # Usar resultados detalhados se disponíveis, senão converter resultados básicos
         if resultados_detalhados:
+            # Ordenar todos os resultados detalhados por custo total
+            resultados_detalhados.sort(key=lambda x: x.get('custo_total', float('inf')))
             ranking_data['ranking_opcoes'] = resultados_detalhados
-            print(f"[FRACIONADO] 🎯 Usando {len(resultados_detalhados)} resultados detalhados do banco")
+            print(f"[FRACIONADO] 🎯 Usando {len(resultados_detalhados)} resultados detalhados do banco (incluindo rotas combinadas)")
         else:
             # Converter resultados tradicionais para formato de ranking
             for idx, resultado in enumerate(resultados):
