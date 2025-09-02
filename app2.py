@@ -23,17 +23,21 @@ load_dotenv()
 app = Flask(__name__, static_folder='static')
 app.secret_key = os.getenv("SECRET_KEY", "chave_secreta_portoex_2025")
 
-# Inicializar PostgreSQL
+# Configuração do banco de dados
+if os.environ.get('DATABASE_URL'):
+    # Render PostgreSQL
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+    print(f"[CONFIG] ✅ Usando DATABASE_URL do Render: {os.environ.get('DATABASE_URL')[:50]}...")
+else:
+    # SQLite local ou Render
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///portoex.db'
+    print("[CONFIG] ⚠️ DATABASE_URL não encontrado, usando SQLite")
+
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Inicializar banco de dados
 try:
     from models import db, Usuario, BaseUnificada, AgenteTransportadora, MemoriaCalculoAgente, Agente, TipoCalculoFrete, FormulaCalculoFrete, ConfiguracaoAgente, HistoricoCalculo, LogSistema
-    from config import config
-    
-    config_name = os.environ.get('FLASK_ENV', 'development')
-    app.config.from_object(config[config_name])
-    
-    # Verificar se DATABASE_URL está disponível (para Render)
-    if os.environ.get('DATABASE_URL'):
-        print(f"[CONFIG] ✅ DATABASE_URL encontrado: {os.environ.get('DATABASE_URL')[:50]}...")
     
     db.init_app(app)
     
@@ -41,12 +45,11 @@ try:
         db.create_all()
         # Criar usuário admin padrão
         Usuario.criar_usuario_admin_default()
-        print("[PostgreSQL] ✅ Sistema inicializado com sucesso")
+        print("[DATABASE] ✅ Sistema inicializado com sucesso")
         
     POSTGRESQL_AVAILABLE = True
 except Exception as e:
-    print(f"[PostgreSQL] ❌ Erro: {e}")
-    print(f"[CONFIG] Tentando fallback para SQLite...")
+    print(f"[DATABASE] ❌ Erro: {e}")
     POSTGRESQL_AVAILABLE = False
 
 # Configurações de sessão
@@ -3041,36 +3044,36 @@ def criar_rota_parcial_coleta_transferencia(agente_coleta, transferencia_linha, 
         return None
 
 def conectar_base_postgresql():
-    """Conecta diretamente ao PostgreSQL e carrega dados reais"""
+    """Conecta diretamente ao banco de dados configurado"""
     try:
-        print("[POSTGRESQL] 🔄 Conectando ao banco PostgreSQL...")
+        print("[DATABASE] 🔄 Conectando ao banco de dados...")
         
-        # Verificar se PostgreSQL está disponível
+        # Verificar se banco está disponível
         if not POSTGRESQL_AVAILABLE:
-            print("[POSTGRESQL] ❌ PostgreSQL não disponível")
+            print("[DATABASE] ❌ Banco de dados não disponível")
             return False
         
         # Verificar conexão
         try:
             db.session.execute(text('SELECT 1'))
-            print("[POSTGRESQL] ✅ Conexão com PostgreSQL estabelecida")
+            print("[DATABASE] ✅ Conexão estabelecida")
         except Exception as e:
-            print(f"[POSTGRESQL] ❌ Erro na conexão: {e}")
+            print(f"[DATABASE] ❌ Erro na conexão: {e}")
             return False
         
         # Contar registros existentes
         total_registros = BaseUnificada.query.count()
-        print(f"[POSTGRESQL] 📊 Total de registros na base: {total_registros}")
+        print(f"[DATABASE] 📊 Total de registros na base: {total_registros}")
         
         if total_registros == 0:
-            print("[POSTGRESQL] ⚠️ Base de dados vazia - operador deve inserir dados via painel admin")
+            print("[DATABASE] ⚠️ Base de dados vazia - operador deve inserir dados via painel admin")
         else:
-            print("[POSTGRESQL] ✅ Base de dados carregada com dados reais")
+            print("[DATABASE] ✅ Base de dados carregada com dados reais")
         
         return True
         
     except Exception as e:
-        print(f"[POSTGRESQL] ❌ Erro ao conectar: {e}")
+        print(f"[DATABASE] ❌ Erro ao conectar: {e}")
         return False
 
 # Conectar ao PostgreSQL na inicialização
