@@ -103,7 +103,8 @@ document.addEventListener('DOMContentLoaded', function() {
             datalist.innerHTML = '';
             estados.forEach(estado => {
                 const option = document.createElement('option');
-                option.value = estado.id;
+                option.value = estado.sigla;
+                option.textContent = estado.nome;
                 datalist.appendChild(option);
             });
             
@@ -150,7 +151,8 @@ document.addEventListener('DOMContentLoaded', function() {
             
             data.forEach((municipio, index) => {
                 const option = document.createElement('option');
-                option.value = municipio.text || municipio.id;
+                option.value = municipio;
+                option.textContent = municipio;
                 datalist.appendChild(option);
             });
             
