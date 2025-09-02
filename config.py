@@ -12,9 +12,9 @@ class Config:
     
     # Configuração local de desenvolvimento com fallback para SQLite
     if not DATABASE_URL:
-        # Primeiro tentar PostgreSQL local
+        # Primeiro tentar PostgreSQL local com suas credenciais
         DATABASE_URL = os.environ.get('POSTGRESQL_URL') or \
-                      'postgresql://postgres:postgres@localhost:5432/cotacao_db'
+                      'postgresql://cotacao:1234@localhost:5432/base_unificada'
         
         # Se PostgreSQL não estiver disponível, usar SQLite como fallback
         try:
@@ -53,7 +53,7 @@ class DevelopmentConfig(Config):
         try:
             import psycopg2
             import sqlalchemy
-            dev_db_url = 'postgresql://postgres:postgres@localhost:5432/cotacao_dev'
+            dev_db_url = 'postgresql://cotacao:1234@localhost:5432/base_unificada'
             engine = sqlalchemy.create_engine(dev_db_url)
             engine.connect()
             print("[CONFIG] ✅ PostgreSQL de desenvolvimento disponível")

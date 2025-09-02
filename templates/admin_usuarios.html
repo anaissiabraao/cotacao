@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortoEx - Gerenciar Usuários</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .admin-header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .admin-header .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .admin-title {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .admin-title h1 {
+            font-size: 1.8rem;
+            margin: 0;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-links a.active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #2a5298;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1e3c72;
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 5px 12px;
+            font-size: 0.8rem;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .table th,
+        .table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 1.3rem;
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        .close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6c757d;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #495057;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #2a5298;
+            box-shadow: 0 0 0 2px rgba(42, 82, 152, 0.1);
+        }
+
+        .form-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .form-check input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .permissions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .permissions-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="container">
+            <div class="admin-title">
+                <i class="fas fa-users-cog"></i>
+                <h1>Gerenciar Usuários</h1>
+            </div>
+            <div class="nav-links">
+                <a href="/admin"><i class="fas fa-home"></i> Painel Principal</a>
+                <a href="/admin/calculadoras"><i class="fas fa-calculator"></i> Calculadoras</a>
+                <a href="/admin/base-dados"><i class="fas fa-database"></i> Base de Dados</a>
+                <a href="/admin/usuarios" class="active"><i class="fas fa-users-cog"></i> Usuários</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div class="section-header">
+            <h2 class="section-title">Usuários do Sistema</h2>
+            <button class="btn btn-primary" onclick="showModal('modalUsuario')">
+                <i class="fas fa-plus"></i> Novo Usuário
+            </button>
+        </div>
+
+        <div class="table-container">
+            <table class="table" id="usuariosTable">
+                <thead>
+                    <tr>
+                        <th>Usuário</th>
+                        <th>Nome Completo</th>
+                        <th>Email</th>
+                        <th>Tipo</th>
+                        <th>Status</th>
+                        <th>Último Login</th>
+                        <th>Permissões</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Usuários serão carregados aqui via JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal: Novo/Editar Usuário -->
+    <div id="modalUsuario" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Usuário</h3>
+                <button class="close" onclick="hideModal('modalUsuario')">&times;</button>
+            </div>
+            <form id="formUsuario">
+                <input type="hidden" id="usuarioId" name="id">
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Nome de Usuário *</label>
+                        <input type="text" class="form-control" id="nomeUsuario" name="nome_usuario" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Nome Completo *</label>
+                        <input type="text" class="form-control" id="nomeCompleto" name="nome_completo" required>
+                    </div>
+                </div>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tipo de Usuário *</label>
+                        <select class="form-control" id="tipoUsuario" name="tipo_usuario" required>
+                            <option value="operador">Operador</option>
+                            <option value="consultor">Consultor</option>
+                            <option value="admin">Administrador</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Senha *</label>
+                    <input type="password" class="form-control" id="senha" name="senha" required>
+                    <small style="color: #6c757d;">Mínimo 6 caracteres</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Confirmar Senha *</label>
+                    <input type="password" class="form-control" id="confirmarSenha" name="confirmar_senha" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Permissões Específicas</label>
+                    <div class="permissions-grid">
+                        <div class="form-check">
+                            <input type="checkbox" id="podeCalcularFretes" name="pode_calcular_fretes" checked>
+                            <label for="podeCalcularFretes">Calcular Fretes</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="podeVerAdmin" name="pode_ver_admin">
+                            <label for="podeVerAdmin">Acessar Admin</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="podeEditarBase" name="pode_editar_base">
+                            <label for="podeEditarBase">Editar Base de Dados</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="podeGerenciarUsuarios" name="pode_gerenciar_usuarios">
+                            <label for="podeGerenciarUsuarios">Gerenciar Usuários</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="podeImportarDados" name="pode_importar_dados">
+                            <label for="podeImportarDados">Importar Dados</label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="usuarioAtivo" name="ativo" checked>
+                            <label for="usuarioAtivo">Usuário Ativo</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 30px;">
+                    <button type="button" class="btn btn-warning" onclick="hideModal('modalUsuario')">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Alterar Senha -->
+    <div id="modalSenha" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Alterar Senha</h3>
+                <button class="close" onclick="hideModal('modalSenha')">&times;</button>
+            </div>
+            <form id="formSenha">
+                <input type="hidden" id="senhaUsuarioId" name="usuario_id">
+                
+                <div class="form-group">
+                    <label class="form-label">Usuário</label>
+                    <input type="text" class="form-control" id="senhaUsuarioNome" readonly>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Nova Senha *</label>
+                    <input type="password" class="form-control" id="novaSenha" name="nova_senha" required>
+                    <small style="color: #6c757d;">Mínimo 6 caracteres</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Confirmar Nova Senha *</label>
+                    <input type="password" class="form-control" id="confirmarNovaSenha" name="confirmar_nova_senha" required>
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                    <button type="button" class="btn btn-warning" onclick="hideModal('modalSenha')">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Alterar Senha</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Variáveis globais
+        let usuariosData = [];
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUsuarios();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('formUsuario').addEventListener('submit', handleSalvarUsuario);
+            document.getElementById('formSenha').addEventListener('submit', handleAlterarSenha);
+            
+            // Atualizar permissões baseado no tipo
+            document.getElementById('tipoUsuario').addEventListener('change', atualizarPermissoesPorTipo);
+        }
+
+        // Carregar usuários
+        async function loadUsuarios() {
+            try {
+                const response = await fetch('/api/admin/usuarios');
+                if (response.ok) {
+                    usuariosData = await response.json();
+                    renderUsuarios();
+                } else {
+                    showAlert('Erro ao carregar usuários', 'danger');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                showAlert('Erro ao conectar com o servidor', 'danger');
+            }
+        }
+
+        // Renderizar usuários
+        function renderUsuarios() {
+            const tbody = document.querySelector('#usuariosTable tbody');
+            
+            if (usuariosData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 40px; color: #6c757d;">
+                            <i class="fas fa-users" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                            <div>Nenhum usuário encontrado</div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = usuariosData.map(usuario => `
+                <tr>
+                    <td>
+                        <strong>${usuario.nome_usuario}</strong>
+                        ${usuario.is_blocked ? '<br><span class="badge badge-danger">Bloqueado</span>' : ''}
+                    </td>
+                    <td>${usuario.nome_completo}</td>
+                    <td>${usuario.email || '-'}</td>
+                    <td>
+                        <span class="badge ${getBadgeClassTipo(usuario.tipo_usuario)}">
+                            ${formatTipoUsuario(usuario.tipo_usuario)}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge ${usuario.ativo ? 'badge-success' : 'badge-danger'}">
+                            ${usuario.ativo ? 'Ativo' : 'Inativo'}
+                        </span>
+                    </td>
+                    <td>${usuario.ultimo_login || 'Nunca'}</td>
+                    <td>
+                        <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                            ${usuario.pode_calcular_fretes ? '<span class="badge badge-info">Fretes</span>' : ''}
+                            ${usuario.pode_ver_admin ? '<span class="badge badge-info">Admin</span>' : ''}
+                            ${usuario.pode_editar_base ? '<span class="badge badge-info">Editar</span>' : ''}
+                            ${usuario.pode_gerenciar_usuarios ? '<span class="badge badge-info">Usuários</span>' : ''}
+                            ${usuario.pode_importar_dados ? '<span class="badge badge-info">Import</span>' : ''}
+                        </div>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editarUsuario(${usuario.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-warning" onclick="alterarSenha(${usuario.id}, '${usuario.nome_usuario}')">
+                            <i class="fas fa-key"></i>
+                        </button>
+                        ${usuario.nome_usuario !== 'admin' ? `
+                            <button class="btn btn-sm btn-danger" onclick="excluirUsuario(${usuario.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        ` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // Formatadores
+        function formatTipoUsuario(tipo) {
+            const tipos = {
+                'admin': 'Administrador',
+                'operador': 'Operador',
+                'consultor': 'Consultor'
+            };
+            return tipos[tipo] || tipo;
+        }
+
+        function getBadgeClassTipo(tipo) {
+            const classes = {
+                'admin': 'badge-danger',
+                'operador': 'badge-success',
+                'consultor': 'badge-info'
+            };
+            return classes[tipo] || 'badge-info';
+        }
+
+        // Atualizar permissões baseado no tipo
+        function atualizarPermissoesPorTipo() {
+            const tipo = document.getElementById('tipoUsuario').value;
+            
+            // Resetar todas as permissões
+            document.getElementById('podeCalcularFretes').checked = true;
+            document.getElementById('podeVerAdmin').checked = false;
+            document.getElementById('podeEditarBase').checked = false;
+            document.getElementById('podeGerenciarUsuarios').checked = false;
+            document.getElementById('podeImportarDados').checked = false;
+            
+            // Configurar baseado no tipo
+            if (tipo === 'admin') {
+                document.getElementById('podeVerAdmin').checked = true;
+                document.getElementById('podeEditarBase').checked = true;
+                document.getElementById('podeGerenciarUsuarios').checked = true;
+                document.getElementById('podeImportarDados').checked = true;
+            } else if (tipo === 'operador') {
+                document.getElementById('podeVerAdmin').checked = true;
+                document.getElementById('podeEditarBase').checked = true;
+            }
+        }
+
+        // Salvar usuário
+        async function handleSalvarUsuario(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Validar senhas
+            if (data.senha !== data.confirmar_senha) {
+                showAlert('Senhas não coincidem', 'danger');
+                return;
+            }
+            
+            if (data.senha.length < 6) {
+                showAlert('Senha deve ter pelo menos 6 caracteres', 'danger');
+                return;
+            }
+            
+            // Converter checkboxes
+            data.pode_calcular_fretes = document.getElementById('podeCalcularFretes').checked;
+            data.pode_ver_admin = document.getElementById('podeVerAdmin').checked;
+            data.pode_editar_base = document.getElementById('podeEditarBase').checked;
+            data.pode_gerenciar_usuarios = document.getElementById('podeGerenciarUsuarios').checked;
+            data.pode_importar_dados = document.getElementById('podeImportarDados').checked;
+            data.ativo = document.getElementById('usuarioAtivo').checked;
+            
+            try {
+                const url = data.id ? `/api/admin/usuarios/${data.id}` : '/api/admin/usuarios';
+                const method = data.id ? 'PUT' : 'POST';
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    hideModal('modalUsuario');
+                    loadUsuarios();
+                    showAlert('Usuário salvo com sucesso!', 'success');
+                } else {
+                    const error = await response.json();
+                    showAlert(error.message || 'Erro ao salvar usuário', 'danger');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                showAlert('Erro ao salvar usuário', 'danger');
+            }
+        }
+
+        // Alterar senha
+        async function handleAlterarSenha(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Validar senhas
+            if (data.nova_senha !== data.confirmar_nova_senha) {
+                showAlert('Senhas não coincidem', 'danger');
+                return;
+            }
+            
+            if (data.nova_senha.length < 6) {
+                showAlert('Senha deve ter pelo menos 6 caracteres', 'danger');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/admin/usuarios/${data.usuario_id}/senha`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({nova_senha: data.nova_senha})
+                });
+
+                if (response.ok) {
+                    hideModal('modalSenha');
+                    showAlert('Senha alterada com sucesso!', 'success');
+                } else {
+                    const error = await response.json();
+                    showAlert(error.message || 'Erro ao alterar senha', 'danger');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                showAlert('Erro ao alterar senha', 'danger');
+            }
+        }
+
+        // Editar usuário
+        function editarUsuario(id) {
+            const usuario = usuariosData.find(u => u.id === id);
+            if (usuario) {
+                document.getElementById('usuarioId').value = usuario.id;
+                document.getElementById('nomeUsuario').value = usuario.nome_usuario;
+                document.getElementById('nomeCompleto').value = usuario.nome_completo;
+                document.getElementById('email').value = usuario.email || '';
+                document.getElementById('tipoUsuario').value = usuario.tipo_usuario;
+                document.getElementById('senha').value = '******';
+                document.getElementById('confirmarSenha').value = '******';
+                
+                // Permissões
+                document.getElementById('podeCalcularFretes').checked = usuario.pode_calcular_fretes;
+                document.getElementById('podeVerAdmin').checked = usuario.pode_ver_admin;
+                document.getElementById('podeEditarBase').checked = usuario.pode_editar_base;
+                document.getElementById('podeGerenciarUsuarios').checked = usuario.pode_gerenciar_usuarios;
+                document.getElementById('podeImportarDados').checked = usuario.pode_importar_dados;
+                document.getElementById('usuarioAtivo').checked = usuario.ativo;
+                
+                // Alterar título e tornar senha opcional para edição
+                document.querySelector('.modal-title').textContent = 'Editar Usuário';
+                document.getElementById('senha').required = false;
+                document.getElementById('confirmarSenha').required = false;
+                
+                showModal('modalUsuario');
+            }
+        }
+
+        // Alterar senha
+        function alterarSenha(id, nomeUsuario) {
+            document.getElementById('senhaUsuarioId').value = id;
+            document.getElementById('senhaUsuarioNome').value = nomeUsuario;
+            showModal('modalSenha');
+        }
+
+        // Excluir usuário
+        async function excluirUsuario(id) {
+            const usuario = usuariosData.find(u => u.id === id);
+            
+            if (!confirm(`Tem certeza que deseja excluir o usuário "${usuario.nome_usuario}"?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/usuarios/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    loadUsuarios();
+                    showAlert('Usuário excluído com sucesso!', 'success');
+                } else {
+                    const error = await response.json();
+                    showAlert(error.message || 'Erro ao excluir usuário', 'danger');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                showAlert('Erro ao excluir usuário', 'danger');
+            }
+        }
+
+        // Utilitários
+        function showModal(modalId) {
+            // Resetar formulário se for novo usuário
+            if (modalId === 'modalUsuario' && !document.getElementById('usuarioId').value) {
+                document.getElementById('formUsuario').reset();
+                document.querySelector('.modal-title').textContent = 'Novo Usuário';
+                document.getElementById('senha').required = true;
+                document.getElementById('confirmarSenha').required = true;
+                document.getElementById('podeCalcularFretes').checked = true;
+                document.getElementById('usuarioAtivo').checked = true;
+            }
+            
+            document.getElementById(modalId).classList.add('show');
+        }
+
+        function hideModal(modalId) {
+            document.getElementById(modalId).classList.remove('show');
+        }
+
+        function showAlert(message, type, duration = 5000) {
+            // Remover alertas existentes
+            document.querySelectorAll('.alert').forEach(alert => alert.remove());
+
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+
+            const container = document.querySelector('.main-container');
+            container.insertBefore(alert, container.firstChild);
+
+            // Remover após duração especificada
+            setTimeout(() => alert.remove(), duration);
+        }
+    </script>
+</body>
+</html>

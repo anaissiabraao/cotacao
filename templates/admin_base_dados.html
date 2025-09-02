@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortoEx - Gerenciar Base de Dados</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .admin-header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .admin-header .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .admin-title {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .admin-title h1 {
+            font-size: 1.8rem;
+            margin: 0;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-links a.active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .main-container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 25px 20px;
+        }
+
+        .controls-section {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            margin-bottom: 25px;
+            border: 1px solid #f0f0f0;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 20px;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+
+        .form-control {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #2a5298;
+            box-shadow: 0 0 0 2px rgba(42, 82, 152, 0.1);
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #2a5298;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1e3c72;
+            transform: translateY(-1px);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover {
+            background: #e0a800;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 0.8rem;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 25px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .stat-item {
+            background: white;
+            padding: 20px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            text-align: center;
+            min-width: 140px;
+            border: 1px solid #f0f0f0;
+            transition: transform 0.2s ease;
+        }
+
+        .stat-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #2a5298;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .table-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .table-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 70vh;
+            border: 1px solid #dee2e6;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+            min-width: 2000px; /* Garantir largura mínima para todas as colunas */
+        }
+
+        .table th,
+        .table td {
+            padding: 6px 8px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+            border-right: 1px solid #f1f3f4;
+            white-space: nowrap;
+            min-width: 80px;
+        }
+
+        /* Colunas principais mais largas */
+        .table th:nth-child(2), .table td:nth-child(2) { /* Fornecedor */
+            min-width: 120px;
+            font-weight: 500;
+        }
+
+        .table th:nth-child(4), .table td:nth-child(4) { /* Origem */
+            min-width: 150px;
+        }
+
+        .table th:nth-child(6), .table td:nth-child(6) { /* Destino */
+            min-width: 150px;
+        }
+
+        /* Colunas de valores com largura fixa */
+        .table th:nth-child(n+7):nth-child(-n+17), 
+        .table td:nth-child(n+7):nth-child(-n+17) {
+            min-width: 70px;
+            text-align: right;
+            font-family: monospace;
+        }
+
+        /* Coluna de ações */
+        .table th:last-child, .table td:last-child {
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .table td.editable {
+            cursor: pointer;
+            position: relative;
+        }
+
+        .table td.editable:hover {
+            background: #e3f2fd;
+        }
+
+        .table td.editing {
+            background: #fff3cd;
+        }
+
+        .edit-input {
+            width: 100%;
+            padding: 4px 6px;
+            border: 1px solid #2a5298;
+            border-radius: 3px;
+            font-size: 0.85rem;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .pagination button {
+            padding: 6px 12px;
+            border: 1px solid #dee2e6;
+            background: white;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #e9ecef;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination .active {
+            background: #2a5298;
+            color: white;
+            border-color: #2a5298;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 1.3rem;
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        .close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #6c757d;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-danger {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .loading i {
+            font-size: 2rem;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .filter-tags {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .filter-tag {
+            background: #2a5298;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .filter-tag .remove {
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .controls-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-bar {
+                justify-content: center;
+            }
+
+            .table-wrapper {
+                font-size: 0.8rem;
+            }
+
+            .modal-content {
+                margin: 20px;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="container">
+            <div class="admin-title">
+                <i class="fas fa-database"></i>
+                <h1>Gerenciar Base de Dados</h1>
+            </div>
+            <div class="nav-links">
+                <a href="/admin"><i class="fas fa-home"></i> Painel Principal</a>
+                <a href="/admin/agentes"><i class="fas fa-users"></i> Agentes</a>
+                <a href="/admin/calculadoras"><i class="fas fa-calculator"></i> Calculadoras</a>
+                <a href="/admin/base-dados" class="active"><i class="fas fa-database"></i> Base de Dados</a>
+                <a href="/admin/agentes-memoria"><i class="fas fa-brain"></i> Memórias de Cálculo</a>
+                <a href="/admin/historico"><i class="fas fa-history"></i> Histórico</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Controles de Filtro -->
+        <div class="controls-section">
+            <div class="controls-grid">
+                <div class="form-group">
+                    <label class="form-label">Tipo</label>
+                    <select class="form-control" id="filtroTipo">
+                        <option value="">Todos os tipos</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fornecedor</label>
+                    <select class="form-control" id="filtroFornecedor">
+                        <option value="">Todos os fornecedores</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Base Origem</label>
+                    <select class="form-control" id="filtroBaseOrigem">
+                        <option value="">Todas as bases</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Origem</label>
+                    <input type="text" class="form-control" id="filtroOrigem" placeholder="Digite a cidade...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Destino</label>
+                    <input type="text" class="form-control" id="filtroDestino" placeholder="Digite a cidade...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ações</label>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn btn-primary" onclick="aplicarFiltros()">
+                            <i class="fas fa-search"></i> Filtrar
+                        </button>
+                        <button class="btn btn-warning" onclick="limparFiltros()">
+                            <i class="fas fa-times"></i> Limpar
+                        </button>
+                        <button class="btn btn-success" onclick="carregarTodos()">
+                            <i class="fas fa-download"></i> Carregar Todos
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="filter-tags" id="filterTags"></div>
+        </div>
+
+        <!-- Estatísticas -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-value" id="totalRegistros">-</div>
+                <div class="stat-label">Total de Registros</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="totalFornecedores">-</div>
+                <div class="stat-label">Fornecedores</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="totalOrigens">-</div>
+                <div class="stat-label">Origens</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="totalDestinos">-</div>
+                <div class="stat-label">Destinos</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="registrosFiltrados">-</div>
+                <div class="stat-label">Filtrados</div>
+            </div>
+        </div>
+
+        <!-- Tabela de Dados -->
+        <div class="table-container">
+            <div class="table-header">
+                <h3 class="table-title">Base Unificada de Fretes</h3>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <label style="font-size: 0.9rem; color: #6c757d;">Registros por página:</label>
+                    <select id="itensPorPaginaSelect" onchange="alterarItensPorPagina()" style="padding: 4px 8px; border: 1px solid #ced4da; border-radius: 4px;">
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                        <option value="1000">1000</option>
+                    </select>
+                    <button class="btn btn-success" onclick="showModal('modalNovoRegistro')">
+                        <i class="fas fa-plus"></i> Novo Registro
+                    </button>
+                    <button class="btn btn-warning" onclick="showModal('modalImportarCSV')">
+                        <i class="fas fa-upload"></i> Importar CSV
+                    </button>
+                    <button class="btn btn-primary" onclick="exportarDados()">
+                        <i class="fas fa-download"></i> Exportar
+                    </button>
+                </div>
+            </div>
+            
+            <div class="table-wrapper">
+                <table class="table" id="tabelaDados">
+                    <thead>
+                        <tr>
+                            <th style="background: #e3f2fd; color: #1565c0;">Tipo</th>
+                            <th style="background: #e3f2fd; color: #1565c0;">Fornecedor</th>
+                            <th style="background: #e8f5e8; color: #2e7d32;">Base Origem</th>
+                            <th style="background: #e8f5e8; color: #2e7d32;">Origem</th>
+                            <th style="background: #fff3e0; color: #ef6c00;">Base Destino</th>
+                            <th style="background: #fff3e0; color: #ef6c00;">Destino</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor mínimo até 10kg">Min 10kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor para 20kg">20kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor para 30kg">30kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor para 50kg">50kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor para 70kg">70kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor para 100kg">100kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor para 150kg">150kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor para 200kg">200kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor para 300kg">300kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor para 500kg">500kg</th>
+                            <th style="background: #f3e5f5; color: #7b1fa2;" title="Valor acima de 500kg">+500kg</th>
+                            <th style="background: #ffebee; color: #c62828;" title="Pedágio para 100kg">Pedágio</th>
+                            <th style="background: #ffebee; color: #c62828;" title="Taxa de excedente">Excedente</th>
+                            <th style="background: #ffebee; color: #c62828;" title="Taxa de seguro">Seguro</th>
+                            <th style="background: #ffebee; color: #c62828;" title="Peso máximo transportado">Peso Máx</th>
+                            <th style="background: #ffebee; color: #c62828;" title="GRIS mínimo">GRIS Min</th>
+                            <th style="background: #ffebee; color: #c62828;" title="GRIS excedente">GRIS Exc</th>
+                            <th style="background: #ffebee; color: #c62828;" title="Taxa TAS">TAS</th>
+                            <th style="background: #ffebee; color: #c62828;" title="Taxa de despacho">Despacho</th>
+                            <th style="background: #f5f5f5; color: #424242;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaBody">
+                        <tr>
+                            <td colspan="26" class="loading">
+                                <i class="fas fa-spinner"></i>
+                                <div>Carregando dados...</div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="paginacao">
+                <!-- Paginação será gerada dinamicamente -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Importar CSV -->
+    <div id="modalImportarCSV" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Importar Base de Dados CSV</h3>
+                <button class="close" onclick="hideModal('modalImportarCSV')">&times;</button>
+            </div>
+            
+            <div class="alert alert-info">
+                <strong>Formato do CSV:</strong> Use ponto e vírgula (;) como separador e codificação UTF-8.
+                <br>As colunas devem seguir a ordem: Tipo, Fornecedor, Base Origem, Origem, Base Destino, Destino, valores por peso, custos adicionais.
+            </div>
+            
+            <form id="formImportarCSV" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label class="form-label">Arquivo CSV *</label>
+                    <input type="file" class="form-control" id="arquivoCSV" name="arquivo" accept=".csv" required>
+                    <small style="color: #6c757d; margin-top: 5px; display: block;">
+                        Máximo 10MB. Formato: CSV com separador ponto e vírgula (;)
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Modo de Importação</label>
+                    <div style="display: flex; gap: 15px; margin-top: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="radio" name="modo_importacao" value="adicionar" checked>
+                            <span>Adicionar novos registros</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="radio" name="modo_importacao" value="substituir">
+                            <span>Substituir registros existentes</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="radio" name="modo_importacao" value="limpar_adicionar">
+                            <span>Limpar base e adicionar</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="validarDados" name="validar_dados" checked>
+                        <label for="validarDados">Validar dados antes de importar</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="criarBackup" name="criar_backup" checked>
+                        <label for="criarBackup">Criar backup antes da importação</label>
+                    </div>
+                </div>
+
+                <div id="previewImportacao" style="display: none; margin-top: 20px;">
+                    <h4 style="color: #2c3e50; margin-bottom: 15px;">Preview da Importação</h4>
+                    <div id="estatisticasPreview" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <!-- Estatísticas do arquivo serão mostradas aqui -->
+                    </div>
+                    <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 5px;">
+                        <table class="table" style="margin: 0; font-size: 0.8rem;">
+                            <thead id="previewHeader">
+                                <!-- Cabeçalho do preview -->
+                            </thead>
+                            <tbody id="previewBody">
+                                <!-- Primeiras linhas do CSV -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 30px;">
+                    <button type="button" class="btn btn-warning" onclick="hideModal('modalImportarCSV')">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="analisarArquivo()">
+                        <i class="fas fa-search"></i> Analisar Arquivo
+                    </button>
+                    <button type="submit" class="btn btn-success" style="display: none;" id="btnConfirmarImportacao">
+                        <i class="fas fa-upload"></i> Confirmar Importação
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Novo/Editar Registro -->
+    <div id="modalNovoRegistro" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Novo Registro</h3>
+                <button class="close" onclick="hideModal('modalNovoRegistro')">&times;</button>
+            </div>
+            <form id="formRegistro">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Tipo *</label>
+                        <select class="form-control" id="registroTipo" required>
+                            <option value="">Selecione</option>
+                            <option value="Fracionado">Fracionado</option>
+                            <option value="Dedicado">Dedicado</option>
+                            <option value="Aéreo">Aéreo</option>
+                            <option value="Transferência">Transferência</option>
+                            <option value="Direto">Direto</option>
+                            <option value="Agente">Agente</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Fornecedor *</label>
+                        <input type="text" class="form-control" id="registroFornecedor" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Base Origem</label>
+                        <input type="text" class="form-control" id="registroBaseOrigem">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Origem *</label>
+                        <input type="text" class="form-control" id="registroOrigem" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Base Destino</label>
+                        <input type="text" class="form-control" id="registroBaseDestino">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Destino *</label>
+                        <input type="text" class="form-control" id="registroDestino" required>
+                    </div>
+                </div>
+
+                <h4 style="margin: 20px 0 15px 0; color: #2c3e50;">Valores por Peso (R$)</h4>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Valor Mín (até 10kg)</label>
+                        <input type="text" class="form-control" id="registroValorMin">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">20kg</label>
+                        <input type="text" class="form-control" id="registro20kg">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">30kg</label>
+                        <input type="text" class="form-control" id="registro30kg">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">50kg</label>
+                        <input type="text" class="form-control" id="registro50kg">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">70kg</label>
+                        <input type="text" class="form-control" id="registro70kg">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">100kg</label>
+                        <input type="text" class="form-control" id="registro100kg">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">150kg</label>
+                        <input type="text" class="form-control" id="registro150kg">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">200kg</label>
+                        <input type="text" class="form-control" id="registro200kg">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">300kg</label>
+                        <input type="text" class="form-control" id="registro300kg">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">500kg</label>
+                        <input type="text" class="form-control" id="registro500kg">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Acima 500kg</label>
+                        <input type="text" class="form-control" id="registroAcima500">
+                    </div>
+                </div>
+
+                <h4 style="margin: 20px 0 15px 0; color: #2c3e50;">Custos Adicionais</h4>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Pedágio (100kg)</label>
+                        <input type="text" class="form-control" id="registroPedagio">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Excedente</label>
+                        <input type="text" class="form-control" id="registroExcedente">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Seguro</label>
+                        <input type="text" class="form-control" id="registroSeguro">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Peso Máximo</label>
+                        <input type="text" class="form-control" id="registroPesoMaximo">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">GRIS Min</label>
+                        <input type="text" class="form-control" id="registroGrisMin">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">GRIS Exc</label>
+                        <input type="text" class="form-control" id="registroGrisExc">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">TAS</label>
+                        <input type="text" class="form-control" id="registroTAS">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Despacho</label>
+                        <input type="text" class="form-control" id="registroDespacho">
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 30px;">
+                    <button type="button" class="btn btn-warning" onclick="hideModal('modalNovoRegistro')">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Variáveis globais
+        let dadosOriginais = [];
+        let dadosFiltrados = [];
+        let paginaAtual = 1;
+        let itensPorPagina = 50;
+        let editandoCelula = null;
+        let filtrosAtivos = {};
+        let todosCarregados = false;
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            carregarDados();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            // Formulário de registro
+            document.getElementById('formRegistro').addEventListener('submit', handleSalvarRegistro);
+            
+            // Formulário de importação CSV
+            document.getElementById('formImportarCSV').addEventListener('submit', handleImportarCSV);
+
+            // Filtros em tempo real
+            document.getElementById('filtroOrigem').addEventListener('input', debounce(aplicarFiltros, 500));
+            document.getElementById('filtroDestino').addEventListener('input', debounce(aplicarFiltros, 500));
+            
+            // Mudança no arquivo CSV
+            document.getElementById('arquivoCSV').addEventListener('change', function() {
+                document.getElementById('previewImportacao').style.display = 'none';
+                document.getElementById('btnConfirmarImportacao').style.display = 'none';
+            });
+        }
+
+        // Carregar dados da base
+        async function carregarDados(carregarTodos = false) {
+            try {
+                showLoading(true);
+                
+                let url = '/api/admin/base-dados';
+                if (carregarTodos) {
+                    url += '?todos=true';
+                    showAlert('Carregando todos os registros... Isso pode demorar alguns segundos.', 'info', 3000);
+                }
+                
+                const response = await fetch(url);
+                console.log('Response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Data received:', data);
+                    
+                    dadosOriginais = data.registros || [];
+                    dadosFiltrados = [...dadosOriginais];
+                    
+                    console.log('Dados originais:', dadosOriginais.length);
+                    console.log('Dados filtrados:', dadosFiltrados.length);
+                    
+                    // Atualizar controles
+                    atualizarFiltrosDisponiveis(data.filtros || {});
+                    atualizarEstatisticas();
+                    renderizarTabela();
+                    
+                    const mensagem = carregarTodos ? 
+                        `Carregados TODOS os ${dadosOriginais.length} registros da base unificada` :
+                        `Carregados ${dadosOriginais.length} registros (primeiros 50)`;
+                    
+                    console.log(mensagem);
+                    
+                    if (carregarTodos) {
+                        showAlert(`✅ ${dadosOriginais.length} registros carregados com sucesso!`, 'success', 3000);
+                    }
+                } else {
+                    console.error('Erro na resposta:', response.status, response.statusText);
+                    const errorText = await response.text();
+                    console.error('Erro detalhado:', errorText);
+                    showAlert('Erro ao carregar dados da base', 'danger');
+                }
+                
+            } catch (error) {
+                console.error('Erro ao carregar dados:', error);
+                showAlert('Erro ao conectar com o servidor', 'danger');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Função para carregar todos os registros
+        function carregarTodos() {
+            if (!todosCarregados) {
+                if (!confirm('Isso irá carregar TODOS os 20.539 registros da base. Pode demorar alguns segundos. Deseja continuar?')) {
+                    return;
+                }
+            }
+            
+            // Aumentar itens por página para mostrar mais registros
+            itensPorPagina = 100;
+            todosCarregados = true;
+            
+            carregarDados(true);
+        }
+
+        // Atualizar filtros disponíveis
+        function atualizarFiltrosDisponiveis(filtros) {
+            // Tipos
+            const selectTipo = document.getElementById('filtroTipo');
+            selectTipo.innerHTML = '<option value="">Todos os tipos</option>';
+            (filtros.tipos || []).forEach(tipo => {
+                selectTipo.innerHTML += `<option value="${tipo}">${tipo}</option>`;
+            });
+
+            // Fornecedores
+            const selectFornecedor = document.getElementById('filtroFornecedor');
+            selectFornecedor.innerHTML = '<option value="">Todos os fornecedores</option>';
+            (filtros.fornecedores || []).forEach(fornecedor => {
+                selectFornecedor.innerHTML += `<option value="${fornecedor}">${fornecedor}</option>`;
+            });
+
+            // Bases Origem
+            const selectBaseOrigem = document.getElementById('filtroBaseOrigem');
+            selectBaseOrigem.innerHTML = '<option value="">Todas as bases</option>';
+            (filtros.bases_origem || []).forEach(base => {
+                selectBaseOrigem.innerHTML += `<option value="${base}">${base}</option>`;
+            });
+        }
+
+        // Aplicar filtros
+        function aplicarFiltros() {
+            const filtros = {
+                tipo: document.getElementById('filtroTipo').value,
+                fornecedor: document.getElementById('filtroFornecedor').value,
+                base_origem: document.getElementById('filtroBaseOrigem').value,
+                origem: document.getElementById('filtroOrigem').value.toLowerCase(),
+                destino: document.getElementById('filtroDestino').value.toLowerCase()
+            };
+
+            // Remover filtros vazios
+            filtrosAtivos = Object.fromEntries(
+                Object.entries(filtros).filter(([key, value]) => value !== '')
+            );
+
+            // Aplicar filtros
+            dadosFiltrados = dadosOriginais.filter(registro => {
+                return Object.entries(filtrosAtivos).every(([campo, valor]) => {
+                    const valorRegistro = (registro[campo] || '').toLowerCase();
+                    
+                    if (campo === 'origem' || campo === 'destino') {
+                        return valorRegistro.includes(valor);
+                    }
+                    
+                    return valorRegistro === valor.toLowerCase();
+                });
+            });
+
+            // Resetar paginação
+            paginaAtual = 1;
+            
+            // Atualizar interface
+            atualizarTagsFiltros();
+            atualizarEstatisticas();
+            renderizarTabela();
+        }
+
+        // Limpar filtros
+        function limparFiltros() {
+            document.getElementById('filtroTipo').value = '';
+            document.getElementById('filtroFornecedor').value = '';
+            document.getElementById('filtroBaseOrigem').value = '';
+            document.getElementById('filtroOrigem').value = '';
+            document.getElementById('filtroDestino').value = '';
+            
+            filtrosAtivos = {};
+            dadosFiltrados = [...dadosOriginais];
+            paginaAtual = 1;
+            
+            atualizarTagsFiltros();
+            atualizarEstatisticas();
+            renderizarTabela();
+        }
+
+        // Atualizar tags de filtros
+        function atualizarTagsFiltros() {
+            const container = document.getElementById('filterTags');
+            container.innerHTML = '';
+
+            Object.entries(filtrosAtivos).forEach(([campo, valor]) => {
+                const tag = document.createElement('div');
+                tag.className = 'filter-tag';
+                tag.innerHTML = `
+                    ${campo}: ${valor}
+                    <span class="remove" onclick="removerFiltro('${campo}')">&times;</span>
+                `;
+                container.appendChild(tag);
+            });
+        }
+
+        // Remover filtro específico
+        function removerFiltro(campo) {
+            delete filtrosAtivos[campo];
+            
+            // Limpar campo correspondente
+            const campoElemento = document.getElementById(`filtro${campo.charAt(0).toUpperCase() + campo.slice(1)}`);
+            if (campoElemento) {
+                campoElemento.value = '';
+            }
+            
+            aplicarFiltros();
+        }
+
+        // Atualizar estatísticas
+        function atualizarEstatisticas() {
+            document.getElementById('totalRegistros').textContent = dadosOriginais.length.toLocaleString();
+            document.getElementById('registrosFiltrados').textContent = dadosFiltrados.length.toLocaleString();
+            
+            // Calcular estatísticas dos dados filtrados
+            const fornecedoresUnicos = new Set(dadosFiltrados.map(r => r.fornecedor).filter(f => f));
+            const origensUnicas = new Set(dadosFiltrados.map(r => r.origem).filter(o => o));
+            const destinosUnicos = new Set(dadosFiltrados.map(r => r.destino).filter(d => d));
+            
+            document.getElementById('totalFornecedores').textContent = fornecedoresUnicos.size.toLocaleString();
+            document.getElementById('totalOrigens').textContent = origensUnicas.size.toLocaleString();
+            document.getElementById('totalDestinos').textContent = destinosUnicos.size.toLocaleString();
+        }
+
+        // Renderizar tabela
+        function renderizarTabela() {
+            console.log('Renderizando tabela...');
+            console.log('Dados filtrados disponíveis:', dadosFiltrados.length);
+            
+            const tbody = document.getElementById('tabelaBody');
+            const inicio = (paginaAtual - 1) * itensPorPagina;
+            const fim = inicio + itensPorPagina;
+            const dadosPagina = dadosFiltrados.slice(inicio, fim);
+            
+            console.log('Dados da página:', dadosPagina.length, 'de', inicio, 'até', fim);
+
+            if (dadosPagina.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="26" style="text-align: center; padding: 40px; color: #6c757d;">
+                            <i class="fas fa-search" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                            <div>Nenhum registro encontrado</div>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                console.log('Renderizando', dadosPagina.length, 'registros...');
+                
+                try {
+                    const html = dadosPagina.map((registro, index) => {
+                        console.log(`Processando registro ${index}:`, registro.fornecedor, registro.origem);
+                        
+                        return `
+                            <tr data-id="${registro.id || ''}">
+                                <td class="editable" data-campo="tipo">${registro.tipo || '-'}</td>
+                                <td class="editable" data-campo="fornecedor">${registro.fornecedor || '-'}</td>
+                                <td class="editable" data-campo="base_origem">${registro.base_origem || '-'}</td>
+                                <td class="editable" data-campo="origem">${registro.origem || '-'}</td>
+                                <td class="editable" data-campo="base_destino">${registro.base_destino || '-'}</td>
+                                <td class="editable" data-campo="destino">${registro.destino || '-'}</td>
+                                <td class="editable" data-campo="valor_minimo_10">${registro.valor_minimo_10 || '-'}</td>
+                                <td class="editable" data-campo="peso_20">${registro.peso_20 || '-'}</td>
+                                <td class="editable" data-campo="peso_30">${registro.peso_30 || '-'}</td>
+                                <td class="editable" data-campo="peso_50">${registro.peso_50 || '-'}</td>
+                                <td class="editable" data-campo="peso_70">${registro.peso_70 || '-'}</td>
+                                <td class="editable" data-campo="peso_100">${registro.peso_100 || '-'}</td>
+                                <td class="editable" data-campo="peso_150">${registro.peso_150 || '-'}</td>
+                                <td class="editable" data-campo="peso_200">${registro.peso_200 || '-'}</td>
+                                <td class="editable" data-campo="peso_300">${registro.peso_300 || '-'}</td>
+                                <td class="editable" data-campo="peso_500">${registro.peso_500 || '-'}</td>
+                                <td class="editable" data-campo="acima_500">${registro.acima_500 || '-'}</td>
+                                <td class="editable" data-campo="pedagio_100kg">${registro.pedagio_100kg || '-'}</td>
+                                <td class="editable" data-campo="excedente">${registro.excedente || '-'}</td>
+                                <td class="editable" data-campo="seguro">${registro.seguro || '-'}</td>
+                                <td class="editable" data-campo="peso_maximo">${registro.peso_maximo || '-'}</td>
+                                <td class="editable" data-campo="gris_min">${registro.gris_min || '-'}</td>
+                                <td class="editable" data-campo="gris_exc">${registro.gris_exc || '-'}</td>
+                                <td class="editable" data-campo="tas">${registro.tas || '-'}</td>
+                                <td class="editable" data-campo="despacho">${registro.despacho || '-'}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger" onclick="excluirRegistro('${registro.id || ''}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                    
+                    tbody.innerHTML = html;
+                    console.log('✅ HTML da tabela gerado com sucesso');
+                    
+                    // Adicionar event listeners para edição inline
+                    setupInlineEditing();
+                    console.log('✅ Event listeners configurados');
+                    
+                } catch (error) {
+                    console.error('❌ Erro ao gerar HTML da tabela:', error);
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="26" style="text-align: center; padding: 40px; color: #dc3545;">
+                                <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 10px;"></i>
+                                <div>Erro ao renderizar dados</div>
+                                <div style="font-size: 0.8rem; margin-top: 5px;">Verifique o console para detalhes</div>
+                            </td>
+                        </tr>
+                    `;
+                }
+            }
+
+            renderizarPaginacao();
+        }
+
+        // Configurar edição inline
+        function setupInlineEditing() {
+            document.querySelectorAll('.editable').forEach(cell => {
+                cell.addEventListener('click', function() {
+                    if (editandoCelula) return; // Já está editando outra célula
+                    
+                    editandoCelula = this;
+                    const valorAtual = this.textContent;
+                    
+                    this.classList.add('editing');
+                    this.innerHTML = `<input type="text" class="edit-input" value="${valorAtual}" onblur="salvarEdicaoInline(this)" onkeypress="handleKeyPress(event, this)">`;
+                    this.querySelector('input').focus();
+                });
+            });
+        }
+
+        // Salvar edição inline
+        async function salvarEdicaoInline(input) {
+            if (!editandoCelula) return;
+            
+            const novoValor = input.value;
+            const valorOriginal = editandoCelula.textContent;
+            const campo = editandoCelula.getAttribute('data-campo');
+            const row = editandoCelula.closest('tr');
+            const registroId = row.getAttribute('data-id');
+            
+            try {
+                // Atualizar no servidor
+                const response = await fetch('/api/admin/base-dados/editar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        id: registroId,
+                        campo: campo,
+                        valor: novoValor
+                    })
+                });
+
+                if (response.ok) {
+                    // Atualizar na interface
+                    editandoCelula.textContent = novoValor;
+                    editandoCelula.classList.remove('editing');
+                    
+                    // Atualizar dados locais
+                    const registro = dadosOriginais.find(r => r.id == registroId);
+                    if (registro) {
+                        registro[campo] = novoValor;
+                    }
+                    
+                    showAlert('Campo atualizado com sucesso!', 'success', 2000);
+                } else {
+                    const error = await response.json();
+                    editandoCelula.textContent = valorOriginal;
+                    editandoCelula.classList.remove('editing');
+                    showAlert(error.message || 'Erro ao atualizar campo', 'danger');
+                }
+            } catch (error) {
+                editandoCelula.textContent = valorOriginal;
+                editandoCelula.classList.remove('editing');
+                showAlert('Erro ao conectar com o servidor', 'danger');
+            }
+            
+            editandoCelula = null;
+        }
+
+        // Handle key press na edição
+        function handleKeyPress(event, input) {
+            if (event.key === 'Enter') {
+                input.blur();
+            } else if (event.key === 'Escape') {
+                editandoCelula.textContent = editandoCelula.getAttribute('data-original') || '';
+                editandoCelula.classList.remove('editing');
+                editandoCelula = null;
+            }
+        }
+
+        // Renderizar paginação
+        function renderizarPaginacao() {
+            const totalPaginas = Math.ceil(dadosFiltrados.length / itensPorPagina);
+            const paginacao = document.getElementById('paginacao');
+            
+            if (totalPaginas <= 1) {
+                paginacao.innerHTML = `
+                    <span style="color: #6c757d;">
+                        Exibindo ${dadosFiltrados.length} registros
+                    </span>
+                `;
+                return;
+            }
+
+            let html = `
+                <button onclick="mudarPagina(1)" ${paginaAtual === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-angle-double-left"></i>
+                </button>
+                <button onclick="mudarPagina(${paginaAtual - 1})" ${paginaAtual === 1 ? 'disabled' : ''}>
+                    <i class="fas fa-angle-left"></i>
+                </button>
+            `;
+
+            // Páginas numeradas
+            const inicio = Math.max(1, paginaAtual - 2);
+            const fim = Math.min(totalPaginas, paginaAtual + 2);
+
+            for (let i = inicio; i <= fim; i++) {
+                html += `
+                    <button onclick="mudarPagina(${i})" ${i === paginaAtual ? 'class="active"' : ''}>
+                        ${i}
+                    </button>
+                `;
+            }
+
+            html += `
+                <button onclick="mudarPagina(${paginaAtual + 1})" ${paginaAtual === totalPaginas ? 'disabled' : ''}>
+                    <i class="fas fa-angle-right"></i>
+                </button>
+                <button onclick="mudarPagina(${totalPaginas})" ${paginaAtual === totalPaginas ? 'disabled' : ''}>
+                    <i class="fas fa-angle-double-right"></i>
+                </button>
+            `;
+
+            html += `
+                <span style="margin-left: 20px; color: #6c757d;">
+                    Página ${paginaAtual} de ${totalPaginas} (${dadosFiltrados.length} registros)
+                </span>
+            `;
+
+            paginacao.innerHTML = html;
+        }
+
+        // Mudar página
+        function mudarPagina(novaPagina) {
+            paginaAtual = novaPagina;
+            renderizarTabela();
+        }
+
+        // Alterar itens por página
+        function alterarItensPorPagina() {
+            const select = document.getElementById('itensPorPaginaSelect');
+            itensPorPagina = parseInt(select.value);
+            paginaAtual = 1; // Resetar para primeira página
+            renderizarTabela();
+        }
+
+        // Salvar registro (novo/edição)
+        async function handleSalvarRegistro(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const dados = Object.fromEntries(formData.entries());
+            
+            try {
+                const response = await fetch('/api/admin/base-dados', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(dados)
+                });
+
+                if (response.ok) {
+                    hideModal('modalNovoRegistro');
+                    showAlert('Registro salvo com sucesso!', 'success');
+                    carregarDados(); // Recarregar dados
+                } else {
+                    const error = await response.json();
+                    showAlert(error.message || 'Erro ao salvar registro', 'danger');
+                }
+            } catch (error) {
+                showAlert('Erro ao conectar com o servidor', 'danger');
+            }
+        }
+
+        // Excluir registro
+        async function excluirRegistro(id) {
+            if (!confirm('Tem certeza que deseja excluir este registro?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/admin/base-dados/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    showAlert('Registro excluído com sucesso!', 'success');
+                    carregarDados(); // Recarregar dados
+                } else {
+                    const error = await response.json();
+                    showAlert(error.message || 'Erro ao excluir registro', 'danger');
+                }
+            } catch (error) {
+                showAlert('Erro ao conectar com o servidor', 'danger');
+            }
+        }
+
+        // Analisar arquivo CSV
+        async function analisarArquivo() {
+            const fileInput = document.getElementById('arquivoCSV');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showAlert('Selecione um arquivo CSV primeiro', 'warning');
+                return;
+            }
+            
+            if (file.size > 10 * 1024 * 1024) { // 10MB
+                showAlert('Arquivo muito grande. Máximo 10MB.', 'danger');
+                return;
+            }
+            
+            try {
+                showAlert('Analisando arquivo...', 'info', 2000);
+                
+                const formData = new FormData();
+                formData.append('arquivo', file);
+                formData.append('apenas_analisar', 'true');
+                
+                const response = await fetch('/api/admin/base-dados/importar', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const resultado = await response.json();
+                    mostrarPreviewImportacao(resultado);
+                    document.getElementById('btnConfirmarImportacao').style.display = 'inline-flex';
+                    showAlert('Arquivo analisado com sucesso!', 'success');
+                } else {
+                    const error = await response.json();
+                    showAlert(error.message || 'Erro ao analisar arquivo', 'danger');
+                }
+                
+            } catch (error) {
+                console.error('Erro:', error);
+                showAlert('Erro ao analisar arquivo', 'danger');
+            }
+        }
+        
+        // Mostrar preview da importação
+        function mostrarPreviewImportacao(resultado) {
+            const previewDiv = document.getElementById('previewImportacao');
+            const estatisticasDiv = document.getElementById('estatisticasPreview');
+            const headerDiv = document.getElementById('previewHeader');
+            const bodyDiv = document.getElementById('previewBody');
+            
+            // Estatísticas
+            estatisticasDiv.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                    <div><strong>Total de linhas:</strong> ${resultado.total_linhas}</div>
+                    <div><strong>Linhas válidas:</strong> ${resultado.linhas_validas}</div>
+                    <div><strong>Linhas com erro:</strong> ${resultado.linhas_erro}</div>
+                    <div><strong>Colunas encontradas:</strong> ${resultado.colunas_encontradas}</div>
+                </div>
+                ${resultado.erros_validacao.length > 0 ? `
+                    <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 5px;">
+                        <strong>Avisos:</strong>
+                        <ul style="margin: 5px 0 0 20px;">
+                            ${resultado.erros_validacao.map(erro => `<li>${erro}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+            `;
+            
+            // Cabeçalho
+            headerDiv.innerHTML = `
+                <tr>
+                    ${resultado.colunas.map(col => `<th>${col}</th>`).join('')}
+                </tr>
+            `;
+            
+            // Primeiras linhas
+            bodyDiv.innerHTML = resultado.preview_linhas.map(linha => `
+                <tr>
+                    ${linha.map(valor => `<td>${valor || '-'}</td>`).join('')}
+                </tr>
+            `).join('');
+            
+            previewDiv.style.display = 'block';
+        }
+
+        // Importar CSV
+        async function handleImportarCSV(e) {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('arquivoCSV');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showAlert('Selecione um arquivo CSV', 'warning');
+                return;
+            }
+            
+            const modo = document.querySelector('input[name="modo_importacao"]:checked').value;
+            const validar = document.getElementById('validarDados').checked;
+            const backup = document.getElementById('criarBackup').checked;
+            
+            // Confirmação para operações destrutivas
+            if (modo === 'limpar_adicionar') {
+                if (!confirm('ATENÇÃO: Isso irá APAGAR TODOS os dados existentes e importar os novos. Tem certeza?')) {
+                    return;
+                }
+            } else if (modo === 'substituir') {
+                if (!confirm('Isso irá substituir registros existentes. Continuar?')) {
+                    return;
+                }
+            }
+            
+            try {
+                showAlert('Importando dados... Isso pode demorar alguns minutos.', 'info');
+                
+                const formData = new FormData();
+                formData.append('arquivo', file);
+                formData.append('modo_importacao', modo);
+                formData.append('validar_dados', validar);
+                formData.append('criar_backup', backup);
+                
+                const response = await fetch('/api/admin/base-dados/importar', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    const resultado = await response.json();
+                    
+                    hideModal('modalImportarCSV');
+                    
+                    showAlert(`✅ Importação concluída! ${resultado.registros_importados} registros processados.`, 'success', 5000);
+                    
+                    // Recarregar dados
+                    carregarDados();
+                    
+                } else {
+                    const error = await response.json();
+                    showAlert(error.message || 'Erro na importação', 'danger');
+                }
+                
+            } catch (error) {
+                console.error('Erro:', error);
+                showAlert('Erro ao importar arquivo', 'danger');
+            }
+        }
+
+        // Exportar dados
+        async function exportarDados() {
+            try {
+                const response = await fetch('/api/admin/base-dados/exportar');
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `base_unificada_${new Date().toISOString().split('T')[0]}.csv`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    showAlert('Dados exportados com sucesso!', 'success');
+                } else {
+                    showAlert('Erro ao exportar dados', 'danger');
+                }
+            } catch (error) {
+                showAlert('Erro ao conectar com o servidor', 'danger');
+            }
+        }
+
+        // Utilitários
+        function showModal(modalId) {
+            document.getElementById(modalId).classList.add('show');
+        }
+
+        function hideModal(modalId) {
+            document.getElementById(modalId).classList.remove('show');
+        }
+
+        function showLoading(show) {
+            const tbody = document.getElementById('tabelaBody');
+            if (show) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="26" class="loading">
+                            <i class="fas fa-spinner"></i>
+                            <div>Carregando dados...</div>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function showAlert(message, type, duration = 5000) {
+            // Remover alertas existentes
+            document.querySelectorAll('.alert').forEach(alert => alert.remove());
+
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+
+            const container = document.querySelector('.main-container');
+            container.insertBefore(alert, container.firstChild);
+
+            // Remover após duração especificada
+            setTimeout(() => alert.remove(), duration);
+        }
+
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+    </script>
+</body>
+</html>

@@ -1,140 +1,189 @@
-# 🚛 Sistema de Cotação de Fretes - Portoex Solutions
+# 🚛 PortoEx - Sistema de Cotação de Fretes
 
-## 📋 Sobre o Projeto
+Sistema moderno e configurável para cotação de fretes com interface web completa e banco de dados PostgreSQL.
 
-Sistema completo de cotação de fretes desenvolvido para a **Portoex Solutions**. O sistema oferece cálculos precisos para fretes fracionados, dedicados e aéreos, com interface moderna e intuitiva.
+## 🎯 Características
 
-## ✨ Funcionalidades Principais
+- ✅ **Interface Web Completa** - Gestão total via navegador
+- ✅ **PostgreSQL Integrado** - Base de dados robusta
+- ✅ **Sistema Configurável** - Fórmulas editáveis via interface
+- ✅ **Importação CSV** - Upload automático de dados
+- ✅ **Memórias de Cálculo** - Lógicas preservadas e configuráveis
+- ✅ **Código Saneado** - 93.6% menos linhas que a versão anterior
 
-### 🌐 **All In - Cotação Unificada**
-- Cálculo simultâneo de todas as modalidades
-- Comparativo visual entre opções
-- Calculadora de volumes avançada
-- Validação de capacidades em tempo real
+## 🚀 Instalação Rápida
 
-### 📦 **Frete Fracionado**
-- Agente + Transferência + Agente
-- Agente Direto
-- Cálculo de GRIS
-- Validação de peso e volume
-
-### 🚛 **Frete Dedicado**
-- 8 tipos de veículos com capacidades:
-  - FIORINO: 500 kg / 1,2 m³
-  - VAN: 1.500 kg / 6 m³
-  - VUC: 3.000 kg / 15 m³
-  - 3/4: 3.500 kg / 12 m³
-  - TOCO: 7.000 kg / 40 m³
-  - TRUCK: 12.000 kg / 70 m³
-  - CARRETA: 28.000 kg / 110 m³
-  - CARRETA LS: 30.000 kg / 120 m³
-- Custos operacionais detalhados
-- Margens comerciais personalizadas
-- Validação visual de capacidade
-
-### ✈️ **Frete Aéreo**
-- Integração com GOLLOG
-- Cálculo de taxas e impostos
-- Prazos estimados
-- Rotas otimizadas
-
-### 🧮 **Calculadora de Volumes**
-- Cálculo simples (L x A x C)
-- Modo avançado multi-SKU
-- Validação em tempo real
-- Conversão automática
-
-### 📊 **Análises e Relatórios**
-- Histórico de cotações
-- Dashboard interativo
-- Métricas de utilização
-- Exportação de dados
-
-## 🚀 Como Executar
-
-### 📋 Pré-requisitos
-- Python 3.8+
-- Ambiente virtual (venv)
-- Dependências no requirements.txt
-
-### ⚡ Execução Rápida
-
+### 1. Clonar Repositório
 ```bash
-# 1. Clonar o repositório
-git clone https://github.com/portoex/cotacao.git
-
-# 2. Criar e ativar ambiente virtual
-python -m venv .venv
-.\.venv\Scripts\activate
-
-# 3. Instalar dependências
-pip install -r requirements.txt
-
-# 4. Executar a aplicação
-python app.py
-
-# 5. Acessar no navegador
-http://localhost:8000
+git clone [url-do-repositorio]
+cd cotacao
 ```
 
-## 🏗️ Estrutura do Projeto
+### 2. Instalar Dependências
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Configurar PostgreSQL
+```bash
+# Criar banco de dados
+createdb base_unificada
+
+# Criar usuário
+psql -c "CREATE USER cotacao WITH PASSWORD '1234';"
+psql -c "GRANT ALL PRIVILEGES ON DATABASE base_unificada TO cotacao;"
+```
+
+### 4. Configurar Variáveis de Ambiente
+```bash
+cp env.example .env
+# Editar .env com suas configurações
+```
+
+### 5. Executar Sistema
+```bash
+python app2.py
+```
+
+Acesse: `http://localhost:8000`
+
+## 📊 Estrutura do Projeto
 
 ```
 cotacao/
-├── app.py                    # Aplicação principal
-├── improved_chico_automate_fpdf.py  # Processamento de fretes
-├── Base_Unificada.xlsx      # Base de dados
-├── requirements.txt         # Dependências
-├── static/
-│   ├── js/
-│   │   ├── chico_automate.js    # Lógica frontend
-│   │   └── correcao_mapa_dedicado.js
-│   └── images/
-├── templates/
-│   ├── index.html          # Interface principal
-│   ├── admin.html         # Painel admin
-│   └── login.html         # Autenticação
-└── docs/                  # Documentação
+├── app2.py                    # Aplicação principal (580 linhas)
+├── models.py                  # Modelos PostgreSQL
+├── config.py                  # Configurações
+├── requirements.txt           # Dependências
+├── static/                    # Arquivos estáticos
+│   ├── css/style.css
+│   ├── js/chico_automate.js
+│   └── portoex-logo.png
+├── templates/                 # Templates HTML
+│   ├── index.html             # Página principal
+│   ├── login.html             # Login
+│   ├── admin_melhorado.html   # Dashboard admin
+│   ├── admin_base_dados.html  # Gestão da base
+│   ├── admin_calculadoras.html # Configurar fórmulas
+│   └── admin_agentes_memoria.html # Memórias de cálculo
+└── data/                      # Dados (vazio - usa PostgreSQL)
 ```
 
-## 🔧 Tecnologias Utilizadas
+## 🖥️ Funcionalidades
 
-### 🐍 Backend
-- **Flask** - Framework web
-- **Pandas** - Processamento de dados
-- **FPDF2** - Geração de PDFs
-- **Requests** - Integração APIs
+### **📊 Dashboard Administrativo**
+- Estatísticas em tempo real
+- Logs de atividades
+- Interface moderna e responsiva
 
-## 📞 Suporte
+### **🗄️ Gestão da Base de Dados**
+- Visualizar 20.000+ registros
+- Edição inline de valores
+- Importação CSV automática
+- Exportação para backup
 
-- **Email**: abraao.anaissi@portoex.com.br
-- **Sistema**: Anaissi Data Strategy
-- **Empresa**: Portoex Solutions  
+### **🧮 Calculadoras Configuráveis**
+- Tipos de cálculo personalizáveis
+- Fórmulas matemáticas editáveis
+- Configurações por agente
+- Testes em tempo real
 
-### 🎨 Frontend
-- **JavaScript ES6** - Interatividade
-- **Leaflet** - Mapas interativos
-- **Chart.js** - Gráficos
-- **Select2** - Campos de busca
+### **🧠 Memórias de Cálculo**
+- Lógicas de agentes preservadas
+- Configurações de GRIS, pedágio, seguro
+- Sistema híbrido (banco + fallback)
 
-### 📊 Dados
-- **Excel** - Base de dados
-- **SQLite** - Cache e histórico
-- **APIs** - Integração externa
+## 🎯 Uso do Sistema
 
-## 📈 Próximas Atualizações
+### **Para Operadores:**
+1. Acesse `http://localhost:8000`
+2. Faça login
+3. Consulte fretes normalmente
+4. Configure via `/admin` se necessário
 
-- [ ] **Cotações em lote** - Múltiplos cálculos
-- [ ] **API REST** - Integração sistemas
-- [ ] **Mobile app** - Versão Android/iOS
-- [ ] **Relatórios avançados** - Business Intelligence
+### **Para Administradores:**
+1. Acesse `http://localhost:8000/admin`
+2. Gerencie base de dados
+3. Configure calculadoras
+4. Monitore sistema
+
+## 🔧 APIs Disponíveis
+
+### **Cálculo de Fretes:**
+- `POST /calcular_frete_fracionado` - Frete fracionado
+- `POST /calcular` - Frete dedicado  
+- `POST /calcular_aereo` - Frete aéreo
+
+### **Administração:**
+- `GET /api/admin/base-dados` - Listar dados
+- `POST /api/admin/base-dados/importar` - Importar CSV
+- `GET /api/admin/agentes-memoria` - Memórias de cálculo
+
+## 🚀 Deploy
+
+### **Render (Recomendado):**
+```bash
+# O arquivo render.yaml está configurado
+# Apenas faça push para o repositório conectado
+```
+
+### **Docker:**
+```bash
+docker build -t portoex .
+docker run -p 8000:8000 portoex
+```
+
+### **Produção:**
+```bash
+gunicorn --config gunicorn.conf.py app2:app
+```
+
+## 🛡️ Segurança
+
+- ✅ Validação de dados de entrada
+- ✅ Sanitização de consultas SQL
+- ✅ Logs de auditoria completos
+- ✅ Backup automático antes de importações
+
+## 📈 Performance
+
+- ✅ Cache inteligente de consultas
+- ✅ Paginação otimizada
+- ✅ Consultas PostgreSQL otimizadas
+- ✅ Interface responsiva
+
+## 🆘 Suporte
+
+### **Problemas Comuns:**
+
+**PostgreSQL não conecta:**
+```bash
+# Verificar se PostgreSQL está rodando
+# Verificar credenciais em .env
+# Verificar permissões do usuário cotacao
+```
+
+**Dados não aparecem:**
+```bash
+# Verificar se base_unificada tem dados
+# Usar importação CSV se necessário
+# Verificar logs no console
+```
+
+## 📝 Changelog
+
+### v2.0.0 (Atual)
+- ✅ Sistema completamente saneado
+- ✅ Código reduzido em 93.6%
+- ✅ PostgreSQL como única fonte de dados
+- ✅ Interface web completa
+- ✅ Sistema de importação CSV
+- ✅ Memórias de cálculo configuráveis
 
 ## 📄 Licença
 
-Este projeto está sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
+MIT License - Veja arquivo LICENSE para detalhes.
 
 ---
 
-**🚛 Sistema de Cotação - Portoex Solutions**
-
-Desenvolvido por DEV - Abraão Anaissi para **Portoex Solutions**
+**Sistema PortoEx - Versão Saneada e Otimizada** 🚀

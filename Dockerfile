@@ -7,6 +7,6 @@ COPY . .
 
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-EXPOSE 5000
+EXPOSE 8000
 
-CMD ["gunicorn", "improved_chico_automate_fpdf:app", "--bind", "0.0.0.0:5000"] 
+CMD ["gunicorn", "app2:app", "--bind", "0.0.0.0:8000"] 

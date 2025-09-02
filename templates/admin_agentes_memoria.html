@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortoEx - Memórias de Cálculo dos Agentes</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+        }
+
+        .admin-header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .admin-header .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .admin-title {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .admin-title h1 {
+            font-size: 1.8rem;
+            margin: 0;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 20px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-links a.active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        .summary-card i {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+
+        .summary-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .summary-card .label {
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .agents-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+            gap: 25px;
+        }
+
+        .agent-card {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .agent-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .agent-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #2a5298, #1e3c72);
+            color: white;
+            position: relative;
+        }
+
+        .agent-header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #ff9800, #f57c00);
+        }
+
+        .agent-name {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .agent-type {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 12px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        .agent-body {
+            padding: 20px;
+        }
+
+        .calculation-logic {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #2a5298;
+        }
+
+        .logic-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logic-description {
+            color: #6c757d;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .parameters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .parameter-item {
+            background: white;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+            text-align: center;
+        }
+
+        .parameter-label {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-bottom: 4px;
+        }
+
+        .parameter-value {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .memories-section {
+            margin-top: 20px;
+        }
+
+        .memory-item {
+            background: #e3f2fd;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 3px solid #1976d2;
+        }
+
+        .memory-name {
+            font-weight: 600;
+            color: #1976d2;
+            margin-bottom: 5px;
+        }
+
+        .memory-details {
+            font-size: 0.85rem;
+            color: #424242;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #2a5298;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1e3c72;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 0.8rem;
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .test-section {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            margin-top: 30px;
+        }
+
+        .test-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-label {
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+
+        .form-control {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+
+        .test-results {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .agents-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .summary-cards {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
+            
+            .test-form {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="admin-header">
+        <div class="container">
+            <div class="admin-title">
+                <i class="fas fa-brain"></i>
+                <h1>Memórias de Cálculo dos Agentes</h1>
+            </div>
+            <div class="nav-links">
+                <a href="/admin"><i class="fas fa-home"></i> Painel Principal</a>
+                <a href="/admin/agentes"><i class="fas fa-users"></i> Agentes</a>
+                <a href="/admin/calculadoras"><i class="fas fa-calculator"></i> Calculadoras</a>
+                <a href="/admin/base-dados"><i class="fas fa-database"></i> Base de Dados</a>
+                <a href="/admin/agentes-memoria" class="active"><i class="fas fa-brain"></i> Memórias de Cálculo</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Resumo -->
+        <div class="summary-cards">
+            <div class="summary-card">
+                <i class="fas fa-truck" style="color: #2a5298;"></i>
+                <div class="value" id="totalTransportadoras">-</div>
+                <div class="label">Transportadoras</div>
+            </div>
+            <div class="summary-card">
+                <i class="fas fa-exchange-alt" style="color: #28a745;"></i>
+                <div class="value" id="totalTransferencias">-</div>
+                <div class="label">Transferências</div>
+            </div>
+            <div class="summary-card">
+                <i class="fas fa-users" style="color: #ffc107;"></i>
+                <div class="value" id="totalAgentesPonta">-</div>
+                <div class="label">Agentes Ponta</div>
+            </div>
+            <div class="summary-card">
+                <i class="fas fa-brain" style="color: #dc3545;"></i>
+                <div class="value" id="totalMemorias">-</div>
+                <div class="label">Memórias Ativas</div>
+            </div>
+        </div>
+
+        <!-- Teste de Memórias -->
+        <div class="test-section">
+            <h3 style="margin-bottom: 20px; color: #2c3e50;">
+                <i class="fas fa-flask"></i> Testar Memórias de Cálculo
+            </h3>
+            <form class="test-form" id="testForm">
+                <div class="form-group">
+                    <label class="form-label">Fornecedor</label>
+                    <select class="form-control" id="testFornecedor">
+                        <option value="">Selecione um fornecedor</option>
+                        <option value="REUNIDAS">REUNIDAS</option>
+                        <option value="PTX">PTX</option>
+                        <option value="Gritsch">Gritsch</option>
+                        <option value="Jem/Dfl">Jem/Dfl</option>
+                        <option value="SOL">SOL</option>
+                        <option value="GLI">GLI</option>
+                        <option value="OPA">OPA</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Peso (kg)</label>
+                    <input type="number" class="form-control" id="testPeso" value="50" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cubagem (m³)</label>
+                    <input type="number" class="form-control" id="testCubagem" value="0.2" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Valor NF (R$)</label>
+                    <input type="number" class="form-control" id="testValorNF" value="1000" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ação</label>
+                    <button type="button" class="btn btn-primary" onclick="testarMemoriaCalculo()">
+                        <i class="fas fa-play"></i> Testar Cálculo
+                    </button>
+                </div>
+            </form>
+            
+            <div class="test-results" id="testResults">
+                <!-- Resultados do teste serão mostrados aqui -->
+            </div>
+        </div>
+
+        <!-- Grid de Agentes -->
+        <div class="agents-grid" id="agentsGrid">
+            <!-- Agentes serão carregados aqui via JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // Variáveis globais
+        let agentesData = [];
+        let memoriasData = [];
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAgentsData();
+        });
+
+        // Carregar dados dos agentes
+        async function loadAgentsData() {
+            try {
+                const response = await fetch('/api/admin/agentes-memoria');
+                if (response.ok) {
+                    const data = await response.json();
+                    agentesData = data.agentes || [];
+                    memoriasData = data.memorias || [];
+                    
+                    updateSummary(data.estatisticas || {});
+                    renderAgents();
+                } else {
+                    console.error('Erro ao carregar dados dos agentes');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+            }
+        }
+
+        // Atualizar resumo
+        function updateSummary(stats) {
+            document.getElementById('totalTransportadoras').textContent = stats.transportadoras || 0;
+            document.getElementById('totalTransferencias').textContent = stats.transferencias || 0;
+            document.getElementById('totalAgentesPonta').textContent = stats.agentes_ponta || 0;
+            document.getElementById('totalMemorias').textContent = stats.memorias_ativas || 0;
+        }
+
+        // Renderizar agentes
+        function renderAgents() {
+            const grid = document.getElementById('agentsGrid');
+            
+            if (agentesData.length === 0) {
+                grid.innerHTML = `
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 60px; color: #6c757d;">
+                        <i class="fas fa-users" style="font-size: 4rem; margin-bottom: 20px;"></i>
+                        <h3>Nenhum agente encontrado</h3>
+                        <p>Execute o script de extração primeiro</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = agentesData.map(agente => {
+                const memorias = memoriasData.filter(m => m.agente_id === agente.id);
+                
+                return `
+                    <div class="agent-card">
+                        <div class="agent-header">
+                            <div class="agent-name">${agente.nome}</div>
+                            <div class="agent-type">${formatTipoAgente(agente.tipo_agente)}</div>
+                        </div>
+                        <div class="agent-body">
+                            <div class="calculation-logic">
+                                <div class="logic-title">
+                                    <i class="fas fa-cogs"></i>
+                                    Lógica: ${formatLogicaCalculo(agente.logica_calculo)}
+                                </div>
+                                <div class="logic-description">
+                                    ${agente.descricao_logica || 'Sem descrição'}
+                                </div>
+                            </div>
+
+                            <div class="parameters-grid">
+                                <div class="parameter-item">
+                                    <div class="parameter-label">GRIS</div>
+                                    <div class="parameter-value">${agente.gris_percentual}%</div>
+                                </div>
+                                <div class="parameter-item">
+                                    <div class="parameter-label">GRIS Mín</div>
+                                    <div class="parameter-value">R$ ${agente.gris_minimo}</div>
+                                </div>
+                                <div class="parameter-item">
+                                    <div class="parameter-label">Seguro</div>
+                                    <div class="parameter-value">
+                                        ${agente.calcula_seguro ? 
+                                          '<span class="badge badge-success">Sim</span>' : 
+                                          '<span class="badge badge-warning">Não</span>'}
+                                    </div>
+                                </div>
+                                <div class="parameter-item">
+                                    <div class="parameter-label">Pedágio</div>
+                                    <div class="parameter-value">
+                                        ${agente.calcula_pedagio ? 
+                                          `R$ ${agente.pedagio_por_bloco}` : 
+                                          '<span class="badge badge-warning">Não</span>'}
+                                    </div>
+                                </div>
+                            </div>
+
+                            ${memorias.length > 0 ? `
+                                <div class="memories-section">
+                                    <h5 style="color: #2c3e50; margin-bottom: 10px;">
+                                        <i class="fas fa-brain"></i> Memórias de Cálculo (${memorias.length})
+                                    </h5>
+                                    ${memorias.map(memoria => `
+                                        <div class="memory-item">
+                                            <div class="memory-name">${memoria.nome_memoria}</div>
+                                            <div class="memory-details">
+                                                Tipo: ${memoria.tipo_memoria} | 
+                                                Prioridade: ${memoria.prioridade} |
+                                                <span class="badge ${memoria.ativo ? 'badge-success' : 'badge-warning'}">
+                                                    ${memoria.ativo ? 'Ativa' : 'Inativa'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+
+                            <div style="margin-top: 15px; text-align: center;">
+                                <button class="btn btn-primary btn-sm" onclick="editarAgente(${agente.id})">
+                                    <i class="fas fa-edit"></i> Editar
+                                </button>
+                                <button class="btn btn-success btn-sm" onclick="testarAgenteEspecifico('${agente.nome}')">
+                                    <i class="fas fa-play"></i> Testar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Formatadores
+        function formatTipoAgente(tipo) {
+            const tipos = {
+                'transportadora': 'Transportadora',
+                'transferencia': 'Transferência',
+                'agente_coleta': 'Agente Coleta',
+                'agente_entrega': 'Agente Entrega'
+            };
+            return tipos[tipo] || tipo;
+        }
+
+        function formatLogicaCalculo(logica) {
+            const logicas = {
+                'valor_fixo_faixa': 'Valor Fixo por Faixa',
+                'valor_por_kg': 'Valor por KG',
+                'tabela_especifica': 'Tabela Específica',
+                'formula_especifica': 'Fórmula Específica'
+            };
+            return logicas[logica] || logica;
+        }
+
+        // Testar memória de cálculo
+        async function testarMemoriaCalculo() {
+            const fornecedor = document.getElementById('testFornecedor').value;
+            const peso = parseFloat(document.getElementById('testPeso').value);
+            const cubagem = parseFloat(document.getElementById('testCubagem').value);
+            const valorNF = parseFloat(document.getElementById('testValorNF').value);
+
+            if (!fornecedor) {
+                alert('Selecione um fornecedor');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/admin/testar-memoria-calculo', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fornecedor: fornecedor,
+                        peso_usado: peso,
+                        peso_real: peso,
+                        peso_cubado: cubagem * 250, // Converter m³ para kg
+                        valor_nf: valorNF,
+                        tipo_servico: 'TRANSFERENCIA'
+                    })
+                });
+
+                if (response.ok) {
+                    const resultado = await response.json();
+                    mostrarResultadoTeste(resultado);
+                } else {
+                    const error = await response.json();
+                    alert(error.message || 'Erro no teste');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao conectar com o servidor');
+            }
+        }
+
+        // Mostrar resultado do teste
+        function mostrarResultadoTeste(resultado) {
+            const resultsDiv = document.getElementById('testResults');
+            
+            if (resultado.sucesso) {
+                resultsDiv.innerHTML = `
+                    <h4 style="color: #28a745; margin-bottom: 15px;">
+                        <i class="fas fa-check-circle"></i> Teste Realizado com Sucesso
+                    </h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                        <div>
+                            <strong>Agente:</strong> ${resultado.agente}
+                        </div>
+                        <div>
+                            <strong>Valor Base:</strong> R$ ${resultado.valor_base?.toFixed(2) || '0.00'}
+                        </div>
+                        <div>
+                            <strong>GRIS:</strong> R$ ${resultado.gris?.toFixed(2) || '0.00'}
+                        </div>
+                        <div>
+                            <strong>Pedágio:</strong> R$ ${resultado.pedagio?.toFixed(2) || '0.00'}
+                        </div>
+                        <div>
+                            <strong>Total:</strong> R$ ${resultado.valor_total?.toFixed(2) || '0.00'}
+                        </div>
+                        <div>
+                            <strong>Lógica:</strong> ${resultado.logica_aplicada || 'N/A'}
+                        </div>
+                    </div>
+                    ${resultado.detalhes ? `
+                        <div style="margin-top: 15px; padding: 10px; background: #e3f2fd; border-radius: 5px;">
+                            <strong>Detalhes:</strong> ${JSON.stringify(resultado.detalhes, null, 2)}
+                        </div>
+                    ` : ''}
+                `;
+            } else {
+                resultsDiv.innerHTML = `
+                    <h4 style="color: #dc3545; margin-bottom: 10px;">
+                        <i class="fas fa-exclamation-triangle"></i> Erro no Teste
+                    </h4>
+                    <p>${resultado.erro || 'Erro desconhecido'}</p>
+                `;
+            }
+            
+            resultsDiv.style.display = 'block';
+        }
+
+        // Testar agente específico
+        function testarAgenteEspecifico(nomeAgente) {
+            document.getElementById('testFornecedor').value = nomeAgente;
+            testarMemoriaCalculo();
+        }
+
+        // Editar agente (placeholder)
+        function editarAgente(agenteId) {
+            alert(`Funcionalidade de edição será implementada. Agente ID: ${agenteId}`);
+        }
+    </script>
+</body>
+</html>

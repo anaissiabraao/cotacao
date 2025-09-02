@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PortoEx - Painel Administrativo</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        .admin-header {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 25px 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .admin-header .container {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 0 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .admin-title {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .admin-title i {
+            font-size: 2.2rem;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 15px;
+            border-radius: 15px;
+        }
+
+        .admin-title h1 {
+            font-size: 2rem;
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .breadcrumb {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 10px 20px;
+            border-radius: 25px;
+            backdrop-filter: blur(10px);
+            font-weight: 500;
+        }
+
+        .admin-nav {
+            background: white;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            margin-bottom: 40px;
+            border-radius: 0 0 20px 20px;
+        }
+
+        .admin-nav .container {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 0 30px;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 0;
+            overflow-x: auto;
+            padding: 5px 0;
+        }
+
+        .nav-item {
+            padding: 18px 25px;
+            color: #6c757d;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            white-space: nowrap;
+            border-radius: 10px 10px 0 0;
+            margin: 0 2px;
+        }
+
+        .nav-item:hover, .nav-item.active {
+            color: #1e3c72;
+            border-bottom-color: #ff9800;
+            background: linear-gradient(135deg, rgba(255, 152, 0, 0.05), rgba(255, 152, 0, 0.1));
+            transform: translateY(-2px);
+        }
+
+        .nav-item i {
+            font-size: 1.1rem;
+        }
+
+        .main-content {
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 0 30px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 50px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 20px;
+            padding: 35px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, #1e3c72, #2a5298, #ff9800);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .stat-icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            color: white;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        }
+
+        .stat-icon.logs { 
+            background: linear-gradient(135deg, #3f51b5, #303f9f); 
+        }
+        .stat-icon.searches { 
+            background: linear-gradient(135deg, #4caf50, #388e3c); 
+        }
+        .stat-icon.users { 
+            background: linear-gradient(135deg, #ff9800, #f57c00); 
+        }
+        .stat-icon.ips { 
+            background: linear-gradient(135deg, #9c27b0, #7b1fa2); 
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            font-size: 1rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .activities-section, .top-actions-section {
+            background: white;
+            border-radius: 20px;
+            padding: 35px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+            margin-bottom: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .section-title {
+            font-size: 1.4rem;
+            margin-bottom: 25px;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 600;
+        }
+
+        .section-title i {
+            color: #ff9800;
+            font-size: 1.3rem;
+        }
+
+        .activity-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+            border-bottom: 1px solid #f1f3f4;
+            transition: all 0.3s ease;
+        }
+
+        .activity-item:hover {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            margin: 0 -25px;
+            padding-left: 25px;
+            padding-right: 25px;
+            border-radius: 12px;
+            border-bottom: 1px solid transparent;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-details {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+        }
+
+        .activity-icon {
+            width: 45px;
+            height: 45px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .activity-icon.login { 
+            background: linear-gradient(135deg, #4caf50, #388e3c); 
+        }
+        .activity-icon.calc { 
+            background: linear-gradient(135deg, #2196f3, #1976d2); 
+        }
+        .activity-icon.admin { 
+            background: linear-gradient(135deg, #ff9800, #f57c00); 
+        }
+        .activity-icon.error { 
+            background: linear-gradient(135deg, #f44336, #d32f2f); 
+        }
+
+        .activity-time {
+            color: #6c757d;
+            font-size: 0.9rem;
+            font-weight: 500;
+            background: #f8f9fa;
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .action-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 25px;
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            border: 1px solid #e9ecef;
+        }
+
+        .action-item:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+        }
+
+        .action-count {
+            font-weight: 700;
+            color: #1e3c72;
+            background: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Melhorias responsivas */
+        @media (max-width: 768px) {
+            .admin-header .container {
+                flex-direction: column;
+                gap: 25px;
+                text-align: center;
+                padding: 0 20px;
+            }
+
+            .admin-title h1 {
+                font-size: 1.6rem;
+            }
+
+            .nav-menu {
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 8px;
+                padding: 10px 0;
+            }
+
+            .nav-item {
+                padding: 14px 18px;
+                font-size: 0.9rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+                gap: 25px;
+            }
+
+            .stat-card {
+                padding: 25px;
+            }
+
+            .stat-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 1.8rem;
+            }
+
+            .stat-value {
+                font-size: 2.2rem;
+            }
+
+            .actions-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .main-content {
+                padding: 0 20px;
+            }
+
+            .activities-section, .top-actions-section {
+                padding: 25px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .admin-header {
+                padding: 20px 0;
+            }
+
+            .admin-title i {
+                font-size: 1.8rem;
+                padding: 12px;
+            }
+
+            .admin-title h1 {
+                font-size: 1.4rem;
+            }
+
+            .nav-item {
+                padding: 12px 15px;
+                font-size: 0.85rem;
+            }
+
+            .stat-card {
+                padding: 20px;
+            }
+
+            .stat-icon {
+                width: 50px;
+                height: 50px;
+                font-size: 1.5rem;
+            }
+
+            .stat-value {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-header">
+        <div class="container">
+            <div class="admin-title">
+                <i class="fas fa-chart-line"></i>
+                <h1>Painel Administrativo</h1>
+            </div>
+            <div class="breadcrumb">
+                <i class="fas fa-user-shield"></i> Administrador
+            </div>
+        </div>
+    </div>
+
+    <nav class="admin-nav">
+        <div class="container">
+            <div class="nav-menu">
+                <a href="/admin" class="nav-item active">
+                    <i class="fas fa-chart-bar"></i> Dashboard
+                </a>
+                <a href="/admin/logs" class="nav-item">
+                    <i class="fas fa-list-alt"></i> Logs do Sistema
+                </a>
+                <a href="/admin/historico-detalhado" class="nav-item">
+                    <i class="fas fa-history"></i> Histórico Detalhado
+                </a>
+                <a href="/admin/calculadoras" class="nav-item">
+                    <i class="fas fa-calculator"></i> Calculadoras
+                </a>
+                <a href="/admin/base-dados" class="nav-item">
+                    <i class="fas fa-database"></i> Base de Dados
+                </a>
+                <a href="/admin/agentes-memoria" class="nav-item">
+                    <i class="fas fa-brain"></i> Memórias de Cálculo
+                </a>
+                <a href="/admin/usuarios" class="nav-item">
+                    <i class="fas fa-users-cog"></i> Usuários
+                </a>
+                <a href="/admin/setup" class="nav-item">
+                    <i class="fas fa-cog"></i> Configurações
+                </a>
+                <a href="/admin/agentes" class="nav-item">
+                    <i class="fas fa-people-carry"></i> Agentes
+                </a>
+                <a href="/" class="nav-item">
+                    <i class="fas fa-arrow-left"></i> Voltar ao Sistema
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon logs">
+                        <i class="fas fa-list-alt"></i>
+                    </div>
+                </div>
+                <div class="stat-value">{{ estatisticas.total_logs }}</div>
+                <div class="stat-label">Total de Logs</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon searches">
+                        <i class="fas fa-search"></i>
+                    </div>
+                </div>
+                <div class="stat-value">{{ estatisticas.total_pesquisas }}</div>
+                <div class="stat-label">Pesquisas Realizadas</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon users">
+                        <i class="fas fa-users"></i>
+                    </div>
+                </div>
+                <div class="stat-value">{{ estatisticas.usuarios_unicos }}</div>
+                <div class="stat-label">Usuários Únicos</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon ips">
+                        <i class="fas fa-network-wired"></i>
+                    </div>
+                </div>
+                <div class="stat-value">{{ estatisticas.ips_unicos }}</div>
+                <div class="stat-label">IPs Únicos</div>
+            </div>
+        </div>
+
+        <div class="activities-section">
+            <div class="section-title">
+                <i class="fas fa-clock"></i>
+                Últimas Atividades
+            </div>
+            {% for atividade in estatisticas.ultimas_atividades %}
+                <div class="activity-item">
+                    <div class="activity-details">
+                        <div class="activity-icon {{ 'login' if 'LOGIN' in atividade.acao else 'calc' if 'CALCULO' in atividade.acao else 'admin' if 'ADMIN' in atividade.acao else 'error' }}">
+                            <i class="fas fa-{{ 'sign-in-alt' if 'LOGIN' in atividade.acao else 'calculator' if 'CALCULO' in atividade.acao else 'cog' if 'ADMIN' in atividade.acao else 'exclamation-triangle' }}"></i>
+                        </div>
+                        <div>
+                            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 4px;">
+                                {{ atividade.usuario }} - {{ atividade.acao }}
+                            </div>
+                            <div style="color: #6c757d; font-size: 0.9rem;">
+                                <i class="fas fa-map-marker-alt"></i> IP: {{ atividade.ip }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="activity-time">{{ atividade.data_hora }}</div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="top-actions-section">
+            <div class="section-title">
+                <i class="fas fa-chart-pie"></i>
+                Ações Mais Comuns
+            </div>
+            <div class="actions-grid">
+                {% for acao, count in estatisticas.acoes_mais_comuns %}
+                    <div class="action-item">
+                        <span style="font-weight: 500; color: #2c3e50;">{{ acao }}</span>
+                        <span class="action-count">{{ count }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

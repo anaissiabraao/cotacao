@@ -16,4 +16,18 @@ services:
         value: production
       - key: WEB_CONCURRENCY
         value: 2
-    healthCheckPath: /health 
+      - key: DATABASE_URL
+        fromDatabase:
+          name: portoex-postgres
+          property: connectionString
+      - key: POSTGRESQL_URL
+        fromDatabase:
+          name: portoex-postgres
+          property: connectionString
+    healthCheckPath: /health
+
+databases:
+  - name: portoex-postgres
+    databaseName: base_unificada
+    user: cotacao
+    plan: free 
