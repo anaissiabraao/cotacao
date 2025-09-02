@@ -83,6 +83,45 @@ def log_acesso(usuario, acao, ip, detalhes=""):
     except Exception as e:
         print(f"[LOG] Erro: {e}")
 
+# ===== CONSTANTES PARA CÁLCULO DEDICADO =====
+
+def determinar_faixa(distancia):
+    """Determina a faixa de distância para cálculo de custos"""
+    faixas = [
+        (0, 20), (20, 50), (50, 100), (100, 150), (150, 200),
+        (200, 250), (250, 300), (300, 400), (400, 600), (600, 800),
+        (800, 1000), (1000, 1500), (1500, 2000), (2000, 2500),
+        (2500, 3000), (3000, 3500), (3500, 4000), (4000, 4500),
+        (4500, 6000)
+    ]
+    for min_val, max_val in faixas:
+        if min_val < distancia <= max_val:
+            return f"{min_val}-{max_val}"
+    return None
+
+# Tabela fixa de custos para frete dedicado por faixa de distância e tipo de veículo
+TABELA_CUSTOS_DEDICADO = {
+    "0-20": {"FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0},
+    "20-50": {"FIORINO": 200.0, "VAN": 250.0, "3/4": 300.0, "TOCO": 400.0, "TRUCK": 500.0, "CARRETA": 700.0},
+    "50-100": {"FIORINO": 300.0, "VAN": 400.0, "3/4": 500.0, "TOCO": 600.0, "TRUCK": 700.0, "CARRETA": 1000.0},
+    "100-150": {"FIORINO": 400.0, "VAN": 500.0, "3/4": 600.0, "TOCO": 800.0, "TRUCK": 1000.0, "CARRETA": 1500.0},
+    "150-200": {"FIORINO": 500.0, "VAN": 600.0, "3/4": 800.0, "TOCO": 1000.0, "TRUCK": 1200.0, "CARRETA": 1800.0},
+    "200-250": {"FIORINO": 600.0, "VAN": 800.0, "3/4": 1000.0, "TOCO": 1200.0, "TRUCK": 1500.0, "CARRETA": 2200.0},
+    "250-300": {"FIORINO": 700.0, "VAN": 900.0, "3/4": 1200.0, "TOCO": 1500.0, "TRUCK": 1800.0, "CARRETA": 2500.0},
+    "300-400": {"FIORINO": 900.0, "VAN": 1200.0, "3/4": 1500.0, "TOCO": 1800.0, "TRUCK": 2200.0, "CARRETA": 3000.0},
+    "400-600": {"FIORINO": 1200.0, "VAN": 1600.0, "3/4": 2000.0, "TOCO": 2500.0, "TRUCK": 3000.0, "CARRETA": 4000.0}
+}
+
+# Valores por km acima de 600km
+DEDICADO_KM_ACIMA_600 = {
+    "FIORINO": 3.0,
+    "VAN": 4.0,
+    "3/4": 4.5,
+    "TOCO": 5.0,
+    "TRUCK": 5.5,
+    "CARRETA": 8.0
+}
+
 # ===== SISTEMA DE CÁLCULO RESTAURADO =====
 
 def carregar_base_unificada():
@@ -1554,8 +1593,257 @@ def calcular_frete_fracionado():
         return jsonify({"error": str(e)})
 
 @app.route("/calcular", methods=["POST"])
+def geocode(municipio, uf):
+    """Geocodifica município e UF para coordenadas"""
+    try:
+        query = f"{municipio}, {uf}, Brasil"
+        url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=1"
+        
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data:
+                lat = float(data[0]['lat'])
+                lon = float(data[0]['lon'])
+                return [lat, lon, f"{municipio} - {uf}"]
+        return None
+    except Exception as e:
+        print(f"[GEOCODE] Erro: {e}")
+        return None
+
+def calcular_distancia_osrm(origem, destino):
+    """Calcula distância usando OSRM"""
+    try:
+        url = f"http://router.project-osrm.org/route/v1/driving/{origem[1]},{origem[0]};{destino[1]},{destino[0]}?overview=false"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data['routes']:
+                route = data['routes'][0]
+                return {
+                    "distancia": route['distance'] / 1000,
+                    "duracao": route['duration'] / 60,
+                    "rota_pontos": [],
+                    "provider": "OSRM"
+                }
+        return None
+    except Exception as e:
+        print(f"[OSRM] Erro: {e}")
+        return None
+
+def calcular_distancia_reta(origem, destino):
+    """Calcula distância em linha reta (fallback)"""
+    try:
+        from math import radians, cos, sin, asin, sqrt
+        
+        lat1, lon1 = origem[0], origem[1]
+        lat2, lon2 = destino[0], destino[1]
+        
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a))
+        r = 6371
+        
+        distancia = c * r
+        duracao = distancia * 1.5
+        
+        return {
+            "distancia": distancia,
+            "duracao": duracao,
+            "rota_pontos": [],
+            "provider": "Distância Reta"
+        }
+    except Exception as e:
+        print(f"[DISTANCIA_RETA] Erro: {e}")
+        return None
+
+def calcular_custos_dedicado(uf_origem, municipio_origem, uf_destino, municipio_destino, distancia, pedagio_real=0):
+    """Calcula custos para frete dedicado baseado na distância"""
+    try:
+        custos = {}
+        
+        pedagio_real = float(pedagio_real) if pedagio_real is not None else 0.0
+        distancia = float(distancia) if distancia is not None else 0.0
+        
+        faixa = determinar_faixa(distancia)
+        
+        if faixa and faixa in TABELA_CUSTOS_DEDICADO:
+            tabela = TABELA_CUSTOS_DEDICADO[faixa]
+            for tipo_veiculo, valor in tabela.items():
+                custo_total = float(valor) + pedagio_real
+                custos[tipo_veiculo] = round(custo_total, 2)
+                
+        elif distancia > 600:
+            for tipo_veiculo, valor_km in DEDICADO_KM_ACIMA_600.items():
+                custo_total = (distancia * float(valor_km)) + pedagio_real
+                custos[tipo_veiculo] = round(custo_total, 2)
+        else:
+            custos_base = {
+                "FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, 
+                "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0
+            }
+            for tipo_veiculo, valor in custos_base.items():
+                custo_total = float(valor) + pedagio_real
+                custos[tipo_veiculo] = round(custo_total, 2)
+        
+        for tipo_veiculo in list(custos.keys()):
+            if not isinstance(custos[tipo_veiculo], (int, float)) or custos[tipo_veiculo] < 0:
+                custos[tipo_veiculo] = 0.0
+        
+        return custos
+        
+    except Exception as e:
+        print(f"[ERRO] Erro ao calcular custos dedicado: {e}")
+        return {
+            "FIORINO": 150.0, "VAN": 200.0, "3/4": 250.0, 
+            "TOCO": 300.0, "TRUCK": 350.0, "CARRETA": 500.0
+        }
+
+def gerar_analise_trajeto(origem_info, destino_info, rota_info, custos, tipo="Dedicado", municipio_origem=None, uf_origem=None, municipio_destino=None, uf_destino=None):
+    """Gera análise completa do trajeto"""
+    if municipio_origem and uf_origem:
+        origem_nome = f"{municipio_origem} - {uf_origem}"
+    else:
+        origem_nome = origem_info[2] if len(origem_info) > 2 else "Origem"
+    
+    if municipio_destino and uf_destino:
+        destino_nome = f"{municipio_destino} - {uf_destino}"
+    else:
+        destino_nome = destino_info[2] if len(destino_info) > 2 else "Destino"
+    
+    horas = int(rota_info["duracao"] / 60)
+    minutos = int(rota_info["duracao"] % 60)
+    tempo_estimado = f"{horas}h {minutos}min"
+    
+    consumo_combustivel = rota_info["distancia"] * 0.12
+    emissao_co2 = consumo_combustivel * 2.3
+    pedagio_real = rota_info["distancia"] * 0.05
+    pedagio_detalhes = {"fonte": "Estimativa baseada na distância", "valor_por_km": 0.05}
+    
+    import uuid
+    id_historico = f"#Ded{uuid.uuid4().hex[:6].upper()}"
+    
+    return {
+        "id_historico": id_historico,
+        "tipo": tipo,
+        "origem": origem_nome,
+        "destino": destino_nome,
+        "distancia": rota_info["distancia"],
+        "duracao_minutos": rota_info["duracao"],
+        "tempo_estimado": tempo_estimado,
+        "consumo_combustivel": round(consumo_combustivel, 2),
+        "emissao_co2": round(emissao_co2, 2),
+        "pedagio_estimado": round(pedagio_real, 2),
+        "pedagio_real": round(pedagio_real, 2),
+        "pedagio_detalhes": pedagio_detalhes,
+        "provider": rota_info["provider"],
+        "data_hora": datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "custos": custos
+    }
+
+def gerar_ranking_dedicado(custos, analise, rota_info, peso=0, cubagem=0, valor_nf=None):
+    """Gera ranking das opções de frete dedicado"""
+    try:
+        ranking_opcoes = []
+        custos_ordenados = sorted(custos.items(), key=lambda x: x[1])
+        
+        for i, (tipo_veiculo, custo) in enumerate(custos_ordenados, 1):
+            if tipo_veiculo == "VAN":
+                capacidade_info = {'peso_max': '1.500kg', 'volume_max': '8m³', 'descricao': 'Veículo compacto para cargas leves'}
+                icone_veiculo = "🚐"
+            elif tipo_veiculo == "TRUCK":
+                capacidade_info = {'peso_max': '8.000kg', 'volume_max': '25m³', 'descricao': 'Caminhão médio para cargas variadas'}
+                icone_veiculo = "🚛"
+            elif tipo_veiculo == "CARRETA":
+                capacidade_info = {'peso_max': '27.000kg', 'volume_max': '90m³', 'descricao': 'Carreta para cargas pesadas'}
+                icone_veiculo = "🚛"
+            else:
+                capacidade_info = {'peso_max': 'Variável', 'volume_max': 'Variável', 'descricao': 'Veículo dedicado'}
+                icone_veiculo = "🚛"
+            
+            if i == 1:
+                icone_posicao = "🥇"
+            elif i == 2:
+                icone_posicao = "🥈"
+            elif i == 3:
+                icone_posicao = "🥉"
+            else:
+                icone_posicao = f"{i}º"
+            
+            distancia = analise.get('distancia', 500)
+            prazo_estimado = max(1, int(distancia / 500))
+            
+            custo_base = custo * 0.70
+            combustivel = custo * 0.20
+            pedagio = analise.get('pedagio_real', custo * 0.10)
+            
+            opcao_ranking = {
+                'posicao': i,
+                'icone': f"{icone_posicao} {icone_veiculo}",
+                'tipo_servico': f"FRETE DEDICADO - {tipo_veiculo}",
+                'fornecedor': 'Porto Express',
+                'descricao': f"Frete dedicado com {tipo_veiculo.lower()} exclusivo",
+                'custo_total': custo,
+                'prazo': prazo_estimado,
+                'peso_usado': f"{peso}kg" if peso else "Não informado",
+                'capacidade': capacidade_info,
+                'eh_melhor_opcao': (i == 1),
+                'detalhes_expandidos': {
+                    'custos_detalhados': {
+                        'custo_base': round(custo_base, 2),
+                        'combustivel': round(combustivel, 2),
+                        'pedagio': round(pedagio, 2),
+                        'outros': round(custo - custo_base - combustivel - pedagio, 2),
+                        'total': custo
+                    },
+                    'rota_info': {
+                        'origem': analise.get('origem', ''),
+                        'destino': analise.get('destino', ''),
+                        'distancia': analise.get('distancia', 0),
+                        'tempo_viagem': analise.get('tempo_estimado', ''),
+                        'pedagio_real': analise.get('pedagio_real', 0),
+                        'consumo_estimado': analise.get('consumo_combustivel', 0),
+                        'emissao_co2': analise.get('emissao_co2', 0)
+                    },
+                    'veiculo_info': {
+                        'tipo': tipo_veiculo,
+                        'capacidade_peso': capacidade_info['peso_max'],
+                        'capacidade_volume': capacidade_info['volume_max'],
+                        'descricao': capacidade_info['descricao']
+                    }
+                }
+            }
+            
+            ranking_opcoes.append(opcao_ranking)
+        
+        melhor_opcao = ranking_opcoes[0] if ranking_opcoes else None
+        
+        return {
+            'id_calculo': analise.get('id_historico', f"#Ded{len(ranking_opcoes):03d}"),
+            'tipo_frete': 'Dedicado',
+            'origem': analise.get('origem', ''),
+            'destino': analise.get('destino', ''),
+            'peso': peso,
+            'cubagem': cubagem,
+            'valor_nf': valor_nf,
+            'distancia': analise.get('distancia', 0),
+            'tempo_estimado': analise.get('tempo_estimado', ''),
+            'pedagio_real': analise.get('pedagio_real', 0),
+            'opcoes': ranking_opcoes,
+            'melhor_opcao': melhor_opcao,
+            'total_opcoes': len(ranking_opcoes)
+        }
+        
+    except Exception as e:
+        print(f"[RANKING] Erro ao gerar ranking dedicado: {e}")
+        return None
+
+@app.route("/calcular_dedicado", methods=["POST"])
 def calcular_dedicado():
-    """Cálculo de frete dedicado limpo"""
+    """Cálculo de frete dedicado completo"""
     try:
         data = request.get_json()
         usuario = session.get('usuario_logado', 'DESCONHECIDO')
@@ -1565,21 +1853,88 @@ def calcular_dedicado():
         destino = data.get("municipio_destino")
         uf_destino = data.get("uf_destino")
         peso = float(data.get("peso", 1))
+        cubagem = float(data.get("cubagem", 0))
+        valor_nf = data.get("valor_nf")
         
         log_acesso(usuario, 'CALCULO_DEDICADO', obter_ip_cliente(), 
-                  f"{origem}/{uf_origem} → {destino}/{uf_destino}, {peso}kg")
+                  f"Cálculo: {origem}/{uf_origem} -> {destino}/{uf_destino}, Peso: {peso}kg")
         
         if not all([origem, uf_origem, destino, uf_destino]):
             return jsonify({"error": "Origem e destino são obrigatórios"})
         
-        # Sistema simplificado para dedicado
-        resultado = {'sem_opcoes': True, 'erro': 'Cálculo dedicado em desenvolvimento'}
+        # Geocodificação
+        coord_origem = geocode(origem, uf_origem)
+        coord_destino = geocode(destino, uf_destino)
         
-        return jsonify(resultado)
+        if not coord_origem or not coord_destino:
+            return jsonify({"error": "Não foi possível geocodificar origem ou destino"})
+        
+        # Calcular rota
+        rota_info = calcular_distancia_osrm(coord_origem, coord_destino) or \
+                    calcular_distancia_reta(coord_origem, coord_destino)
+        
+        if not rota_info:
+            return jsonify({"error": "Não foi possível calcular a rota"})
+        
+        # Calcular pedágio real
+        analise_preliminar = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, {}, "Dedicado", origem, uf_origem, destino, uf_destino)
+        pedagio_real = analise_preliminar.get('pedagio_real', 0)
+        
+        # Calcular custos
+        custos = calcular_custos_dedicado(uf_origem, origem, uf_destino, destino, rota_info["distancia"], pedagio_real)
+        
+        # Gerar análise final
+        analise = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, custos, "Dedicado", origem, uf_origem, destino, uf_destino)
+        
+        # Gerar ranking
+        ranking_dedicado = gerar_ranking_dedicado(custos, analise, rota_info, peso, cubagem, valor_nf)
+        
+        # Preparar rota para mapa
+        rota_pontos = rota_info.get("rota_pontos", [])
+        if not isinstance(rota_pontos, list) or len(rota_pontos) == 0:
+            rota_pontos = [coord_origem, coord_destino]
+        
+        for i, pt in enumerate(rota_pontos):
+            if not isinstance(pt, list) or len(pt) < 2:
+                rota_pontos[i] = [0, 0]
+        
+        # Resposta completa
+        resposta = {
+            "tipo": "Dedicado",
+            "distancia": rota_info["distancia"],
+            "duracao": rota_info["duracao"],
+            "custos": custos,
+            "rota_pontos": rota_pontos,
+            "analise": {
+                "tempo_estimado": analise["tempo_estimado"],
+                "consumo_combustivel": analise["consumo_combustivel"],
+                "emissao_co2": analise["emissao_co2"],
+                "pedagio_estimado": analise["pedagio_estimado"],
+                "pedagio_real": analise.get("pedagio_real", 0),
+                "pedagio_detalhes": analise.get("pedagio_detalhes"),
+                "origem": analise["origem"],
+                "destino": analise["destino"],
+                "distancia": analise["distancia"],
+                "duracao_minutos": analise["duracao_minutos"],
+                "provider": analise["provider"],
+                "data_hora": analise["data_hora"],
+                "rota_pontos": rota_pontos,
+                "id_historico": analise["id_historico"],
+                "tipo": "Dedicado",
+                "custos": custos
+            },
+            "ranking_dedicado": ranking_dedicado,
+            "melhor_opcao": ranking_dedicado['melhor_opcao'] if ranking_dedicado else None,
+            "total_opcoes": ranking_dedicado['total_opcoes'] if ranking_dedicado else len(custos)
+        }
+        
+        return jsonify(resposta)
         
     except Exception as e:
         print(f"[DEDICADO] Erro: {e}")
-        return jsonify({"error": str(e)})
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Erro ao calcular frete dedicado: {str(e)}"})
 
 @app.route("/calcular_aereo", methods=["POST"])
 def calcular_aereo():
