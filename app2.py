@@ -339,8 +339,10 @@ def calcular_rotas_automaticas_banco(origem, uf_origem, destino, uf_destino, pes
         ]
         
         # Buscar agentes de entrega no destino (como no código original)
+        # Como os agentes têm Destino=None, vamos buscar agentes que atendem a região do destino
         agentes_entrega = df_agentes[
-            df_agentes['Origem'].str.contains(destino_norm, case=False, na=False)
+            (df_agentes['Origem'].str.contains(destino_norm, case=False, na=False)) |
+            (df_agentes['Base Destino'].str.contains(destino_norm, case=False, na=False))
         ]
         
         # Buscar transferências diretas

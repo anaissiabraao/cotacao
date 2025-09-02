@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', function() {
             datalist.id = datalistId;
             input.parentNode.insertBefore(datalist, input.nextSibling);
         }
-
+        
         try {
             const response = await fetch('/estados');
             if (!response.ok) {
@@ -234,7 +234,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const fracionadoData = await fracionadoResponse.json();
                     console.log('[ALL IN] Dados frete fracionado recebidos:', fracionadoData);
                     exibirResultadoAllInFracionado(fracionadoData);
-                } else {
+        } else {
                     console.error('[ALL IN] Erro na resposta do frete fracionado:', fracionadoResponse.status);
                     exibirResultadoAllInFracionado({ erro: 'Erro ao calcular frete fracionado' });
                 }
@@ -267,7 +267,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 exibirResultadoAllInAereo(aereoData);
             }
                 
-        } catch (error) {
+            } catch (error) {
             console.error('[ALL IN] Erro:', error);
             showError(`Erro no calculo All In: ${error.message}`);
         } finally {
@@ -315,7 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             exibirResultadoFracionado(data);
                 
-        } catch (error) {
+            } catch (error) {
             console.error('[FRACIONADO] Erro:', error);
             showError(`Erro no calculo fracionado: ${error.message}`);
         } finally {
@@ -387,13 +387,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify(formData)
             });
 
-            if (!response.ok) {
-                throw new Error(`Erro HTTP: ${response.status}`);
-            }
+                if (!response.ok) {
+                    throw new Error(`Erro HTTP: ${response.status}`);
+                }
 
             const data = await response.json();
                 
-            if (data.error) {
+                if (data.error) {
                 throw new Error(data.error);
             }
 
@@ -427,7 +427,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Funcoes de exibicao de resultados
-    function exibirResultadoAllInFracionado(data) {
+        function exibirResultadoAllInFracionado(data) {
         const container = document.getElementById('resumo-fracionado-completo');
         if (!container) {
             console.error('[ALL IN FRAC] Container resumo-fracionado-completo nao encontrado');
@@ -460,36 +460,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 const borderColor = ismelhor ? '#28a745' : '#dee2e6';
                 const bgColor = ismelhor ? '#e8f5e9' : '#ffffff';
                 const badge = ismelhor ? '<div style="background: #28a745; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; margin-top: 8px; text-align: center;">⭐ Melhor Opção</div>' : '';
-                
-                html += `
+                        
+                        html += `
                     <div style="background: ${bgColor}; border: 2px solid ${borderColor}; border-radius: 8px; padding: 15px; transition: transform 0.2s;">
                         <div style="text-align: center; margin-bottom: 12px;">
                             <h6 style="color: #495057; margin: 0; font-size: 1.1rem; font-weight: bold;">${opcao.fornecedor}</h6>
                             ${badge}
-                        </div>
+                                </div>
                         <div style="text-align: center; margin: 15px 0;">
                             <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">R$ ${opcao.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
-                        </div>
+                                    </div>
                         <div style="font-size: 0.9rem; color: #6c757d; line-height: 1.4;">
                             <div><strong>Peso usado:</strong> ${opcao.peso_usado}</div>
                             <div><strong>Serviço:</strong> ${opcao.tipo_servico}</div>
-                        </div>
+                                    </div>
                         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #dee2e6; font-size: 0.8rem; color: #6c757d;">
                             <div style="display: flex; justify-content: space-between;"><span>Base:</span><span>R$ ${opcao.custo_base.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span></div>
                             <div style="display: flex; justify-content: space-between;"><span>GRIS:</span><span>R$ ${opcao.gris.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span></div>
                             <div style="display: flex; justify-content: space-between;"><span>Pedágio:</span><span>R$ ${opcao.pedagio.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span></div>
                             <div style="display: flex; justify-content: space-between;"><span>Seguro:</span><span>R$ ${opcao.seguro.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span></div>
-                        </div>
-                    </div>
-                `;
-            });
-            
-            html += `
-                    </div>
-                </div>
-            `;
+                                    </div>
+                            </div>
+                        `;
+                    });
+                        
+                        html += `
+                                </div>
+                            </div>
+                        `;
             container.innerHTML = html;
-        } else {
+            } else {
             container.innerHTML = '<div class="alert alert-info">Nenhuma opcao de frete fracionado encontrada.</div>';
         }
         
@@ -541,7 +541,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="info-rota-fracionado" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
                     <p><strong>Rota:</strong> ${origem} → ${destino}</p>
                     <p><strong>Total de opções encontradas:</strong> ${opcoes.length}</p>
-                </div>
+                                </div>
                 
                 <div class="opcoes-fracionado">
                     <h4><i class="fa-solid fa-truck"></i> Opções Disponíveis:</h4>
@@ -581,21 +581,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     <td style="padding: 12px; border: 1px solid #dee2e6; text-align: right; font-weight: bold; color: #28a745; font-size: 1.1rem; font-family: monospace;">R$ ${opcao.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
                     <td style="padding: 12px; border: 1px solid #dee2e6; text-align: center; font-weight: 600;">${opcao.peso_usado}</td>
                 </tr>
-            `;
-        });
-        
+                        `;
+                    });
+                
         html += `
                             </tbody>
                         </table>
-                    </div>
-                </div>
+                        </div>
+                        </div>
                 
                 <div class="resumo-melhor-opcao" style="background: #e8f5e9; padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #28a745;">
                     <h5 style="color: #28a745; margin-bottom: 10px;"><i class="fa-solid fa-star"></i> Melhor Opção:</h5>
                     <p style="margin: 0; font-size: 1.1rem;"><strong>${opcoes[0].fornecedor}</strong> - <span style="color: #28a745; font-weight: bold;">R$ ${opcoes[0].total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span></p>
-                </div>
-            </div>
-        `;
+                        </div>
+                    </div>
+                `;
         
         container.innerHTML = html;
         console.log('[FRACIONADO] Resultado exibido com sucesso');
@@ -668,7 +668,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Tabela de ranking com detalhes expandíveis
         if (ranking.ranking_opcoes && ranking.ranking_opcoes.length > 0) {
-            html += `
+                html += `
                 <div class="analise-container">
                     <div class="analise-title">📊 Opções de Frete Fracionado Disponíveis</div>
                     <table class="result-table" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
@@ -793,14 +793,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                             <p style="color: #6c757d; text-align: center; font-style: italic;">
                                                 Clique em um agente ao lado para ver custos específicos
                                             </p>
-                                        </div>
-                                    </div>
+                                                </div>
+                                                </div>
                                 </div>
                             </div>
                         </td>
-                    </tr>
-                `;
-            });
+                              </tr>
+                        `;
+                    });
             
             html += `
                         </tbody>
@@ -1003,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (containerVeiculos) {
             if (data.erro) {
                 containerVeiculos.innerHTML = `<div class="alert alert-warning">${data.erro}</div>`;
-            } else {
+                    } else {
                 containerVeiculos.innerHTML = '<div class="alert alert-info">Calculo dedicado em desenvolvimento</div>';
             }
         }
@@ -1027,7 +1027,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (container) {
             if (data.erro) {
                 container.innerHTML = `<div class="alert alert-warning">${data.erro}</div>`;
-            } else {
+        } else {
                 container.innerHTML = '<div class="alert alert-info">Calculo dedicado em desenvolvimento</div>';
             }
         }
@@ -1051,8 +1051,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         if (!historico || historico.length === 0) {
             container.innerHTML = '<div class="alert alert-info">Nenhum item no historico ainda.</div>';
-            return;
-        }
+                return;
+            }
             
         let html = '<h3>Ultimos Calculos</h3>';
         html += '<div class="historico-lista">';
@@ -1090,7 +1090,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <strong>Erro:</strong> ${msg}
             <button type="button" class="close" style="float: right; background: none; border: none; font-size: 1.5rem;" onclick="this.parentElement.remove()">
                 &times;
-            </button>
+                            </button>
         `;
         
         document.body.appendChild(alertDiv);
