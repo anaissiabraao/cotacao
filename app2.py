@@ -1594,7 +1594,7 @@ def calcular_frete_fracionado():
 
 @app.route("/calcular", methods=["POST"])
 def calcular():
-    """Rota principal de cálculo - redireciona para fracionado"""
+    """Rota principal de cálculo - redireciona para dedicado"""
     try:
         data = request.get_json()
         usuario = session.get('usuario_logado', 'DESCONHECIDO')
@@ -1604,24 +1604,88 @@ def calcular():
         destino = data.get("municipio_destino")
         uf_destino = data.get("uf_destino")
         peso = float(data.get("peso", 1))
-        cubagem = float(data.get("cubagem", 0.01))
-        valor_nf = float(data.get("valor_nf", 0)) if data.get("valor_nf") else None
+        cubagem = float(data.get("cubagem", 0))
+        valor_nf = data.get("valor_nf")
         
         log_acesso(usuario, 'CALCULO_PRINCIPAL', obter_ip_cliente(), 
-                  f"{origem}/{uf_origem} → {destino}/{uf_destino}, {peso}kg")
+                  f"Cálculo: {origem}/{uf_origem} -> {destino}/{uf_destino}, Peso: {peso}kg")
         
         if not all([origem, uf_origem, destino, uf_destino]):
             return jsonify({"error": "Origem e destino são obrigatórios"})
         
-        # Usar função restaurada que funcionava
-        resultado = calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_destino, 
-                                                           peso, cubagem, valor_nf)
+        # Geocodificação
+        coord_origem = geocode(origem, uf_origem)
+        coord_destino = geocode(destino, uf_destino)
         
-        return jsonify(resultado)
+        if not coord_origem or not coord_destino:
+            return jsonify({"error": "Não foi possível geocodificar origem ou destino"})
+        
+        # Calcular rota
+        rota_info = calcular_distancia_osrm(coord_origem, coord_destino) or \
+                    calcular_distancia_reta(coord_origem, coord_destino)
+        
+        if not rota_info:
+            return jsonify({"error": "Não foi possível calcular a rota"})
+        
+        # Calcular pedágio real
+        analise_preliminar = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, {}, "Dedicado", origem, uf_origem, destino, uf_destino)
+        pedagio_real = analise_preliminar.get('pedagio_real', 0)
+        
+        # Calcular custos
+        custos = calcular_custos_dedicado(uf_origem, origem, uf_destino, destino, rota_info["distancia"], pedagio_real)
+        
+        # Gerar análise final
+        analise = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, custos, "Dedicado", origem, uf_origem, destino, uf_destino)
+        
+        # Gerar ranking
+        ranking_dedicado = gerar_ranking_dedicado(custos, analise, rota_info, peso, cubagem, valor_nf)
+        
+        # Preparar rota para mapa
+        rota_pontos = rota_info.get("rota_pontos", [])
+        if not isinstance(rota_pontos, list) or len(rota_pontos) == 0:
+            rota_pontos = [coord_origem, coord_destino]
+        
+        for i, pt in enumerate(rota_pontos):
+            if not isinstance(pt, list) or len(pt) < 2:
+                rota_pontos[i] = [0, 0]
+        
+        # Resposta completa
+        resposta = {
+            "tipo": "Dedicado",
+            "distancia": rota_info["distancia"],
+            "duracao": rota_info["duracao"],
+            "custos": custos,
+            "rota_pontos": rota_pontos,
+            "analise": {
+                "tempo_estimado": analise["tempo_estimado"],
+                "consumo_combustivel": analise["consumo_combustivel"],
+                "emissao_co2": analise["emissao_co2"],
+                "pedagio_estimado": analise["pedagio_estimado"],
+                "pedagio_real": analise.get("pedagio_real", 0),
+                "pedagio_detalhes": analise.get("pedagio_detalhes"),
+                "origem": analise["origem"],
+                "destino": analise["destino"],
+                "distancia": analise["distancia"],
+                "duracao_minutos": analise["duracao_minutos"],
+                "provider": analise["provider"],
+                "data_hora": analise["data_hora"],
+                "rota_pontos": rota_pontos,
+                "id_historico": analise["id_historico"],
+                "tipo": "Dedicado",
+                "custos": custos
+            },
+            "ranking_dedicado": ranking_dedicado,
+            "melhor_opcao": ranking_dedicado['melhor_opcao'] if ranking_dedicado else None,
+            "total_opcoes": ranking_dedicado['total_opcoes'] if ranking_dedicado else len(custos)
+        }
+        
+        return jsonify(resposta)
         
     except Exception as e:
         print(f"[CALCULO] Erro: {e}")
-        return jsonify({"error": str(e)})
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Erro ao calcular frete dedicado: {str(e)}"})
 
 def geocode(municipio, uf):
     """Geocodifica município e UF para coordenadas"""
