@@ -397,7 +397,7 @@
                 </button>
                 
                 <button class="btn btn-info" onclick="popularBaseUnificada()">
-                    <i class="fas fa-sync-alt"></i> Sincronizar Base de Dados
+                    <i class="fas fa-database"></i> Verificar PostgreSQL
                 </button>
                 
                 <button class="btn btn-primary" onclick="limparCache()">
@@ -585,9 +585,9 @@
             }
         }
 
-        // Função para sincronizar base de dados
+        // Função para verificar conexão PostgreSQL
         async function popularBaseUnificada() {
-            if (!confirm('Tem certeza que deseja sincronizar a base de dados com dados reais? Isso pode atualizar registros existentes.')) {
+            if (!confirm('Deseja verificar a conexão com o PostgreSQL?')) {
                 return;
             }
             
@@ -602,15 +602,15 @@
                 const data = await response.json();
                 
                 if (data.sucesso) {
-                    showAlert('Base de dados sincronizada com sucesso!', 'success');
+                    showAlert('Conexão com PostgreSQL verificada com sucesso!', 'success');
                     // Recarregar estatísticas
                     testarConexao();
                 } else {
-                    showAlert('Erro ao sincronizar base de dados: ' + data.mensagem, 'danger');
+                    showAlert('Erro na conexão com PostgreSQL: ' + data.mensagem, 'danger');
                 }
                 
             } catch (error) {
-                showAlert('Erro ao sincronizar base de dados: ' + error.message, 'danger');
+                showAlert('Erro ao verificar PostgreSQL: ' + error.message, 'danger');
             }
         }
 
