@@ -1690,19 +1690,56 @@ def calcular():
 def geocode(municipio, uf):
     """Geocodifica município e UF para coordenadas"""
     try:
+        if not municipio or not uf:
+            print(f"[GEOCODE] Dados inválidos: municipio='{municipio}', uf='{uf}'")
+            return None
+            
         query = f"{municipio}, {uf}, Brasil"
         url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=1"
         
+        print(f"[GEOCODE] Buscando: {query}")
+        print(f"[GEOCODE] URL: {url}")
+        
         response = requests.get(url, timeout=10)
+        print(f"[GEOCODE] Status: {response.status_code}")
+        
         if response.status_code == 200:
             data = response.json()
-            if data:
+            print(f"[GEOCODE] Resposta: {data}")
+            
+            if data and len(data) > 0:
                 lat = float(data[0]['lat'])
                 lon = float(data[0]['lon'])
-                return [lat, lon, f"{municipio} - {uf}"]
+                resultado = [lat, lon, f"{municipio} - {uf}"]
+                print(f"[GEOCODE] Sucesso: {resultado}")
+                return resultado
+            else:
+                print(f"[GEOCODE] Nenhum resultado encontrado para: {query}")
+        else:
+            print(f"[GEOCODE] Erro HTTP: {response.status_code}")
+            
+        # Fallback: coordenadas aproximadas dos estados brasileiros
+        coordenadas_estados = {
+            'AC': [-8.77, -70.55], 'AL': [-9.71, -35.73], 'AP': [0.90, -52.00], 'AM': [-3.42, -65.73],
+            'BA': [-12.97, -38.50], 'CE': [-3.72, -38.54], 'DF': [-15.78, -47.92], 'ES': [-20.31, -40.31],
+            'GO': [-16.64, -49.25], 'MA': [-2.53, -44.30], 'MT': [-15.60, -56.10], 'MS': [-20.44, -54.64],
+            'MG': [-19.92, -43.93], 'PA': [-1.45, -48.50], 'PB': [-7.12, -34.88], 'PR': [-25.42, -49.27],
+            'PE': [-8.05, -34.88], 'PI': [-5.09, -42.80], 'RJ': [-22.91, -43.20], 'RN': [-5.79, -35.21],
+            'RS': [-30.03, -51.23], 'RO': [-8.76, -63.90], 'RR': [2.82, -60.67], 'SC': [-27.59, -48.55],
+            'SP': [-23.55, -46.64], 'SE': [-10.90, -37.07], 'TO': [-10.17, -48.33]
+        }
+        
+        if uf in coordenadas_estados:
+            lat, lon = coordenadas_estados[uf]
+            resultado = [lat, lon, f"{municipio} - {uf}"]
+            print(f"[GEOCODE] Fallback para {uf}: {resultado}")
+            return resultado
+            
         return None
     except Exception as e:
         print(f"[GEOCODE] Erro: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def calcular_distancia_osrm(origem, destino):
