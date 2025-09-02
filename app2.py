@@ -1593,6 +1593,36 @@ def calcular_frete_fracionado():
         return jsonify({"error": str(e)})
 
 @app.route("/calcular", methods=["POST"])
+def calcular():
+    """Rota principal de cálculo - redireciona para fracionado"""
+    try:
+        data = request.get_json()
+        usuario = session.get('usuario_logado', 'DESCONHECIDO')
+        
+        origem = data.get("municipio_origem")
+        uf_origem = data.get("uf_origem")
+        destino = data.get("municipio_destino")
+        uf_destino = data.get("uf_destino")
+        peso = float(data.get("peso", 1))
+        cubagem = float(data.get("cubagem", 0.01))
+        valor_nf = float(data.get("valor_nf", 0)) if data.get("valor_nf") else None
+        
+        log_acesso(usuario, 'CALCULO_PRINCIPAL', obter_ip_cliente(), 
+                  f"{origem}/{uf_origem} → {destino}/{uf_destino}, {peso}kg")
+        
+        if not all([origem, uf_origem, destino, uf_destino]):
+            return jsonify({"error": "Origem e destino são obrigatórios"})
+        
+        # Usar função restaurada que funcionava
+        resultado = calcular_frete_fracionado_base_unificada(origem, uf_origem, destino, uf_destino, 
+                                                           peso, cubagem, valor_nf)
+        
+        return jsonify(resultado)
+        
+    except Exception as e:
+        print(f"[CALCULO] Erro: {e}")
+        return jsonify({"error": str(e)})
+
 def geocode(municipio, uf):
     """Geocodifica município e UF para coordenadas"""
     try:
