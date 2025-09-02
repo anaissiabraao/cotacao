@@ -204,6 +204,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     async function calcularAllIn() {
+        console.log('[ALL IN] Função calcularAllIn iniciada');
         const loading = document.getElementById('loading-all');
         if (loading) loading.style.display = 'block';
 
@@ -218,7 +219,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 valor_nf: parseFloat(document.getElementById('valor_nf_all').value) || null
             };
 
-            console.log('[ALL IN] Dados do formulario:', formData);
+            console.log('[ALL IN] Dados do formulário:', formData);
 
             if (!formData.uf_origem || !formData.municipio_origem || !formData.uf_destino || !formData.municipio_destino) {
                 throw new Error('Todos os campos de origem e destino sao obrigatorios');
@@ -226,6 +227,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Calcular Frete Fracionado
             try {
+                console.log('[ALL IN] Iniciando cálculo fracionado...');
                 const fracionadoResponse = await fetch('/calcular_frete_fracionado', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -236,7 +238,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     const fracionadoData = await fracionadoResponse.json();
                     console.log('[ALL IN] Dados frete fracionado recebidos:', fracionadoData);
                     exibirResultadoAllInFracionado(fracionadoData);
-        } else {
+                } else {
                     console.error('[ALL IN] Erro na resposta do frete fracionado:', fracionadoResponse.status);
                     exibirResultadoAllInFracionado({ erro: 'Erro ao calcular frete fracionado' });
                 }
@@ -246,18 +248,28 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             // Calcular Frete Dedicado
+            console.log('[ALL IN] Iniciando cálculo dedicado...');
             const dedicadoResponse = await fetch('/calcular', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(formData)
             });
 
+            console.log('[ALL IN] Resposta dedicado status:', dedicadoResponse.status);
+            
             if (dedicadoResponse.ok) {
                 const dedicadoData = await dedicadoResponse.json();
+                console.log('[ALL IN] Dados frete dedicado recebidos:', dedicadoData);
+                console.log('[ALL IN] Chamando exibirResultadoAllInDedicado...');
                 exibirResultadoAllInDedicado(dedicadoData);
+            } else {
+                console.error('[ALL IN] Erro na resposta do frete dedicado:', dedicadoResponse.status);
+                const errorText = await dedicadoResponse.text();
+                console.error('[ALL IN] Erro detalhado:', errorText);
             }
 
             // Calcular Frete Aereo
+            console.log('[ALL IN] Iniciando cálculo aéreo...');
             const aereoResponse = await fetch('/calcular_aereo', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -266,10 +278,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (aereoResponse.ok) {
                 const aereoData = await aereoResponse.json();
+                console.log('[ALL IN] Dados frete aéreo recebidos:', aereoData);
                 exibirResultadoAllInAereo(aereoData);
             }
                 
-            } catch (error) {
+        } catch (error) {
             console.error('[ALL IN] Erro:', error);
             showError(`Erro no calculo All In: ${error.message}`);
         } finally {
@@ -999,16 +1012,236 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    // Variável global para armazenar dados do frete dedicado
+    let dadosFreteDedicadoAll = null;
+    let veiculoSelecionado = null;
+
     function exibirResultadoAllInDedicado(data) {
-        const containerVeiculos = document.getElementById('resumo-dedicado-veiculos');
+        console.log('[EXIBIR ALL IN DEDICADO] Iniciando função');
+        console.log('[EXIBIR ALL IN DEDICADO] Procurando containers...');
         
+        const containerVeiculos = document.getElementById('resumo-dedicado-veiculos');
+        const containerCustos = document.getElementById('resumo-dedicado-custos');
+        const containerMargens = document.getElementById('resumo-dedicado-margens');
+        
+        console.log('[EXIBIR ALL IN DEDICADO] Container veículos:', containerVeiculos);
+        console.log('[EXIBIR ALL IN DEDICADO] Container custos:', containerCustos);
+        console.log('[EXIBIR ALL IN DEDICADO] Container margens:', containerMargens);
+        console.log('[DEBUG] Dados recebidos para frete dedicado All In:', data);
+        
+        // Armazenar dados globalmente
+        dadosFreteDedicadoAll = data;
+        
+        // Veículos Disponíveis
+        console.log('[EXIBIR ALL IN DEDICADO] Verificando container veículos...');
         if (containerVeiculos) {
-            if (data.erro) {
-                containerVeiculos.innerHTML = `<div class="alert alert-warning">${data.erro}</div>`;
-                    } else {
-                containerVeiculos.innerHTML = '<div class="alert alert-info">Calculo dedicado em desenvolvimento</div>';
+            let htmlVeiculos = '<h4>🚛 Veículos Disponíveis</h4>';
+            htmlVeiculos += '<p style="font-size: 0.9rem; color: #6c757d; margin-bottom: 15px;">Clique em um veículo para ver detalhes específicos</p>';
+            
+            console.log('[EXIBIR ALL IN DEDICADO] Verificando data.custos:', data.custos);
+            console.log('[EXIBIR ALL IN DEDICADO] Tipo de data.custos:', typeof data.custos);
+            console.log('[EXIBIR ALL IN DEDICADO] data.custos é objeto?', typeof data.custos === 'object');
+            
+            if (data && data.custos) {
+                console.log('[EXIBIR ALL IN DEDICADO] Custos encontrados, criando grid');
+                console.log('[EXIBIR ALL IN DEDICADO] Chaves dos custos:', Object.keys(data.custos));
+                htmlVeiculos += '<div class="veiculos-grid">';
+                
+                Object.entries(data.custos).forEach(([veiculo, valor]) => {
+                    console.log('[EXIBIR ALL IN DEDICADO] Processando veículo:', veiculo, 'valor:', valor);
+                    const icone = veiculo.includes('VAN') ? '🚐' : 
+                                 veiculo.includes('3/4') ? '🚛' : 
+                                 veiculo.includes('TOCO') ? '🚛' : 
+                                 veiculo.includes('TRUCK') ? '🚛' : 
+                                 veiculo.includes('CARRETA') ? '🚛' : 
+                                 veiculo.includes('FIORINO') ? '🚛' : '🚛';
+                    
+                    // Obter capacidade do veículo
+                    const capacidade = obterCapacidadeVeiculo(veiculo);
+                    
+                    // Verificar se o veículo comporta a carga (se tivermos os dados)
+                    const pesoSolicitado = parseFloat(document.getElementById('peso_all')?.value) || 0;
+                    const volumeSolicitado = parseFloat(document.getElementById('cubagem_all')?.value) || 0;
+                    
+                    const pesoOk = pesoSolicitado <= capacidade.peso_max;
+                    const volumeOk = volumeSolicitado <= capacidade.volume_max;
+                    const capacidadeOk = pesoOk && volumeOk;
+                    
+                    htmlVeiculos += `
+                        <div class="veiculo-card ${!capacidadeOk && pesoSolicitado > 0 ? 'capacidade-excedida' : ''}" 
+                             onclick="selecionarVeiculo('${veiculo}')" style="cursor: pointer;">
+                            <div class="veiculo-icone">${icone}</div>
+                            <div class="veiculo-nome">${veiculo}</div>
+                            <div class="veiculo-valor">R$ ${valor.toFixed(2)}</div>
+                            <div class="veiculo-capacidade">
+                                <small>
+                                    <div class="${!pesoOk && pesoSolicitado > 0 ? 'capacidade-insuficiente' : ''}">
+                                        ⚖️ ${capacidade.peso_max.toLocaleString('pt-BR')} kg
+                                    </div>
+                                    <div class="${!volumeOk && volumeSolicitado > 0 ? 'capacidade-insuficiente' : ''}">
+                                        📦 ${capacidade.volume_max.toLocaleString('pt-BR')} m³
+                                    </div>
+                                </small>
+                            </div>
+                            ${!capacidadeOk && pesoSolicitado > 0 ? '<div class="aviso-capacidade">⚠️ Capacidade excedida</div>' : ''}
+                        </div>
+                    `;
+                });
+                
+                htmlVeiculos += '</div>';
+            } else {
+                htmlVeiculos += '<p class="text-muted">Nenhum veículo disponível encontrado.</p>';
             }
+            
+            console.log('[EXIBIR ALL IN DEDICADO] HTML gerado:', htmlVeiculos);
+            containerVeiculos.innerHTML = htmlVeiculos;
         }
+        
+        // Custos Operacionais - Exibir mensagem inicial
+        console.log('[EXIBIR ALL IN DEDICADO] Verificando container custos...');
+        if (containerCustos) {
+            containerCustos.innerHTML = `
+                <h4>💰 Custos Operacionais</h4>
+                <p class="text-muted" style="text-align: center; padding: 20px;">
+                    <i class="fa-solid fa-hand-pointer"></i> Selecione um veículo para ver os custos operacionais
+                </p>
+            `;
+        }
+        
+        // Margens Comerciais - Exibir mensagem inicial
+        console.log('[EXIBIR ALL IN DEDICADO] Verificando container margens...');
+        if (containerMargens) {
+            containerMargens.innerHTML = `
+                <h4>📈 Margens Comerciais</h4>
+                <p class="text-muted" style="text-align: center; padding: 20px;">
+                    <i class="fa-solid fa-hand-pointer"></i> Selecione um veículo para ver as margens sugeridas
+                </p>
+            `;
+        }
+    }
+
+    // Função para selecionar veículo e atualizar custos e margens
+    window.selecionarVeiculo = function(veiculo) {
+        if (!dadosFreteDedicadoAll) return;
+        
+        veiculoSelecionado = veiculo;
+        
+        // Destacar veículo selecionado
+        document.querySelectorAll('.veiculo-card').forEach(card => {
+            card.classList.remove('veiculo-selecionado');
+            if (card.querySelector('.veiculo-nome').textContent === veiculo) {
+                card.classList.add('veiculo-selecionado');
+            }
+        });
+        
+        // Atualizar Custos Operacionais
+        const containerCustos = document.getElementById('resumo-dedicado-custos');
+        if (containerCustos) {
+            let htmlCustos = `<h4>💰 Custos Operacionais - ${veiculo}</h4>`;
+            
+            if (dadosFreteDedicadoAll.analise) {
+                htmlCustos += '<div class="analise-dedicado">';
+                
+                // Informações gerais da rota
+                if (dadosFreteDedicadoAll.analise.distancia) {
+                    htmlCustos += `<div class="analise-item">📏 Distância: ${dadosFreteDedicadoAll.analise.distancia} km</div>`;
+                }
+                
+                if (dadosFreteDedicadoAll.analise.tempo_estimado) {
+                    htmlCustos += `<div class="analise-item">⏱️ Tempo estimado: ${dadosFreteDedicadoAll.analise.tempo_estimado}</div>`;
+                }
+                
+                // Consumo específico do veículo
+                const consumoVeiculo = calcularConsumoVeiculo(veiculo, dadosFreteDedicadoAll.analise.distancia);
+                htmlCustos += `<div class="analise-item">⛽ Consumo estimado: ${consumoVeiculo.litros} litros</div>`;
+                htmlCustos += `<div class="analise-item">💰 Custo combustível: R$ ${consumoVeiculo.custo.toFixed(2)}</div>`;
+                
+                // Pedágio
+                if (dadosFreteDedicadoAll.analise.pedagio_real || dadosFreteDedicadoAll.analise.pedagio_estimado) {
+                    const pedagio = dadosFreteDedicadoAll.analise.pedagio_real || dadosFreteDedicadoAll.analise.pedagio_estimado;
+                    const pedagioVeiculo = calcularPedagioVeiculo(veiculo, pedagio);
+                    htmlCustos += `<div class="analise-item">🛣️ Pedágio: R$ ${pedagioVeiculo.toFixed(2)}</div>`;
+                }
+                
+                htmlCustos += '</div>';
+            }
+            
+            containerCustos.innerHTML = htmlCustos;
+        }
+        
+        // Atualizar Margens Comerciais
+        const containerMargens = document.getElementById('resumo-dedicado-margens');
+        if (containerMargens) {
+            let htmlMargens = `<h4>📈 Margens Comerciais - ${veiculo}</h4>`;
+            
+            if (dadosFreteDedicadoAll.custos && dadosFreteDedicadoAll.custos[veiculo]) {
+                const custoTotal = dadosFreteDedicadoAll.custos[veiculo];
+                const custosVeiculo = calcularCustosOperacionaisVeiculo(veiculo, dadosFreteDedicadoAll);
+                
+                htmlMargens += '<div class="margens-dedicado">';
+                htmlMargens += `<div class="margem-item">💰 Custo total: R$ ${custoTotal.toFixed(2)}</div>`;
+                htmlMargens += `<div class="margem-item">📊 Margem sugerida (15%): R$ ${(custoTotal * 0.15).toFixed(2)}</div>`;
+                htmlMargens += `<div class="margem-item">💵 Preço sugerido: R$ ${(custoTotal * 1.15).toFixed(2)}</div>`;
+                htmlMargens += '</div>';
+            }
+            
+            containerMargens.innerHTML = htmlMargens;
+        }
+    };
+
+    // Funções auxiliares para cálculos
+    function obterCapacidadeVeiculo(veiculo) {
+        const capacidades = {
+            'FIORINO': { peso_max: 1000, volume_max: 4 },
+            'VAN': { peso_max: 1500, volume_max: 8 },
+            '3/4': { peso_max: 4000, volume_max: 15 },
+            'TOCO': { peso_max: 6000, volume_max: 25 },
+            'TRUCK': { peso_max: 8000, volume_max: 35 },
+            'CARRETA': { peso_max: 27000, volume_max: 90 }
+        };
+        
+        return capacidades[veiculo] || { peso_max: 1000, volume_max: 4 };
+    }
+
+    function calcularConsumoVeiculo(veiculo, distancia) {
+        const consumos = {
+            'FIORINO': 0.12,
+            'VAN': 0.15,
+            '3/4': 0.18,
+            'TOCO': 0.20,
+            'TRUCK': 0.22,
+            'CARRETA': 0.25
+        };
+        
+        const consumoPorKm = consumos[veiculo] || 0.15;
+        const litros = distancia * consumoPorKm;
+        const custo = litros * 5.50; // Preço médio do diesel
+        
+        return { litros: litros.toFixed(2), custo: custo.toFixed(2) };
+    }
+
+    function calcularPedagioVeiculo(veiculo, pedagioBase) {
+        const multiplicadores = {
+            'FIORINO': 1.0,
+            'VAN': 1.2,
+            '3/4': 1.5,
+            'TOCO': 2.0,
+            'TRUCK': 2.5,
+            'CARRETA': 3.0
+        };
+        
+        const multiplicador = multiplicadores[veiculo] || 1.0;
+        return pedagioBase * multiplicador;
+    }
+
+    function calcularCustosOperacionaisVeiculo(veiculo, dados) {
+        // Implementação básica - pode ser expandida
+        return {
+            combustivel: 0,
+            pedagio: 0,
+            manutencao: 0,
+            total: 0
+        };
     }
 
     function exibirResultadoAllInAereo(data) {
@@ -1024,13 +1257,104 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function exibirResultadoDedicado(data) {
-        const container = document.getElementById('resultados-dedicado') || document.getElementById('resultados-dedicado-all-in');
+        console.log('[DEDICADO] Exibindo resultado:', data);
+        const container = document.getElementById('resultados-dedicado-all-in');
         
         if (container) {
-            if (data.erro) {
-                container.innerHTML = `<div class="alert alert-warning">${data.erro}</div>`;
-        } else {
-                container.innerHTML = '<div class="alert alert-info">Calculo dedicado em desenvolvimento</div>';
+            if (data.error) {
+                container.innerHTML = `<div class="alert alert-warning">${data.error}</div>`;
+            } else if (data.custos) {
+                // Usar o mesmo layout da aba All In
+                console.log('[DEDICADO] Usando layout All In para frete dedicado');
+                
+                // Armazenar dados globalmente para uso nas funções de seleção
+                window.dadosFreteDedicado = data;
+                
+                let html = `
+                    <div class="resumo-section">
+                        <h3><i class="fa-solid fa-truck"></i> Frete Dedicado</h3>
+                        <div class="resumo-grid">
+                            <!-- Veículos -->
+                            <div class="resumo-card">
+                                <div class="resumo-card-header">
+                                    <i class="fa-solid fa-truck-moving"></i> Veículos Disponíveis
+                                </div>
+                                <div id="resumo-dedicado-veiculos" class="resumo-card-body">
+                `;
+                
+                // Verificar se há custos para exibir
+                if (data.custos && Object.keys(data.custos).length > 0) {
+                    html += '<h4>🚛 Veículos Disponíveis</h4>';
+                    html += '<p style="font-size: 0.9rem; color: #6c757d; margin-bottom: 15px;">Clique em um veículo para ver detalhes específicos</p>';
+                    html += '<div class="veiculos-grid">';
+                    
+                    Object.entries(data.custos).forEach(([veiculo, valor]) => {
+                        const icone = veiculo.includes('VAN') ? '🚐' : 
+                                     veiculo.includes('3/4') ? '🚛' : 
+                                     veiculo.includes('TOCO') ? '🚛' : 
+                                     veiculo.includes('TRUCK') ? '🚛' : 
+                                     veiculo.includes('CARRETA') ? '🚛' : 
+                                     veiculo.includes('FIORINO') ? '🚛' : '🚛';
+                        
+                        // Obter capacidade do veículo
+                        const capacidade = obterCapacidadeVeiculo(veiculo);
+                        
+                        html += `
+                            <div class="veiculo-card" onclick="selecionarVeiculoDedicado('${veiculo}')" style="cursor: pointer;">
+                                <div class="veiculo-icone">${icone}</div>
+                                <div class="veiculo-nome">${veiculo}</div>
+                                <div class="veiculo-valor">R$ ${valor.toFixed(2)}</div>
+                                <div class="veiculo-capacidade">
+                                    <small>
+                                        <div>⚖️ ${capacidade.peso_max.toLocaleString('pt-BR')} kg</div>
+                                        <div>📦 ${capacidade.volume_max.toLocaleString('pt-BR')} m³</div>
+                                    </small>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                } else {
+                    html += '<p class="placeholder-text">Nenhum veículo disponível encontrado.</p>';
+                }
+                
+                html += `
+                                </div>
+                            </div>
+                            
+                            <!-- Custos Operacionais -->
+                            <div class="resumo-card">
+                                <div class="resumo-card-header">
+                                    <i class="fa-solid fa-calculator"></i> Custos Operacionais
+                                </div>
+                                <div id="resumo-dedicado-custos" class="resumo-card-body">
+                                    <h4>💰 Custos Operacionais</h4>
+                                    <p class="placeholder-text">
+                                        <i class="fa-solid fa-hand-pointer"></i> Selecione um veículo para ver os custos operacionais
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <!-- Margens Comerciais -->
+                            <div class="resumo-card">
+                                <div class="resumo-card-header">
+                                    <i class="fa-solid fa-chart-line"></i> Margens Comerciais
+                                </div>
+                                <div id="resumo-dedicado-margens" class="resumo-card-body">
+                                    <h4>📈 Margens Comerciais</h4>
+                                    <p class="placeholder-text">
+                                        <i class="fa-solid fa-hand-pointer"></i> Selecione um veículo para ver as margens sugeridas
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+            } else {
+                container.innerHTML = '<div class="alert alert-info">Dados do cálculo dedicado não disponíveis</div>';
             }
         }
     }
@@ -1211,4 +1535,104 @@ document.addEventListener('DOMContentLoaded', function() {
     // Expor funcoes globalmente
     window.showError = showError;
     window.showNoOptionsMessage = showNoOptionsMessage;
+    
+    // Funções auxiliares para frete dedicado
+    function obterCapacidadeVeiculo(veiculo) {
+        const capacidades = {
+            'FIORINO': { peso_max: 1000, volume_max: 4 },
+            'VAN': { peso_max: 1500, volume_max: 8 },
+            '3/4': { peso_max: 4000, volume_max: 15 },
+            'TOCO': { peso_max: 6000, volume_max: 25 },
+            'TRUCK': { peso_max: 8000, volume_max: 35 },
+            'CARRETA': { peso_max: 27000, volume_max: 90 }
+        };
+        
+        return capacidades[veiculo] || { peso_max: 1000, volume_max: 4 };
+    }
+
+    function calcularConsumoVeiculo(veiculo, distancia) {
+        const consumos = {
+            'FIORINO': 0.12,
+            'VAN': 0.15,
+            '3/4': 0.18,
+            'TOCO': 0.20,
+            'TRUCK': 0.22,
+            'CARRETA': 0.25
+        };
+        
+        const consumoPorKm = consumos[veiculo] || 0.15;
+        const litros = distancia * consumoPorKm;
+        const custo = litros * 5.50;
+        
+        return { litros: litros.toFixed(2), custo: custo.toFixed(2) };
+    }
+
+    function calcularPedagioVeiculo(veiculo, pedagioBase) {
+        const multiplicadores = {
+            'FIORINO': 1.0,
+            'VAN': 1.2,
+            '3/4': 1.5,
+            'TOCO': 2.0,
+            'TRUCK': 2.5,
+            'CARRETA': 3.0
+        };
+        
+        const multiplicador = multiplicadores[veiculo] || 1.0;
+        return pedagioBase * multiplicador;
+    }
+
+    // Função para selecionar veículo na aba dedicado
+    window.selecionarVeiculoDedicado = function(veiculo) {
+        console.log('[SELECIONAR VEICULO DEDICADO] Veículo selecionado:', veiculo);
+        
+        if (!window.dadosFreteDedicado) {
+            console.error('[SELECIONAR VEICULO DEDICADO] Dados não disponíveis');
+            return;
+        }
+        
+        // Destacar veículo selecionado
+        document.querySelectorAll('.veiculo-card').forEach(card => {
+            card.classList.remove('veiculo-selecionado');
+            if (card.querySelector('.veiculo-nome').textContent === veiculo) {
+                card.classList.add('veiculo-selecionado');
+            }
+        });
+        
+        // Atualizar Custos Operacionais
+        const containerCustos = document.getElementById('resumo-dedicado-custos');
+        if (containerCustos && window.dadosFreteDedicado.analise) {
+            let htmlCustos = `<h4>💰 Custos Operacionais - ${veiculo}</h4>`;
+            
+            htmlCustos += '<div class="analise-dedicado">';
+            htmlCustos += `<div class="analise-item">📏 Distância: ${window.dadosFreteDedicado.analise.distancia} km</div>`;
+            htmlCustos += `<div class="analise-item">⏱️ Tempo estimado: ${window.dadosFreteDedicado.analise.tempo_estimado}</div>`;
+            
+            const consumoVeiculo = calcularConsumoVeiculo(veiculo, window.dadosFreteDedicado.analise.distancia);
+            htmlCustos += `<div class="analise-item">⛽ Consumo estimado: ${consumoVeiculo.litros} litros</div>`;
+            htmlCustos += `<div class="analise-item">💰 Custo combustível: R$ ${consumoVeiculo.custo}</div>`;
+            
+            const pedagioVeiculo = calcularPedagioVeiculo(veiculo, window.dadosFreteDedicado.analise.pedagio_real);
+            htmlCustos += `<div class="analise-item">🛣️ Pedágio: R$ ${pedagioVeiculo.toFixed(2)}</div>`;
+            
+            htmlCustos += '</div>';
+            
+            containerCustos.innerHTML = htmlCustos;
+        }
+        
+        // Atualizar Margens Comerciais
+        const containerMargens = document.getElementById('resumo-dedicado-margens');
+        if (containerMargens && window.dadosFreteDedicado.custos && window.dadosFreteDedicado.custos[veiculo]) {
+            let htmlMargens = `<h4>📈 Margens Comerciais - ${veiculo}</h4>`;
+            
+            const custoTotal = window.dadosFreteDedicado.custos[veiculo];
+            
+            htmlMargens += '<div class="margens-dedicado">';
+            htmlMargens += `<div class="margem-item">💰 Custo total: R$ ${custoTotal.toFixed(2)}</div>`;
+            htmlMargens += `<div class="margem-item">📊 Margem sugerida (15%): R$ ${(custoTotal * 0.15).toFixed(2)}</div>`;
+            htmlMargens += `<div class="margem-item">💵 Preço sugerido: R$ ${(custoTotal * 1.15).toFixed(2)}</div>`;
+            htmlMargens += '</div>';
+            
+            containerMargens.innerHTML = htmlMargens;
+        }
+    };
 });

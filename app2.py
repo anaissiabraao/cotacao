@@ -1598,6 +1598,12 @@ def calcular():
     print("[CALCULO] Função calcular() iniciada")
     try:
         data = request.get_json()
+        print(f"[CALCULO] Dados recebidos: {data}")
+        
+        if not data:
+            print("[CALCULO] ❌ Dados JSON não recebidos")
+            return jsonify({"error": "Dados JSON não recebidos"}), 400
+        
         usuario = session.get('usuario_logado', 'DESCONHECIDO')
         
         origem = data.get("municipio_origem")
@@ -1608,25 +1614,40 @@ def calcular():
         cubagem = float(data.get("cubagem", 0))
         valor_nf = data.get("valor_nf")
         
+        print(f"[CALCULO] Parâmetros extraídos: origem={origem}, uf_origem={uf_origem}, destino={destino}, uf_destino={uf_destino}")
+        
         log_acesso(usuario, 'CALCULO_PRINCIPAL', obter_ip_cliente(), 
                   f"Cálculo: {origem}/{uf_origem} -> {destino}/{uf_destino}, Peso: {peso}kg")
         
         if not all([origem, uf_origem, destino, uf_destino]):
-            return jsonify({"error": "Origem e destino são obrigatórios"})
+            print("[CALCULO] ❌ Parâmetros obrigatórios ausentes")
+            return jsonify({"error": "Origem e destino são obrigatórios"}), 400
+        
+        print("[CALCULO] ✅ Parâmetros válidos, iniciando geocodificação...")
         
         # Geocodificação
         coord_origem = geocode(origem, uf_origem)
         coord_destino = geocode(destino, uf_destino)
         
+        print(f"[CALCULO] Coordenadas obtidas: origem={coord_origem}, destino={coord_destino}")
+        
         if not coord_origem or not coord_destino:
-            return jsonify({"error": "Não foi possível geocodificar origem ou destino"})
+            print("[CALCULO] ❌ Falha na geocodificação")
+            return jsonify({"error": "Não foi possível geocodificar origem ou destino"}), 400
+        
+        print("[CALCULO] ✅ Geocodificação bem-sucedida, calculando rota...")
         
         # Calcular rota
         rota_info = calcular_distancia_osrm(coord_origem, coord_destino) or \
                     calcular_distancia_reta(coord_origem, coord_destino)
         
+        print(f"[CALCULO] Informações da rota: {rota_info}")
+        
         if not rota_info:
-            return jsonify({"error": "Não foi possível calcular a rota"})
+            print("[CALCULO] ❌ Falha no cálculo da rota")
+            return jsonify({"error": "Não foi possível calcular a rota"}), 400
+        
+        print("[CALCULO] ✅ Rota calculada, calculando custos...")
         
         # Calcular pedágio real
         analise_preliminar = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, {}, "Dedicado", origem, uf_origem, destino, uf_destino)
@@ -1635,11 +1656,15 @@ def calcular():
         # Calcular custos
         custos = calcular_custos_dedicado(uf_origem, origem, uf_destino, destino, rota_info["distancia"], pedagio_real)
         
+        print(f"[CALCULO] Custos calculados: {custos}")
+        
         # Gerar análise final
         analise = gerar_analise_trajeto(coord_origem, coord_destino, rota_info, custos, "Dedicado", origem, uf_origem, destino, uf_destino)
         
         # Gerar ranking
         ranking_dedicado = gerar_ranking_dedicado(custos, analise, rota_info, peso, cubagem, valor_nf)
+        
+        print(f"[CALCULO] Ranking gerado: {ranking_dedicado}")
         
         # Preparar rota para mapa
         rota_pontos = rota_info.get("rota_pontos", [])
@@ -1680,13 +1705,14 @@ def calcular():
             "total_opcoes": ranking_dedicado['total_opcoes'] if ranking_dedicado else len(custos)
         }
         
+        print(f"[CALCULO] ✅ Resposta preparada: {resposta}")
         return jsonify(resposta)
         
     except Exception as e:
-        print(f"[CALCULO] Erro: {e}")
+        print(f"[CALCULO] ❌ Erro: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"error": f"Erro ao calcular frete dedicado: {str(e)}"})
+        return jsonify({"error": f"Erro ao calcular frete dedicado: {str(e)}"}), 500
 
 def geocode(municipio, uf):
     """Geocodifica município e UF para coordenadas"""
