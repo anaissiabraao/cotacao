@@ -1398,7 +1398,7 @@
                 formData.append('arquivo', file);
                 formData.append('apenas_analisar', 'true');
                 
-                const response = await fetch('/api/admin/base-dados/importar', {
+                const response = await fetch('/api/admin/configuracoes/importar-csv', {
                     method: 'POST',
                     body: formData
                 });
@@ -1497,7 +1497,7 @@
                 formData.append('validar_dados', validar);
                 formData.append('criar_backup', backup);
                 
-                const response = await fetch('/api/admin/base-dados/importar', {
+                const response = await fetch('/api/admin/configuracoes/importar-csv', {
                     method: 'POST',
                     body: formData
                 });

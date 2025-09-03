@@ -24,33 +24,68 @@ app = Flask(__name__, static_folder='static')
 app.secret_key = os.getenv("SECRET_KEY", "chave_secreta_portoex_2025")
 
 # Configuração do banco de dados
-if os.environ.get('DATABASE_URL') and not os.environ.get('DATABASE_URL').startswith('postgresql://localhost'):
-    # Render PostgreSQL válido
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
-    print(f"[CONFIG] ✅ Produção usando DATABASE_URL: {os.environ.get('DATABASE_URL')[:50]}...")
+database_url = os.environ.get('DATABASE_URL', '')
+
+# Limpar a URL se tiver aspas
+if database_url:
+    database_url = database_url.strip().strip("'").strip('"')
+    
+    # Verificar se é uma URL válida do Neon
+    if (database_url.startswith('postgresql://') and 
+        'neon.tech' in database_url and 
+        not database_url.startswith('postgresql://localhost')):
+        
+        app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+        print(f"[CONFIG] ✅ Produção usando DATABASE_URL: {database_url[:50]}...")
+    else:
+        # URL inválida ou localhost
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///portoex.db'
+        print(f"[CONFIG] ⚠️ DATABASE_URL inválido: {database_url[:50]}..., usando SQLite")
 else:
-    # SQLite local ou Render (fallback)
+    # Sem DATABASE_URL
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///portoex.db'
-    print("[CONFIG] ⚠️ DATABASE_URL não encontrado ou inválido, usando SQLite")
+    print("[CONFIG] ⚠️ DATABASE_URL não encontrado, usando SQLite")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_BINDS'] = {}
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 300,
+    'pool_timeout': 20,
+    'max_overflow': 0
+}
 
 # Inicializar banco de dados
+POSTGRESQL_AVAILABLE = False
+
 try:
+    print("[DATABASE] 🔄 Inicializando banco de dados...")
     from models import db, Usuario, BaseUnificada, AgenteTransportadora, MemoriaCalculoAgente, Agente, TipoCalculoFrete, FormulaCalculoFrete, ConfiguracaoAgente, HistoricoCalculo, LogSistema
     
+    # Inicializar o banco
     db.init_app(app)
+    print("[DATABASE] ✅ SQLAlchemy inicializado")
     
+    # Criar contexto da aplicação
     with app.app_context():
+        print("[DATABASE] 🔄 Criando tabelas...")
         db.create_all()
+        print("[DATABASE] ✅ Tabelas criadas")
+        
         # Criar usuário admin padrão
+        print("[DATABASE] 🔄 Criando usuário admin...")
         Usuario.criar_usuario_admin_default()
+        print("[DATABASE] ✅ Usuário admin criado")
+        
         print("[DATABASE] ✅ Sistema inicializado com sucesso")
         
     POSTGRESQL_AVAILABLE = True
+    print("[DATABASE] ✅ PostgreSQL disponível")
+    
 except Exception as e:
-    print(f"[DATABASE] ❌ Erro: {e}")
+    print(f"[DATABASE] ❌ Erro na inicialização: {e}")
     POSTGRESQL_AVAILABLE = False
+    print("[DATABASE] ⚠️ Usando SQLite como fallback")
 
 # Configurações de sessão
 app.config["SESSION_PERMANENT"] = True
@@ -2633,13 +2668,18 @@ def api_importar_csv():
 def api_teste_conexao_banco():
     """Testar conexão com o banco de dados"""
     try:
+        print("[TESTE] Iniciando teste de conexão...")
+        
         # Testar conexão básica
         from sqlalchemy import text
         with app.app_context():
+            print("[TESTE] Testando conexão básica...")
             db.session.execute(text('SELECT 1'))
             db.session.commit()
+            print("[TESTE] Conexão básica OK")
             
             # Testar consultas específicas
+            print("[TESTE] Testando consultas...")
             estatisticas = {
                 'total_registros': BaseUnificada.query.count(),
                 'total_usuarios': Usuario.query.count(),
@@ -2648,16 +2688,18 @@ def api_teste_conexao_banco():
                 'total_tipos_calculo': TipoCalculoFrete.query.count(),
                 'total_formulas': FormulaCalculoFrete.query.count()
             }
+            print(f"[TESTE] Estatísticas: {estatisticas}")
             
             # Verificar configurações do banco
             config_info = {
-                'database_url': app.config.get('SQLALCHEMY_DATABASE_URI', 'Não configurado'),
+                'database_url': app.config.get('SQLALCHEMY_DATABASE_URI', 'Não configurado')[:50] + '...' if app.config.get('SQLALCHEMY_DATABASE_URI') else 'Não configurado',
                 'database_type': 'PostgreSQL' if 'postgresql' in app.config.get('SQLALCHEMY_DATABASE_URI', '').lower() else 'SQLite',
                 'flask_env': os.environ.get('FLASK_ENV', 'development'),
                 'debug_mode': app.config.get('DEBUG', False),
                 'postgresql_available': POSTGRESQL_AVAILABLE
             }
             
+            print("[TESTE] Teste concluído com sucesso")
             return jsonify({
                 'sucesso': True,
                 'conexao': 'OK',
@@ -2667,9 +2709,9 @@ def api_teste_conexao_banco():
             })
         
     except Exception as e:
+        print(f"[TESTE] Erro: {e}")
         return jsonify({
             'sucesso': False,
-            'conexao': 'ERRO',
             'error': str(e),
             'message': 'Erro na conexão com banco de dados'
         }), 500
