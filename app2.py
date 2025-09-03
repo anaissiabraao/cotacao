@@ -24,14 +24,14 @@ app = Flask(__name__, static_folder='static')
 app.secret_key = os.getenv("SECRET_KEY", "chave_secreta_portoex_2025")
 
 # Configuração do banco de dados
-if os.environ.get('DATABASE_URL'):
-    # Render PostgreSQL
+if os.environ.get('DATABASE_URL') and not os.environ.get('DATABASE_URL').startswith('postgresql://localhost'):
+    # Render PostgreSQL válido
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
-    print(f"[CONFIG] ✅ Usando DATABASE_URL do Render: {os.environ.get('DATABASE_URL')[:50]}...")
+    print(f"[CONFIG] ✅ Produção usando DATABASE_URL: {os.environ.get('DATABASE_URL')[:50]}...")
 else:
-    # SQLite local ou Render
+    # SQLite local ou Render (fallback)
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///portoex.db'
-    print("[CONFIG] ⚠️ DATABASE_URL não encontrado, usando SQLite")
+    print("[CONFIG] ⚠️ DATABASE_URL não encontrado ou inválido, usando SQLite")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -930,7 +930,7 @@ def calcular_com_configuracao_banco(agente_nome, linha_base, peso_cubado, valor_
         
         if tipo_memoria == 'valor_fixo_faixa':
             # Lógica: usar valor fixo de uma faixa específica
-            faixa_especifica = config.get('faixa_especifica', '50')  # Ex: '50' para 50kg
+            faixa_especifica = config.get('faixa_especifica', '50')
             valor_base = float(linha_base.get(faixa_especifica, 0))
             
         elif tipo_memoria == 'valor_por_kg':
@@ -2272,6 +2272,117 @@ def api_editar_campo_base_dados():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/base-dados/inserir-automatico', methods=['POST'])
+def api_inserir_dados_automatico():
+    """Inserir dados automaticamente na base de dados"""
+    try:
+        # Permitir inserção automática sem verificação de permissão
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Dados não fornecidos'}), 400
+        
+        # Se for uma lista, inserir múltiplos registros
+        if isinstance(data, list):
+            registros_inseridos = 0
+            for item in data:
+                try:
+                    # Criar novo registro
+                    novo_registro = BaseUnificada(
+                        tipo=item.get('tipo', ''),
+                        fornecedor=item.get('fornecedor', ''),
+                        base_origem=item.get('base_origem', ''),
+                        origem=item.get('origem', ''),
+                        base_destino=item.get('base_destino', ''),
+                        destino=item.get('destino', ''),
+                        valor_minimo_10=item.get('valor_minimo_ate_10'),
+                        peso_20=item.get('valor_20'),
+                        peso_30=item.get('valor_30'),
+                        peso_50=item.get('valor_50'),
+                        peso_70=item.get('valor_70'),
+                        peso_100=item.get('valor_100'),
+                        peso_150=item.get('valor_150'),
+                        peso_200=item.get('valor_200'),
+                        peso_300=item.get('valor_300'),
+                        peso_500=item.get('valor_500'),
+                        acima_500=item.get('valor_acima_500'),
+                        pedagio_100kg=item.get('pedagio_100_kg'),
+                        excedente=item.get('excedente'),
+                        seguro=item.get('seguro'),
+                        peso_maximo=item.get('peso_maximo_transportado'),
+                        gris_min=item.get('gris_min'),
+                        gris_exc=item.get('gris_exc'),
+                        prazo=item.get('prazo'),
+                        tda=item.get('tda', ''),
+                        uf=item.get('uf', ''),
+                        tas=item.get('tas'),
+                        despacho=item.get('despacho')
+                    )
+                    
+                    db.session.add(novo_registro)
+                    registros_inseridos += 1
+                    
+                except Exception as e:
+                    print(f"Erro ao inserir registro: {e}")
+                    continue
+            
+            db.session.commit()
+            return jsonify({
+                'sucesso': True, 
+                'message': f'{registros_inseridos} registros inseridos automaticamente',
+                'registros_inseridos': registros_inseridos
+            })
+        
+        else:
+            # Inserir registro único
+            novo_registro = BaseUnificada(
+                tipo=data.get('tipo', ''),
+                fornecedor=data.get('fornecedor', ''),
+                base_origem=data.get('base_origem', ''),
+                origem=data.get('origem', ''),
+                base_destino=data.get('base_destino', ''),
+                destino=data.get('destino', ''),
+                valor_minimo_10=data.get('valor_minimo_ate_10'),
+                peso_20=data.get('valor_20'),
+                peso_30=data.get('valor_30'),
+                peso_50=data.get('valor_50'),
+                peso_70=data.get('valor_70'),
+                peso_100=data.get('valor_100'),
+                peso_150=data.get('valor_150'),
+                peso_200=data.get('valor_200'),
+                peso_300=data.get('valor_300'),
+                peso_500=data.get('valor_500'),
+                acima_500=data.get('valor_acima_500'),
+                pedagio_100kg=data.get('pedagio_100_kg'),
+                excedente=data.get('excedente'),
+                seguro=data.get('seguro'),
+                peso_maximo=data.get('peso_maximo_transportado'),
+                gris_min=data.get('gris_min'),
+                gris_exc=data.get('gris_exc'),
+                prazo=data.get('prazo'),
+                tda=data.get('tda', ''),
+                uf=data.get('uf', ''),
+                tas=data.get('tas'),
+                despacho=data.get('despacho')
+            )
+            
+            db.session.add(novo_registro)
+            db.session.commit()
+            
+            return jsonify({
+                'sucesso': True, 
+                'message': 'Registro inserido automaticamente',
+                'registro': {
+                    'fornecedor': novo_registro.fornecedor,
+                    'origem': novo_registro.origem,
+                    'destino': novo_registro.destino
+                }
+            })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Erro ao inserir dados: {str(e)}'}), 500
+
 @app.route('/api/admin/base-dados', methods=['POST'])
 def api_create_base_dados():
     """Criar novo registro na base de dados"""
@@ -2378,6 +2489,145 @@ def api_delete_base_dados(registro_id):
 def admin_configuracoes():
     """Painel de configurações do sistema"""
     return render_template('admin_configuracoes.html')
+
+@app.route('/api/admin/configuracoes/importar-csv', methods=['POST'])
+def api_importar_csv():
+    """Importar dados CSV para o banco Neon"""
+    try:
+        # Verificar se arquivo foi enviado
+        if 'arquivo_csv' not in request.files:
+            return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+        
+        arquivo = request.files['arquivo_csv']
+        if arquivo.filename == '':
+            return jsonify({'error': 'Nenhum arquivo selecionado'}), 400
+        
+        # Verificar extensão
+        if not arquivo.filename.lower().endswith('.csv'):
+            return jsonify({'error': 'Arquivo deve ser CSV'}), 400
+        
+        # Ler arquivo CSV
+        import csv
+        import io
+        
+        # Decodificar arquivo
+        conteudo = arquivo.read().decode('utf-8')
+        arquivo_csv = io.StringIO(conteudo)
+        
+        dados_para_inserir = []
+        registros_processados = 0
+        
+        try:
+            reader = csv.DictReader(arquivo_csv)
+            
+            for row in reader:
+                registros_processados += 1
+                
+                # Função para limpar valores
+                def limpar_valor(valor):
+                    if not valor or valor.strip() == '':
+                        return None
+                    try:
+                        valor_limpo = valor.strip().replace('R$', '').replace(',', '.').replace(' ', '')
+                        return float(valor_limpo)
+                    except:
+                        return None
+                
+                # Preparar dados
+                dados = {
+                    'tipo': row.get('Tipo', ''),
+                    'fornecedor': row.get('Fornecedor', ''),
+                    'base_origem': row.get('Base Origem', ''),
+                    'origem': row.get('Origem', ''),
+                    'base_destino': row.get('Base Destino', ''),
+                    'destino': row.get('Destino', ''),
+                    'valor_minimo_ate_10': limpar_valor(row.get('VALOR MÍNIMO ATÉ 10', '')),
+                    'valor_20': limpar_valor(row.get('20', '')),
+                    'valor_30': limpar_valor(row.get('30', '')),
+                    'valor_50': limpar_valor(row.get('50', '')),
+                    'valor_70': limpar_valor(row.get('70', '')),
+                    'valor_100': limpar_valor(row.get('100', '')),
+                    'valor_150': limpar_valor(row.get('150', '')),
+                    'valor_200': limpar_valor(row.get('200', '')),
+                    'valor_300': limpar_valor(row.get('300', '')),
+                    'valor_500': limpar_valor(row.get('500', '')),
+                    'valor_acima_500': limpar_valor(row.get('Acima 500', '')),
+                    'pedagio_100_kg': limpar_valor(row.get('Pedagio (100 Kg)', '')),
+                    'excedente': limpar_valor(row.get('EXCEDENTE', '')),
+                    'seguro': limpar_valor(row.get('Seguro', '')),
+                    'peso_maximo_transportado': limpar_valor(row.get('PESO MÁXIMO TRANSPORTADO', '')),
+                    'gris_min': limpar_valor(row.get('Gris Min', '')),
+                    'gris_exc': limpar_valor(row.get('Gris Exc', '')),
+                    'prazo': int(row.get('Prazo', '0')) if row.get('Prazo', '').isdigit() else None,
+                    'tda': row.get('TDA', ''),
+                    'uf': row.get('UF', ''),
+                    'tas': limpar_valor(row.get('TAS', '')),
+                    'despacho': limpar_valor(row.get('DESPACHO', ''))
+                }
+                
+                dados_para_inserir.append(dados)
+                
+        except Exception as e:
+            return jsonify({'error': f'Erro ao ler CSV: {str(e)}'}), 400
+        
+        if not dados_para_inserir:
+            return jsonify({'error': 'Nenhum dado válido encontrado no CSV'}), 400
+        
+        # Inserir dados no banco
+        registros_inseridos = 0
+        for dados in dados_para_inserir:
+            try:
+                novo_registro = BaseUnificada(
+                    tipo=dados['tipo'],
+                    fornecedor=dados['fornecedor'],
+                    base_origem=dados['base_origem'],
+                    origem=dados['origem'],
+                    base_destino=dados['base_destino'],
+                    destino=dados['destino'],
+                    valor_minimo_10=dados['valor_minimo_ate_10'],
+                    peso_20=dados['valor_20'],
+                    peso_30=dados['valor_30'],
+                    peso_50=dados['valor_50'],
+                    peso_70=dados['valor_70'],
+                    peso_100=dados['valor_100'],
+                    peso_150=dados['valor_150'],
+                    peso_200=dados['valor_200'],
+                    peso_300=dados['valor_300'],
+                    peso_500=dados['valor_500'],
+                    acima_500=dados['valor_acima_500'],
+                    pedagio_100kg=dados['pedagio_100_kg'],
+                    excedente=dados['excedente'],
+                    seguro=dados['seguro'],
+                    peso_maximo=dados['peso_maximo_transportado'],
+                    gris_min=dados['gris_min'],
+                    gris_exc=dados['gris_exc'],
+                    prazo=dados['prazo'],
+                    tda=dados['tda'],
+                    uf=dados['uf'],
+                    tas=dados['tas'],
+                    despacho=dados['despacho']
+                )
+                
+                db.session.add(novo_registro)
+                registros_inseridos += 1
+                
+            except Exception as e:
+                print(f"Erro ao inserir registro: {e}")
+                continue
+        
+        db.session.commit()
+        
+        return jsonify({
+            'sucesso': True,
+            'message': f'Importação concluída! {registros_inseridos} de {registros_processados} registros inseridos',
+            'registros_processados': registros_processados,
+            'registros_inseridos': registros_inseridos,
+            'arquivo': arquivo.filename
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Erro durante importação: {str(e)}'}), 500
 
 @app.route('/api/admin/configuracoes/teste-conexao', methods=['POST'])
 def api_teste_conexao_banco():
@@ -3046,7 +3296,7 @@ def criar_rota_parcial_coleta_transferencia(agente_coleta, transferencia_linha, 
 def conectar_base_postgresql():
     """Conecta diretamente ao banco de dados configurado"""
     try:
-        print("[DATABASE] 🔄 Conectando ao banco de dados...")
+        print("[DATABASE] 🔄 Conectando ao banco Neon...")
         
         # Verificar se banco está disponível
         if not POSTGRESQL_AVAILABLE:
@@ -3056,9 +3306,9 @@ def conectar_base_postgresql():
         # Verificar conexão
         try:
             db.session.execute(text('SELECT 1'))
-            print("[DATABASE] ✅ Conexão estabelecida")
+            print("[DATABASE] ✅ Conexão Neon estabelecida")
         except Exception as e:
-            print(f"[DATABASE] ❌ Erro na conexão: {e}")
+            print(f"[DATABASE] ❌ Erro na conexão Neon: {e}")
             return False
         
         # Contar registros existentes

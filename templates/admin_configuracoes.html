@@ -3,314 +3,140 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PortoEx - Configurações do Sistema</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>Configurações - PortoEx</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f7fa;
-            min-height: 100vh;
-        }
-
-        .admin-header {
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
-            padding: 20px 0;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .admin-header .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 0 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .admin-title {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .admin-title h1 {
-            font-size: 1.8rem;
-            margin: 0;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 20px;
-        }
-
-        .nav-links a {
-            color: white;
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-        }
-
-        .nav-links a:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .nav-links a.active {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .main-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 25px 20px;
-        }
-
         .config-section {
             background: white;
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            margin-bottom: 25px;
-            border: 1px solid #f0f0f0;
-        }
-
-        .config-section h2 {
-            color: #2c3e50;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .config-section h2 i {
-            color: #3498db;
-        }
-
-        .status-card {
-            background: #f8f9fa;
-            border: 2px solid #e9ecef;
             border-radius: 10px;
             padding: 20px;
             margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-
-        .status-card.success {
-            border-color: #28a745;
-            background: #d4edda;
-        }
-
-        .status-card.error {
-            border-color: #dc3545;
-            background: #f8d7da;
-        }
-
-        .status-card.warning {
-            border-color: #ffc107;
-            background: #fff3cd;
-        }
-
-        .status-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 15px;
-        }
-
-        .status-title {
-            font-weight: 600;
-            font-size: 1.1rem;
+        
+        .config-title {
             color: #2c3e50;
+            font-size: 1.5em;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
         }
-
-        .status-icon {
-            font-size: 1.5rem;
-        }
-
-        .status-icon.success {
-            color: #28a745;
-        }
-
-        .status-icon.error {
-            color: #dc3545;
-        }
-
-        .status-icon.warning {
-            color: #ffc107;
-        }
-
-        .status-details {
-            font-size: 0.9rem;
-            color: #6c757d;
-            line-height: 1.5;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: 500;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.3s;
-        }
-
-        .btn-primary {
+        
+        .test-button {
             background: #3498db;
             color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background 0.3s;
         }
-
-        .btn-primary:hover {
+        
+        .test-button:hover {
             background: #2980b9;
         }
-
-        .btn-success {
-            background: #28a745;
+        
+        .test-button.success {
+            background: #27ae60;
+        }
+        
+        .test-button.error {
+            background: #e74c3c;
+        }
+        
+        .result-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 0.9em;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .file-upload {
+            border: 2px dashed #3498db;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin: 20px 0;
+            background: #f8f9fa;
+            transition: border-color 0.3s;
+        }
+        
+        .file-upload:hover {
+            border-color: #2980b9;
+        }
+        
+        .file-upload input[type="file"] {
+            display: none;
+        }
+        
+        .file-upload label {
+            cursor: pointer;
+            color: #3498db;
+            font-weight: bold;
+        }
+        
+        .import-button {
+            background: #27ae60;
             color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            margin-top: 15px;
+            transition: background 0.3s;
         }
-
-        .btn-success:hover {
-            background: #218838;
+        
+        .import-button:hover {
+            background: #229954;
         }
-
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #c82333;
-        }
-
-        .btn:disabled {
-            opacity: 0.6;
+        
+        .import-button:disabled {
+            background: #95a5a6;
             cursor: not-allowed;
         }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
         }
-
-        .stat-item {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid #e9ecef;
-            text-align: center;
+        
+        .progress-fill {
+            height: 100%;
+            background: #3498db;
+            width: 0%;
+            transition: width 0.3s;
         }
-
-        .stat-number {
-            font-size: 1.8rem;
-            font-weight: bold;
-            color: #3498db;
-            margin-bottom: 5px;
-        }
-
-        .stat-label {
-            font-size: 0.9rem;
-            color: #6c757d;
-        }
-
-        .config-info {
-            background: #f8f9fa;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 15px;
-        }
-
-        .config-info h4 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-
-        .config-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 0;
-            border-bottom: 1px solid #e9ecef;
-        }
-
-        .config-item:last-child {
-            border-bottom: none;
-        }
-
-        .config-label {
-            font-weight: 500;
-            color: #495057;
-        }
-
-        .config-value {
-            color: #6c757d;
-            font-family: monospace;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-
-        .loading.show {
-            display: block;
-        }
-
-        .spinner {
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #3498db;
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .alert {
-            padding: 12px 16px;
+        
+        .status-message {
+            padding: 10px;
             border-radius: 5px;
-            margin-bottom: 15px;
-            display: none;
+            margin: 10px 0;
         }
-
-        .alert.show {
-            display: block;
-        }
-
-        .alert-success {
+        
+        .status-success {
             background: #d4edda;
             color: #155724;
             border: 1px solid #c3e6cb;
         }
-
-        .alert-danger {
+        
+        .status-error {
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
-
-        .alert-warning {
-            background: #fff3cd;
-            color: #856404;
-            border: 1px solid #ffeaa7;
-        }
-
-        .alert-info {
+        
+        .status-info {
             background: #d1ecf1;
             color: #0c5460;
             border: 1px solid #bee5eb;
@@ -318,361 +144,310 @@
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <header class="admin-header">
-        <div class="container">
-            <div class="admin-title">
-                <i class="fas fa-cogs"></i>
-                <h1>Configurações do Sistema</h1>
-            </div>
-            <nav class="nav-links">
-                <a href="/admin"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-                <a href="/admin/calculadoras"><i class="fas fa-calculator"></i> Calculadoras</a>
-                <a href="/admin/base-dados"><i class="fas fa-database"></i> Base de Dados</a>
-                <a href="/admin/agentes-memoria"><i class="fas fa-memory"></i> Agentes</a>
-                <a href="/admin/usuarios"><i class="fas fa-users"></i> Usuários</a>
-                <a href="/admin/configuracoes" class="active"><i class="fas fa-cogs"></i> Configurações</a>
+    <div class="container">
+        <header>
+            <h1>⚙️ Configurações do Sistema</h1>
+            <nav>
+                <a href="/admin" class="nav-link">← Voltar ao Admin</a>
             </nav>
-        </div>
-    </header>
+        </header>
 
-    <!-- Main Content -->
-    <div class="main-container">
-        <!-- Alertas -->
-        <div id="alertContainer"></div>
+        <main>
+            <!-- Seção de Teste de Conexão -->
+            <div class="config-section">
+                <h2 class="config-title">🔌 Teste de Conexão com Banco</h2>
+                <p>Teste a conexão com o banco de dados Neon PostgreSQL</p>
+                <button class="test-button" onclick="testarConexao()">Testar Conexão</button>
+                <div id="resultado-conexao" class="result-box" style="display: none;"></div>
+            </div>
 
-        <!-- Status do Sistema -->
-        <div class="config-section">
-            <h2><i class="fas fa-server"></i> Status do Sistema</h2>
-            
-            <div id="statusCard" class="status-card">
-                <div class="status-header">
-                    <div class="status-title">Conexão com Banco de Dados</div>
-                    <div class="status-icon" id="statusIcon">
-                        <i class="fas fa-question-circle"></i>
+            <!-- Seção de Importação CSV -->
+            <div class="config-section">
+                <h2 class="config-title">📁 Importar Dados CSV</h2>
+                <p>Importe dados de tarifa do arquivo CSV para o banco Neon</p>
+                
+                <div class="file-upload">
+                    <input type="file" id="arquivo-csv" accept=".csv" onchange="prepararImportacao()">
+                    <label for="arquivo-csv">
+                        📎 Clique para selecionar arquivo CSV
+                        <br>
+                        <small>Arraste o arquivo ou clique para selecionar</small>
+                    </label>
+                </div>
+                
+                <div id="info-arquivo" style="display: none;">
+                    <h4>📋 Informações do Arquivo:</h4>
+                    <div id="detalhes-arquivo"></div>
+                </div>
+                
+                <button id="btn-importar" class="import-button" onclick="importarCSV()" disabled>
+                    🚀 Importar Dados
+                </button>
+                
+                <div id="progresso-importacao" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progresso-fill"></div>
                     </div>
+                    <div id="status-importacao"></div>
                 </div>
-                <div class="status-details" id="statusDetails">
-                    Clique em "Testar Conexão" para verificar o status do banco de dados.
-                </div>
-                <button class="btn btn-primary" onclick="testarConexao()" id="btnTestar">
-                    <i class="fas fa-plug"></i> Testar Conexão
-                </button>
-                <button class="btn btn-info" onclick="testarPermissoes()" id="btnTestarPermissoes" style="margin-left: 10px;">
-                    <i class="fas fa-user-shield"></i> Testar Permissões
-                </button>
-            </div>
-
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Testando conexão...</p>
-            </div>
-        </div>
-
-        <!-- Estatísticas do Banco -->
-        <div class="config-section" id="statsSection" style="display: none;">
-            <h2><i class="fas fa-chart-bar"></i> Estatísticas do Banco de Dados</h2>
-            
-            <div class="stats-grid" id="statsGrid">
-                <!-- Estatísticas serão inseridas aqui -->
-            </div>
-        </div>
-
-        <!-- Informações de Configuração -->
-        <div class="config-section" id="configSection" style="display: none;">
-            <h2><i class="fas fa-info-circle"></i> Informações de Configuração</h2>
-            
-            <div class="config-info" id="configInfo">
-                <!-- Informações serão inseridas aqui -->
-            </div>
-        </div>
-
-        <!-- Ações do Sistema -->
-        <div class="config-section">
-            <h2><i class="fas fa-tools"></i> Ações do Sistema</h2>
-            
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
-                <button class="btn btn-success" onclick="popularBanco()">
-                    <i class="fas fa-database"></i> Popular Banco com Dados Iniciais
-                </button>
                 
-                <button class="btn btn-info" onclick="popularBaseUnificada()">
-                    <i class="fas fa-database"></i> Verificar PostgreSQL
-                </button>
-                
-                <button class="btn btn-primary" onclick="limparCache()">
-                    <i class="fas fa-broom"></i> Limpar Cache do Sistema
-                </button>
-                
-                <button class="btn btn-warning" onclick="verificarLogs()">
-                    <i class="fas fa-file-alt"></i> Verificar Logs do Sistema
-                </button>
+                <div id="resultado-importacao"></div>
             </div>
-        </div>
+
+            <!-- Seção de Permissões -->
+            <div class="config-section">
+                <h2 class="config-title">👤 Verificar Permissões</h2>
+                <p>Verifique as permissões do usuário logado</p>
+                <button class="test-button" onclick="verificarPermissoes()">Verificar Permissões</button>
+                <div id="resultado-permissoes" class="result-box" style="display: none;"></div>
+            </div>
+        </main>
     </div>
 
     <script>
-        // Função para mostrar alertas
-        function showAlert(message, type = 'info', duration = 5000) {
-            const alertContainer = document.getElementById('alertContainer');
-            const alert = document.createElement('div');
-            alert.className = `alert alert-${type}`;
-            alert.textContent = message;
-            
-            alertContainer.appendChild(alert);
-            alert.classList.add('show');
-            
-            setTimeout(() => {
-                alert.classList.remove('show');
-                setTimeout(() => alert.remove(), 300);
-            }, duration);
-        }
-
-        // Função para testar conexão
+        // Testar conexão com banco
         async function testarConexao() {
-            const btnTestar = document.getElementById('btnTestar');
-            const loading = document.getElementById('loading');
-            const statusCard = document.getElementById('statusCard');
-            const statusIcon = document.getElementById('statusIcon');
-            const statusDetails = document.getElementById('statusDetails');
+            const button = event.target;
+            const resultadoDiv = document.getElementById('resultado-conexao');
             
-            // Desabilitar botão e mostrar loading
-            btnTestar.disabled = true;
-            loading.classList.add('show');
+            button.textContent = '🔄 Testando...';
+            button.disabled = true;
             
             try {
                 const response = await fetch('/api/admin/configuracoes/teste-conexao', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
+                    headers: {'Content-Type': 'application/json'}
                 });
                 
                 const data = await response.json();
                 
                 if (data.sucesso) {
-                    // Sucesso
-                    statusCard.className = 'status-card success';
-                    statusIcon.className = 'status-icon success';
-                    statusIcon.innerHTML = '<i class="fas fa-check-circle"></i>';
-                    statusDetails.textContent = data.message;
-                    
-                    // Mostrar estatísticas
-                    mostrarEstatisticas(data.estatisticas);
-                    
-                    // Mostrar informações de configuração
-                    mostrarConfigInfo(data.config_info);
-                    
-                    showAlert('Conexão com banco de dados funcionando corretamente!', 'success');
-                } else {
-                    // Erro
-                    statusCard.className = 'status-card error';
-                    statusIcon.className = 'status-icon error';
-                    statusIcon.innerHTML = '<i class="fas fa-times-circle"></i>';
-                    statusDetails.textContent = data.message + ': ' + data.error;
-                    
-                    showAlert('Erro na conexão com banco de dados!', 'danger');
-                }
-                
-            } catch (error) {
-                // Erro de rede
-                statusCard.className = 'status-card error';
-                statusIcon.className = 'status-icon error';
-                statusIcon.innerHTML = '<i class="fas fa-times-circle"></i>';
-                statusDetails.textContent = 'Erro de conexão com o servidor: ' + error.message;
-                
-                showAlert('Erro de conexão com o servidor!', 'danger');
-            } finally {
-                // Reabilitar botão e esconder loading
-                btnTestar.disabled = false;
-                loading.classList.remove('show');
-            }
-        }
-
-        // Função para mostrar estatísticas
-        function mostrarEstatisticas(estatisticas) {
-            const statsSection = document.getElementById('statsSection');
-            const statsGrid = document.getElementById('statsGrid');
-            
-            statsGrid.innerHTML = `
-                <div class="stat-item">
-                    <div class="stat-number">${estatisticas.total_registros}</div>
-                    <div class="stat-label">Registros na Base</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number">${estatisticas.total_usuarios}</div>
-                    <div class="stat-label">Usuários</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number">${estatisticas.total_agentes}</div>
-                    <div class="stat-label">Agentes</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number">${estatisticas.total_memorias}</div>
-                    <div class="stat-label">Memórias de Cálculo</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number">${estatisticas.total_tipos_calculo}</div>
-                    <div class="stat-label">Tipos de Cálculo</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-number">${estatisticas.total_formulas}</div>
-                    <div class="stat-label">Fórmulas</div>
-                </div>
-            `;
-            
-            statsSection.style.display = 'block';
-        }
-
-        // Função para mostrar informações de configuração
-        function mostrarConfigInfo(configInfo) {
-            const configSection = document.getElementById('configSection');
-            const configInfoDiv = document.getElementById('configInfo');
-            
-            configInfoDiv.innerHTML = `
-                <h4>Configurações do Sistema</h4>
-                <div class="config-item">
-                    <span class="config-label">Tipo de Banco:</span>
-                    <span class="config-value">${configInfo.database_type}</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-label">Ambiente:</span>
-                    <span class="config-value">${configInfo.flask_env}</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-label">Modo Debug:</span>
-                    <span class="config-value">${configInfo.debug_mode ? 'Ativado' : 'Desativado'}</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-label">PostgreSQL Disponível:</span>
-                    <span class="config-value">${configInfo.postgresql_available ? 'Sim' : 'Não'}</span>
-                </div>
-                <div class="config-item">
-                    <span class="config-label">URL do Banco:</span>
-                    <span class="config-value">${configInfo.database_url}</span>
-                </div>
-            `;
-            
-            configSection.style.display = 'block';
-        }
-
-        // Função para popular banco
-        async function popularBanco() {
-            if (!confirm('Tem certeza que deseja popular o banco com dados iniciais? Isso pode sobrescrever dados existentes.')) {
-                return;
-            }
-            
-            try {
-                const response = await fetch('/admin/setup-memorias', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.sucesso) {
-                    showAlert('Banco populado com sucesso!', 'success');
-                    // Recarregar estatísticas
-                    testarConexao();
-                } else {
-                    showAlert('Erro ao popular banco: ' + data.mensagem, 'danger');
-                }
-                
-            } catch (error) {
-                showAlert('Erro ao popular banco: ' + error.message, 'danger');
-            }
-        }
-
-        // Função para verificar conexão PostgreSQL
-        async function popularBaseUnificada() {
-            if (!confirm('Deseja verificar a conexão com o PostgreSQL?')) {
-                return;
-            }
-            
-            try {
-                const response = await fetch('/admin/setup-base-unificada', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.sucesso) {
-                    showAlert('Conexão com PostgreSQL verificada com sucesso!', 'success');
-                    // Recarregar estatísticas
-                    testarConexao();
-                } else {
-                    showAlert('Erro na conexão com PostgreSQL: ' + data.mensagem, 'danger');
-                }
-                
-            } catch (error) {
-                showAlert('Erro ao verificar PostgreSQL: ' + error.message, 'danger');
-            }
-        }
-
-        // Função para limpar cache
-        function limparCache() {
-            showAlert('Cache do sistema limpo com sucesso!', 'success');
-        }
-
-        // Função para verificar logs
-        function verificarLogs() {
-            showAlert('Funcionalidade de logs em desenvolvimento!', 'info');
-        }
-
-        // Função para testar permissões
-        async function testarPermissoes() {
-            const btnTestarPermissoes = document.getElementById('btnTestarPermissoes');
-            
-            // Desabilitar botão
-            btnTestarPermissoes.disabled = true;
-            btnTestarPermissoes.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testando...';
-            
-            try {
-                const response = await fetch('/api/admin/configuracoes/teste-permissoes', {
-                    method: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
-                });
-                
-                const data = await response.json();
-                
-                if (data.sucesso) {
-                    showAlert('Permissões verificadas com sucesso!', 'success');
-                    console.log('Permissões do usuário:', data.usuario);
-                    console.log('Permissões na sessão:', data.permissoes_sessao);
-                    
-                    // Mostrar informações das permissões
-                    const statusDetails = document.getElementById('statusDetails');
-                    statusDetails.innerHTML = `
-                        <strong>Usuário:</strong> ${data.usuario.nome_usuario}<br>
-                        <strong>Tipo:</strong> ${data.usuario.tipo_usuario}<br>
-                        <strong>Pode editar base:</strong> ${data.usuario.pode_editar_base ? 'Sim' : 'Não'}<br>
-                        <strong>Pode ver admin:</strong> ${data.usuario.pode_ver_admin ? 'Sim' : 'Não'}<br>
-                        <strong>Pode gerenciar usuários:</strong> ${data.usuario.pode_gerenciar_usuarios ? 'Sim' : 'Não'}
+                    button.textContent = '✅ Conexão OK';
+                    button.className = 'test-button success';
+                    resultadoDiv.innerHTML = `
+                        <h4>✅ Conexão Estabelecida</h4>
+                        <p><strong>Mensagem:</strong> ${data.message}</p>
+                        <h5>📊 Estatísticas:</h5>
+                        <ul>
+                            <li>Registros na base: ${data.estatisticas.total_registros}</li>
+                            <li>Usuários: ${data.estatisticas.total_usuarios}</li>
+                            <li>Agentes: ${data.estatisticas.total_agentes}</li>
+                            <li>Memórias: ${data.estatisticas.total_memorias}</li>
+                        </ul>
+                        <h5>⚙️ Configurações:</h5>
+                        <ul>
+                            <li>Tipo de banco: ${data.config_info.database_type}</li>
+                            <li>Ambiente: ${data.config_info.flask_env}</li>
+                            <li>PostgreSQL disponível: ${data.config_info.postgresql_available ? 'Sim' : 'Não'}</li>
+                        </ul>
                     `;
                 } else {
-                    showAlert('Erro ao verificar permissões: ' + data.message, 'danger');
+                    button.textContent = '❌ Erro na Conexão';
+                    button.className = 'test-button error';
+                    resultadoDiv.innerHTML = `
+                        <h4>❌ Erro na Conexão</h4>
+                        <p><strong>Erro:</strong> ${data.error}</p>
+                        <p><strong>Mensagem:</strong> ${data.message}</p>
+                    `;
                 }
                 
+                resultadoDiv.style.display = 'block';
+                
             } catch (error) {
-                showAlert('Erro ao verificar permissões: ' + error.message, 'danger');
-            } finally {
-                // Reabilitar botão
-                btnTestarPermissoes.disabled = false;
-                btnTestarPermissoes.innerHTML = '<i class="fas fa-user-shield"></i> Testar Permissões';
+                button.textContent = '❌ Erro na Conexão';
+                button.className = 'test-button error';
+                resultadoDiv.innerHTML = `
+                    <h4>❌ Erro na Requisição</h4>
+                    <p><strong>Erro:</strong> ${error.message}</p>
+                `;
+                resultadoDiv.style.display = 'block';
             }
         }
 
-        // Testar conexão automaticamente ao carregar a página
+        // Preparar importação de arquivo
+        function prepararImportacao() {
+            const arquivo = document.getElementById('arquivo-csv').files[0];
+            const btnImportar = document.getElementById('btn-importar');
+            const infoArquivo = document.getElementById('info-arquivo');
+            const detalhesArquivo = document.getElementById('detalhes-arquivo');
+            
+            if (arquivo) {
+                const tamanhoMB = (arquivo.size / (1024 * 1024)).toFixed(2);
+                detalhesArquivo.innerHTML = `
+                    <p><strong>Nome:</strong> ${arquivo.name}</p>
+                    <p><strong>Tamanho:</strong> ${tamanhoMB} MB</p>
+                    <p><strong>Tipo:</strong> ${arquivo.type || 'text/csv'}</p>
+                    <p><strong>Última modificação:</strong> ${new Date(arquivo.lastModified).toLocaleString()}</p>
+                `;
+                
+                infoArquivo.style.display = 'block';
+                btnImportar.disabled = false;
+                btnImportar.textContent = `🚀 Importar ${arquivo.name}`;
+            } else {
+                infoArquivo.style.display = 'none';
+                btnImportar.disabled = true;
+                btnImportar.textContent = '🚀 Importar Dados';
+            }
+        }
+
+        // Importar CSV
+        async function importarCSV() {
+            const arquivo = document.getElementById('arquivo-csv').files[0];
+            const btnImportar = document.getElementById('btn-importar');
+            const progressoDiv = document.getElementById('progresso-importacao');
+            const resultadoDiv = document.getElementById('resultado-importacao');
+            const statusDiv = document.getElementById('status-importacao');
+            const progressoFill = document.getElementById('progresso-fill');
+            
+            if (!arquivo) {
+                alert('Selecione um arquivo CSV primeiro!');
+                return;
+            }
+            
+            // Preparar interface
+            btnImportar.disabled = true;
+            btnImportar.textContent = '🔄 Importando...';
+            progressoDiv.style.display = 'block';
+            resultadoDiv.innerHTML = '';
+            
+            // Criar FormData
+            const formData = new FormData();
+            formData.append('arquivo_csv', arquivo);
+            
+            try {
+                statusDiv.innerHTML = '<div class="status-info">📤 Enviando arquivo...</div>';
+                progressoFill.style.width = '25%';
+                
+                const response = await fetch('/api/admin/configuracoes/importar-csv', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                progressoFill.style.width = '75%';
+                statusDiv.innerHTML = '<div class="status-info">📊 Processando dados...</div>';
+                
+                const data = await response.json();
+                
+                progressoFill.style.width = '100%';
+                
+                if (data.sucesso) {
+                    statusDiv.innerHTML = '<div class="status-success">✅ Importação concluída!</div>';
+                    resultadoDiv.innerHTML = `
+                        <div class="status-success">
+                            <h4>🎉 Importação Realizada com Sucesso!</h4>
+                            <p><strong>Arquivo:</strong> ${data.arquivo}</p>
+                            <p><strong>Registros processados:</strong> ${data.registros_processados}</p>
+                            <p><strong>Registros inseridos:</strong> ${data.registros_inseridos}</p>
+                            <p><strong>Mensagem:</strong> ${data.message}</p>
+                        </div>
+                    `;
+                    btnImportar.textContent = '✅ Importação Concluída';
+                    btnImportar.className = 'import-button success';
+                } else {
+                    statusDiv.innerHTML = '<div class="status-error">❌ Erro na importação</div>';
+                    resultadoDiv.innerHTML = `
+                        <div class="status-error">
+                            <h4>❌ Erro na Importação</h4>
+                            <p><strong>Erro:</strong> ${data.error}</p>
+                        </div>
+                    `;
+                    btnImportar.textContent = '❌ Erro na Importação';
+                    btnImportar.className = 'import-button error';
+                }
+                
+            } catch (error) {
+                progressoFill.style.width = '100%';
+                statusDiv.innerHTML = '<div class="status-error">❌ Erro na requisição</div>';
+                resultadoDiv.innerHTML = `
+                    <div class="status-error">
+                        <h4>❌ Erro na Requisição</h4>
+                        <p><strong>Erro:</strong> ${error.message}</p>
+                    </div>
+                `;
+                btnImportar.textContent = '❌ Erro na Importação';
+                btnImportar.className = 'import-button error';
+            }
+        }
+
+        // Verificar permissões
+        async function verificarPermissoes() {
+            const button = event.target;
+            const resultadoDiv = document.getElementById('resultado-permissoes');
+            
+            button.textContent = '🔄 Verificando...';
+            button.disabled = true;
+            
+            try {
+                const response = await fetch('/api/admin/configuracoes/teste-permissoes');
+                const data = await response.json();
+                
+                if (data.sucesso) {
+                    button.textContent = '✅ Permissões OK';
+                    button.className = 'test-button success';
+                    resultadoDiv.innerHTML = `
+                        <h4>✅ Permissões Verificadas</h4>
+                        <p><strong>Usuário:</strong> ${data.usuario.nome_usuario}</p>
+                        <p><strong>Tipo:</strong> ${data.usuario.tipo_usuario}</p>
+                        <p><strong>Ativo:</strong> ${data.usuario.ativo ? 'Sim' : 'Não'}</p>
+                        <h5>🔐 Permissões:</h5>
+                        <ul>
+                            <li>Calcular fretes: ${data.usuario.pode_calcular_fretes ? '✅' : '❌'}</li>
+                            <li>Ver admin: ${data.usuario.pode_ver_admin ? '✅' : '❌'}</li>
+                            <li>Editar base: ${data.usuario.pode_editar_base ? '✅' : '❌'}</li>
+                            <li>Gerenciar usuários: ${data.usuario.pode_gerenciar_usuarios ? '✅' : '❌'}</li>
+                            <li>Importar dados: ${data.usuario.pode_importar_dados ? '✅' : '❌'}</li>
+                        </ul>
+                    `;
+                } else {
+                    button.textContent = '❌ Erro nas Permissões';
+                    button.className = 'test-button error';
+                    resultadoDiv.innerHTML = `
+                        <h4>❌ Erro nas Permissões</h4>
+                        <p><strong>Mensagem:</strong> ${data.message}</p>
+                    `;
+                }
+                
+                resultadoDiv.style.display = 'block';
+                
+            } catch (error) {
+                button.textContent = '❌ Erro na Requisição';
+                button.className = 'test-button error';
+                resultadoDiv.innerHTML = `
+                    <h4>❌ Erro na Requisição</h4>
+                    <p><strong>Erro:</strong> ${error.message}</p>
+                `;
+                resultadoDiv.style.display = 'block';
+            }
+        }
+
+        // Drag and drop para arquivo
         document.addEventListener('DOMContentLoaded', function() {
-            // Aguardar um pouco antes de testar
-            setTimeout(testarConexao, 1000);
+            const fileUpload = document.querySelector('.file-upload');
+            const fileInput = document.getElementById('arquivo-csv');
+            
+            fileUpload.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                fileUpload.style.borderColor = '#2980b9';
+                fileUpload.style.background = '#ecf0f1';
+            });
+            
+            fileUpload.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                fileUpload.style.borderColor = '#3498db';
+                fileUpload.style.background = '#f8f9fa';
+            });
+            
+            fileUpload.addEventListener('drop', function(e) {
+                e.preventDefault();
+                fileUpload.style.borderColor = '#3498db';
+                fileUpload.style.background = '#f8f9fa';
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    prepararImportacao();
+                }
+            });
         });
     </script>
 </body>
