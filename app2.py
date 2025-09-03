@@ -1536,7 +1536,7 @@ def login():
                 print(f"[LOGIN] Permissões: {session.get('usuario_permissoes')}")
                 
                 flash(f'Bem-vindo, {usuario.nome_completo}!', 'success')
-                return redirect(url_for('index'))
+                return redirect(url_for('admin'))
             else:
                 print(f"[LOGIN] Senha incorreta para: {nome_usuario}")
                 flash('Senha incorreta')
@@ -2100,6 +2100,7 @@ def calcular_aereo():
 # ===== ROTAS DE ADMINISTRAÇÃO =====
 
 @app.route('/admin')
+@middleware_admin
 def admin():
     """Painel administrativo"""
     usuario = session.get('usuario_logado', 'DESCONHECIDO')
@@ -3460,42 +3461,16 @@ def debug_sessao():
         'permissoes': session.get('usuario_permissoes')
     })
 
-@app.route('/teste-admin')
-def teste_admin():
-    """Teste simples para verificar usuário admin"""
-    try:
-        admin = Usuario.query.filter_by(nome_usuario='admin').first()
-        
-        if admin:
-            # Testar senha
-            senha_valida = admin.verificar_senha('admin123')
-            
-            return jsonify({
-                'admin_existe': True,
-                'nome_usuario': admin.nome_usuario,
-                'tipo_usuario': admin.tipo_usuario,
-                'ativo': admin.ativo,
-                'senha_valida': senha_valida,
-                'permissoes': {
-                    'pode_calcular_fretes': admin.pode_calcular_fretes,
-                    'pode_ver_admin': admin.pode_ver_admin,
-                    'pode_editar_base': admin.pode_editar_base,
-                    'pode_gerenciar_usuarios': admin.pode_gerenciar_usuarios,
-                    'pode_importar_dados': admin.pode_importar_dados
-                },
-                'senha_hash': admin.senha_hash[:20] + '...' if admin.senha_hash else None
-            })
-        else:
-            return jsonify({
-                'admin_existe': False,
-                'total_usuarios': Usuario.query.count()
-            })
-            
-    except Exception as e:
-        return jsonify({
-            'erro': str(e),
-            'admin_existe': False
-        })
+@app.route('/debug/admin-acesso')
+def debug_admin_acesso():
+    """Debug do acesso ao admin"""
+    return jsonify({
+        'usuario_logado': session.get('usuario_logado'),
+        'usuario_tipo': session.get('usuario_tipo'),
+        'permissoes': session.get('usuario_permissoes'),
+        'pode_ver_admin': session.get('usuario_permissoes', {}).get('pode_ver_admin', False),
+        'sessao_completa': dict(session)
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
