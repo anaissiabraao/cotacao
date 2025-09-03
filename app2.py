@@ -1483,11 +1483,12 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Sistema de login com banco de dados"""
+    """Sistema de login com banco de dados - Versão simplificada"""
     if request.method == 'POST':
         nome_usuario = request.form.get('usuario', '').strip()
         senha = request.form.get('senha', '').strip()
-        ip_cliente = obter_ip_cliente()
+        
+        print(f"[LOGIN] Tentativa: {nome_usuario}")
         
         if not nome_usuario or not senha:
             flash('Usuário e senha são obrigatórios')
@@ -1498,28 +1499,25 @@ def login():
             usuario = Usuario.query.filter_by(nome_usuario=nome_usuario).first()
             
             if not usuario:
-                log_acesso(nome_usuario, 'LOGIN_FALHA_USUARIO_INEXISTENTE', ip_cliente)
+                print(f"[LOGIN] Usuário não encontrado: {nome_usuario}")
                 flash('Usuário não encontrado')
                 return render_template('login.html')
             
-            # Verificar se usuário está bloqueado
-            if usuario.is_blocked():
-                log_acesso(nome_usuario, 'LOGIN_FALHA_USUARIO_BLOQUEADO', ip_cliente)
-                flash('Usuário temporariamente bloqueado. Tente novamente em 30 minutos.')
-                return render_template('login.html')
+            print(f"[LOGIN] Usuário encontrado: {usuario.nome_usuario}, Tipo: {usuario.tipo_usuario}")
             
             # Verificar se usuário está ativo
             if not usuario.ativo:
-                log_acesso(nome_usuario, 'LOGIN_FALHA_USUARIO_INATIVO', ip_cliente)
+                print(f"[LOGIN] Usuário inativo: {nome_usuario}")
                 flash('Usuário inativo. Contate o administrador.')
                 return render_template('login.html')
             
             # Verificar senha
-            if usuario.verificar_senha(senha):
+            senha_valida = usuario.verificar_senha(senha)
+            print(f"[LOGIN] Senha válida: {senha_valida}")
+            
+            if senha_valida:
                 # Login bem-sucedido
-                usuario.resetar_tentativas_login()
-                usuario.ip_ultimo_login = ip_cliente
-                db.session.commit()
+                print(f"[LOGIN] Login bem-sucedido para: {nome_usuario}")
                 
                 # Criar sessão
                 session['usuario_logado'] = usuario.nome_usuario
@@ -1534,21 +1532,18 @@ def login():
                     'pode_importar_dados': usuario.pode_importar_dados
                 }
                 
-                log_acesso(nome_usuario, 'LOGIN_SUCESSO', ip_cliente, f'Tipo: {usuario.tipo_usuario}')
+                print(f"[LOGIN] Sessão criada: {session.get('usuario_logado')}")
+                print(f"[LOGIN] Permissões: {session.get('usuario_permissoes')}")
+                
                 flash(f'Bem-vindo, {usuario.nome_completo}!', 'success')
                 return redirect(url_for('index'))
             else:
-                # Senha incorreta
-                usuario.incrementar_tentativas_login()
-                db.session.commit()
-                
-                log_acesso(nome_usuario, 'LOGIN_FALHA_SENHA_INCORRETA', ip_cliente)
-                flash(f'Senha incorreta. Tentativas restantes: {5 - usuario.tentativas_login}')
+                print(f"[LOGIN] Senha incorreta para: {nome_usuario}")
+                flash('Senha incorreta')
                 return render_template('login.html')
                 
         except Exception as e:
             print(f"[LOGIN] Erro: {e}")
-            log_acesso(nome_usuario, 'LOGIN_ERRO_SISTEMA', ip_cliente, str(e))
             flash('Erro interno do sistema. Tente novamente.')
             return render_template('login.html')
     
@@ -3465,24 +3460,42 @@ def debug_sessao():
         'permissoes': session.get('usuario_permissoes')
     })
 
-@app.route('/debug/usuarios')
-def debug_usuarios():
-    """Debug dos usuários no banco"""
+@app.route('/teste-admin')
+def teste_admin():
+    """Teste simples para verificar usuário admin"""
     try:
-        usuarios = Usuario.query.all()
-        return jsonify({
-            'total_usuarios': len(usuarios),
-            'usuarios': [{
-                'id': u.id,
-                'nome_usuario': u.nome_usuario,
-                'tipo_usuario': u.tipo_usuario,
-                'ativo': u.ativo,
-                'pode_gerenciar_usuarios': u.pode_gerenciar_usuarios,
-                'senha_hash': u.senha_hash[:20] + '...' if u.senha_hash else None
-            } for u in usuarios]
-        })
+        admin = Usuario.query.filter_by(nome_usuario='admin').first()
+        
+        if admin:
+            # Testar senha
+            senha_valida = admin.verificar_senha('admin123')
+            
+            return jsonify({
+                'admin_existe': True,
+                'nome_usuario': admin.nome_usuario,
+                'tipo_usuario': admin.tipo_usuario,
+                'ativo': admin.ativo,
+                'senha_valida': senha_valida,
+                'permissoes': {
+                    'pode_calcular_fretes': admin.pode_calcular_fretes,
+                    'pode_ver_admin': admin.pode_ver_admin,
+                    'pode_editar_base': admin.pode_editar_base,
+                    'pode_gerenciar_usuarios': admin.pode_gerenciar_usuarios,
+                    'pode_importar_dados': admin.pode_importar_dados
+                },
+                'senha_hash': admin.senha_hash[:20] + '...' if admin.senha_hash else None
+            })
+        else:
+            return jsonify({
+                'admin_existe': False,
+                'total_usuarios': Usuario.query.count()
+            })
+            
     except Exception as e:
-        return jsonify({'erro': str(e)})
+        return jsonify({
+            'erro': str(e),
+            'admin_existe': False
+        })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
