@@ -3372,6 +3372,118 @@ def conectar_base_postgresql():
 with app.app_context():
     conectar_base_postgresql()
 
+# Adicionar após a rota de login existente
+
+@app.route('/debug/login', methods=['GET', 'POST'])
+def debug_login():
+    """Rota de debug para testar login"""
+    if request.method == 'POST':
+        nome_usuario = request.form.get('usuario', '').strip()
+        senha = request.form.get('senha', '').strip()
+        
+        print(f"[DEBUG] Tentativa de login: {nome_usuario}")
+        
+        try:
+            # Buscar usuário
+            usuario = Usuario.query.filter_by(nome_usuario=nome_usuario).first()
+            
+            if not usuario:
+                return jsonify({
+                    'sucesso': False,
+                    'erro': 'Usuário não encontrado',
+                    'debug': {
+                        'nome_usuario': nome_usuario,
+                        'total_usuarios': Usuario.query.count()
+                    }
+                })
+            
+            # Verificar senha
+            senha_valida = usuario.verificar_senha(senha)
+            
+            if senha_valida:
+                # Criar sessão
+                session['usuario_logado'] = usuario.nome_usuario
+                session['usuario_id'] = usuario.id
+                session['usuario_tipo'] = usuario.tipo_usuario
+                session['usuario_nome_completo'] = usuario.nome_completo
+                session['usuario_permissoes'] = {
+                    'pode_calcular_fretes': usuario.pode_calcular_fretes,
+                    'pode_ver_admin': usuario.pode_ver_admin,
+                    'pode_editar_base': usuario.pode_editar_base,
+                    'pode_gerenciar_usuarios': usuario.pode_gerenciar_usuarios,
+                    'pode_importar_dados': usuario.pode_importar_dados
+                }
+                
+                return jsonify({
+                    'sucesso': True,
+                    'usuario': usuario.to_dict(),
+                    'sessao': {
+                        'usuario_logado': session.get('usuario_logado'),
+                        'usuario_id': session.get('usuario_id'),
+                        'usuario_tipo': session.get('usuario_tipo'),
+                        'permissoes': session.get('usuario_permissoes')
+                    }
+                })
+            else:
+                return jsonify({
+                    'sucesso': False,
+                    'erro': 'Senha incorreta',
+                    'debug': {
+                        'nome_usuario': nome_usuario,
+                        'senha_fornecida': senha,
+                        'senha_hash': usuario.senha_hash[:20] + '...'
+                    }
+                })
+                
+        except Exception as e:
+            return jsonify({
+                'sucesso': False,
+                'erro': str(e),
+                'debug': {
+                    'nome_usuario': nome_usuario,
+                    'exception': str(e)
+                }
+            })
+    
+    return '''
+    <h2>Debug Login</h2>
+    <form method="POST">
+        <p>Usuário: <input type="text" name="usuario" value="admin"></p>
+        <p>Senha: <input type="password" name="senha" value="admin123"></p>
+        <p><input type="submit" value="Testar Login"></p>
+    </form>
+    '''
+
+@app.route('/debug/sessao')
+def debug_sessao():
+    """Debug da sessão atual"""
+    return jsonify({
+        'sessao_atual': dict(session),
+        'usuario_logado': session.get('usuario_logado'),
+        'usuario_id': session.get('usuario_id'),
+        'usuario_tipo': session.get('usuario_tipo'),
+        'permissoes': session.get('usuario_permissoes')
+    })
+
+@app.route('/debug/usuarios')
+def debug_usuarios():
+    """Debug dos usuários no banco"""
+    try:
+        usuarios = Usuario.query.all()
+        return jsonify({
+            'total_usuarios': len(usuarios),
+            'usuarios': [{
+                'id': u.id,
+                'nome_usuario': u.nome_usuario,
+                'tipo_usuario': u.tipo_usuario,
+                'ativo': u.ativo,
+                'pode_gerenciar_usuarios': u.pode_gerenciar_usuarios,
+                'senha_hash': u.senha_hash[:20] + '...' if u.senha_hash else None
+            } for u in usuarios]
+        })
+    except Exception as e:
+        return jsonify({'erro': str(e)})
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
     print(f"🚀 PortoEx iniciando na porta {port}")
